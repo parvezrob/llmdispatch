@@ -55,6 +55,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run depcruise
       - run: npm run build
+      # The fixtures whose imports already exist in the build, compiled against it rather
+      # than against the spec — 5 of 13 today, more as the remaining exports land.
+      - name: Compile the fixtures the build can satisfy against it
+        run: node scripts/check-types-fixtures.mjs --target package
+      - name: Check the built exports against the specification
+        run: node scripts/check-spec-surface.mjs
       - run: npm run publint
       - run: npm run attw
       - run: npm run api:check

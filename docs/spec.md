@@ -158,6 +158,9 @@ active envelope.
   counts committed + unexpired pending slots for the store's current UTC day; under `limit`
   → insert pending reservation, lease `expiresAt = min(now + leaseMs, resetsAt)` (a lease
   never crosses the day boundary).
+  A denial's `used` is authoritative for that `reserve`'s own snapshot-and-lock point: it is
+  never lower than live usage, and it exceeds live usage only by rows that lapsed or appeared
+  while that `reserve` waited for the counter.
   **`limit === 0`:** the core **still calls `reserve`** and never short-circuits — `used` and
   `resetsAt` must be store-authoritative. An available store returns the complete denial
   `{ ok: false, used, resetsAt }` — `used` being the day's authoritative count, which may be
@@ -414,7 +417,7 @@ export declare function defineOperation<In extends z.ZodType, Out extends z.ZodT
   def: OperationDefinition<In, Out>
 ): OperationDefinition<In, Out>
 export declare function defineOperations<Ops extends OperationsMap>(ops: Ops): Ops
-export type OperationsMap = Record<string, OperationDefinition<any, any>>
+export type OperationsMap = Record<string, OperationDefinition<z.ZodType, z.ZodType>>
 
 export interface Switch<Ops extends OperationsMap> {
   run<K extends keyof Ops & string>(
@@ -571,13 +574,14 @@ export interface UsageStore {
 }
 export declare function memoryStores(): StorePair
 export declare function postgresStores(opts: {
-  pool: { query(sql: string, params?: unknown[]): Promise<{ rows: any[] }> }
+  pool: { query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }> }
   schema?: string                                        // default 'llmswitch'; validated identifier
   leaseMs?: number                                       // default 120_000; 5_000–600_000
 }): StorePair
 
 // ——— errors ———
 export declare class LLMSwitchError extends Error {
+  private constructor()                                  // instances come from the package; narrow on `code`
   readonly code: 'INVALID_INPUT' | 'MISSING_SUBJECT' | 'QUOTA_EXCEEDED'
     | 'USAGE_STORE_UNAVAILABLE' | 'CONFIG_STORE_UNAVAILABLE' | 'INVALID_CONFIG'
     | 'ABORTED' | 'PROVIDER_FAILED' | 'OUTPUT_REJECTED'
@@ -597,6 +601,22 @@ pricing finite ≥ 0; provider responses failing the `ProviderResponse` union sh
 non-string prompt returns → unwrapped
 `TypeError` (pre-quota); malformed quality verdicts → `quality_error`; malformed prepared
 dispatchers → `INVALID_CONFIG` (local).
+
+**String domain.** Every string that reaches a store — operation names, provider
+registration IDs, `OperationRoute`/`RouteTarget` `provider` and `model`, `subjectId`,
+`ReservationEnvelope.reservationId`, and `AttemptRecord.provider`/`model` — is well-formed
+Unicode (`String.prototype.isWellFormed()`), contains no U+0000, and is at most 1 000 bytes
+of UTF-8. The core checks this **before any store call**, at these boundaries: operation
+names, provider IDs and declared routes at `createSwitch` → `INVALID_CONFIG`; a route at
+`setConfig` → `INVALID_CONFIG`; `subjectId` before `reserve` and before `getQuota`'s
+`snapshot` → `INVALID_INPUT`. A stored `ConfigStore` row that violates it is a malformed row
+and follows the §2 rules. A `ReservationEnvelope` returned by `reserve` that violates it is a
+malformed store result → `USAGE_STORE_UNAVAILABLE`, checked before `commit`; the envelope and
+the attempt records are checked again before `settle`. A store additionally rejects
+out-of-domain values as defence in depth. The bound is part of the contract because a
+relational store cannot hold every JavaScript string: PostgreSQL `text` and `jsonb` reject
+U+0000, lone surrogates do not survive a round trip, and index entries are size-capped — so a
+store that had to narrow the domain itself would not be substitutable.
 
 ## 6a. Core-enforced store deadlines
 
@@ -623,7 +643,8 @@ export interface ConformanceResult { passed: boolean; failures: string[]; skippe
 export declare function runUsageStoreConformance(opts: {
   // create returns the store under test plus REQUIRED test controls:
   // setTime drives the STORE's authoritative clock (for Postgres: a session/test hook the
-  // adapter documents); reset wipes state; readSettled exposes what settle() persisted so
+  // adapter documents) and is called with non-decreasing instants between reset() calls;
+  // reset wipes state; readSettled exposes what settle() persisted so
   // duplicate/conflict/unknown-reservation behavior is observable.
   create(): Promise<{
     store: UsageStore
@@ -684,7 +705,8 @@ persists only a whitelist of route fields, needs updating. Coverage:
   rollover via `setTime`, snapshot correctness including pending, settle
   duplicate/conflict/unknown-reservation behavior observed via `readSettled`,
   envelope validity (key match, `YYYY-MM-DD` day format), a `reserve` call with `limit: 0`
-  denying without inserting a reservation, and a limit lowered below existing
+  denying without inserting a reservation (observed as: a following `reserve` at `limit: 1`
+  on the same key is admitted with `used` 0), and a limit lowered below existing
   pending/committed usage denying new reservations while leaving those rows intact.
   (Settle-FAILURE isolation — a rejecting store not affecting run outcomes — is core
   behavior, tested internally.)

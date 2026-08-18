@@ -237,7 +237,10 @@ function main() {
   for (const problem of problems) process.stdout.write(`${problem}\n`)
   process.stdout.write(
     problems.length === 0
-      ? `all fixtures import ${String(SUBPATHS.length)} entry points from sha256 ${before}\n`
+      ? `all fixtures reached ${String(SUBPATHS.length)} entry points, recognised a ProviderError ` +
+          'across the ESM and CommonJS builds in both directions, rejected the values that only ' +
+          'look like one, and narrowed LLMSwitchError by code — ' +
+          `from sha256 ${before}\n`
       : `${String(problems.length)} problem(s)\n`,
   )
   return problems.length === 0 ? 0 : 1

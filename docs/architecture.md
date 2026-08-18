@@ -22,17 +22,24 @@ graph TD
   stores["stores/<br/>one adapter per backend"]
   suites["conformance/<br/>harnesses over interfaces"]
   errors["errors/<br/>the error surface"]
+  types["types.ts<br/>the public shapes"]
 
   root --> core
   root --> providers
   root --> stores
   root --> errors
+  root --> types
   pg --> stores
   conf --> suites
   core --> errors
   providers --> errors
   stores --> errors
   suites --> errors
+  core --> types
+  providers --> types
+  stores --> types
+  suites --> types
+  errors --> types
 ```
 
 Every arrow points down the same slope, so the graph has no cycles, and the layer that
@@ -40,9 +47,15 @@ changes most often — the adapters — sits where nothing depends on it.
 
 ## What each folder is for
 
-**`errors/`** is the bottom. One error class with a closed set of codes, the typed
-factories that construct it, and the literal `retryable` value that belongs to each code.
-Everything may depend on it; it depends on nothing.
+**`types.ts`** is the floor: every shape the package publishes, declared once from spec §6,
+importing nothing but Zod.
+
+**`errors/`** is the bottom layer of behaviour. Two public classes: `LLMSwitchError`, with a
+closed set of codes, the typed factories that construct it, and the literal `retryable` of
+the spec §5b classification row — the row, not the code, since `PROVIDER_FAILED` is retryable
+for a `transient` failure and not for a `refused` one; and `ProviderError`, which an adapter
+throws to classify a failed call and which is recognised by a brand rather than by
+`instanceof`. Everything may depend on it; it depends on nothing but the public types.
 
 **`core/`** decides. The run state machine, config resolution and its cache, failure
 classification, the quota lifecycle. It is pure: no HTTP, no SQL, no Node built-ins at

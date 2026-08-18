@@ -163,7 +163,7 @@ const q = await ai.getQuota('summarize', user.id)
 // reads config before usage.
 ```
 
-Set `perDay: 0` to halt an operation during an incident: every reservation is denied, nothing is inserted, and callers get `QUOTA_EXCEEDED` whenever the usage store answers — if that store is itself unreachable the call still refuses, as `USAGE_STORE_UNAVAILABLE`. It takes effect like any other config change (see the cache note below), and `getQuota` keeps reporting the day's real `used` while `limit` and `remaining` read 0.
+Set `perDay: 0` to halt an operation during an incident: every reservation is denied, no reservation is recorded, and callers get `QUOTA_EXCEEDED` whenever the usage store answers — if that store is itself unreachable the call still refuses, as `USAGE_STORE_UNAVAILABLE`. It takes effect like any other config change (see the cache note below), and `getQuota` keeps reporting the day's real `used` while `limit` and `remaining` read 0.
 
 The Postgres adapter stores metadata only — operation, subject, day, states, token counts — **never prompts or outputs**, and ships with pruning guidance (spec §4).
 
@@ -203,6 +203,8 @@ stores: postgresStores({ pool, schema: 'llmswitch' })  // production — plain S
 ```
 
 `postgresStores` ships a versioned SQL migration (you run it — llmswitch never touches your schema on its own) and uses single-statement atomic operations, safe under concurrency. The exact `ConfigStore`/`UsageStore` contracts — including the idempotent commit protocol and lease semantics — are spec §4 and §6, and a **conformance test suite** ships with the package: passing it verifies your custom adapter against every executed case, concurrency included — check its `skipped` list, because scenarios you don't supply are unverified, not passed.
+
+Whatever store you write it against, the strings llmswitch hands a store — operation names, provider IDs, models, subject IDs, reservation IDs — are well-formed Unicode, free of U+0000, and at most 1 000 bytes of UTF-8, checked before every store call, so any relational backend can hold them verbatim (spec §6).
 
 ## Providers
 

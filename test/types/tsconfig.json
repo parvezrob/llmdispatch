@@ -1,0 +1,43 @@
+{
+  // The compile fixtures. They are checked by `scripts/check-types-fixtures.mjs`, which
+  // builds one program per fixture with these options, because the negative ones are meant
+  // to fail and a single program would simply report their errors as build errors.
+  //
+  // The `paths` below point at the generated spec surfaces. That is what an editor and
+  // ESLint resolve `llmswitch` to; the runner substitutes `dist/*.d.ts` in memory when it
+  // checks a fixture against the built package instead.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": false,
+
+    "noEmit": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "llmswitch": ["./spec-surface.d.ts"],
+      "llmswitch/postgres": ["./spec-surface-postgres.d.ts"],
+      "llmswitch/conformance": ["./spec-surface-conformance.d.ts"]
+    }
+  },
+  "include": ["."]
+}

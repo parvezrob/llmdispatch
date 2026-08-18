@@ -27,7 +27,9 @@ export default defineConfig({
       provider: 'v8',
       // The two folders held to a threshold: what decides, and what is thrown.
       include: ['src/core/**/*.ts', 'src/errors/**/*.ts'],
-      reporter: ['text', 'lcov'],
+      // `text` prints nothing at all when every measured file is fully covered, so
+      // `text-summary` is what makes a green run say a number out loud.
+      reporter: ['text', 'text-summary', 'lcov'],
       thresholds: { lines: 90, branches: 90 },
     },
   },

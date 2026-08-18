@@ -4,6 +4,7 @@ coverage/
 api/
 package-lock.json
 test/fixtures/
+test/types/spec-surface*.d.ts
 *.tgz
 
 # The published documents are edited as prose and kept byte-for-byte as written.

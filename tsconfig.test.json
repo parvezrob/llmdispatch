@@ -12,5 +12,9 @@
     "skipLibCheck": true
   },
   "include": ["test", "scripts", "*.config.ts", "eslint.config.js"],
-  "exclude": ["test/consumers"]
+  // `test/types` holds the compile fixtures, half of which are meant to fail. They carry
+  // their own tsconfig and are checked one program at a time by
+  // `scripts/check-types-fixtures.mjs`; compiling them here would simply report their
+  // intended errors as build errors.
+  "exclude": ["test/consumers", "test/types"]
 }

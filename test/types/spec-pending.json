@@ -1,0 +1,27 @@
+{
+  "index": {
+    "value": [
+      "anthropic",
+      "createSwitch",
+      "defineOperation",
+      "defineOperations",
+      "gemini",
+      "memoryStores",
+      "openaiCompatible",
+      "postgresStores"
+    ],
+    "type": []
+  },
+  "postgres": {
+    "value": ["MIGRATIONS", "migrationSql"],
+    "type": []
+  },
+  "conformance": {
+    "value": [
+      "runConfigStoreConformance",
+      "runProviderConformance",
+      "runUsageStoreConformance"
+    ],
+    "type": ["ConformanceResult"]
+  }
+}

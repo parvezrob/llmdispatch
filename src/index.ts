@@ -1,15 +1,43 @@
 /**
  * Root entry point — `import { … } from 'llmswitch'`.
  *
- * This is the only module that assembles the pieces: it will export the factory that
- * turns providers, operation definitions and stores into a working switch, the
- * built-in provider adapters, the in-memory stores, the error type every failed run
- * raises, and the types describing all of them.
- *
- * The exact surface is specified in `docs/spec.md` §6. Nothing is exported yet — the
- * package is pre-release and the implementation lands before the first publish.
+ * The only module that assembles the pieces: the factory that turns providers, operations
+ * and stores into a working switch, the built-in adapters, the in-memory stores, the errors,
+ * and the types describing them. The surface is spec §6, listed name by name rather than
+ * re-exported wholesale so a new declaration cannot reach adopters by accident. The package
+ * is pre-release; the remaining values land before the first publish.
  *
  * @module
  */
 
-export {}
+export type {
+  OperationsMap,
+  Switch,
+  CreateSwitchConfig,
+  SettlementFailure,
+  StorePair,
+  Logger,
+  OperationDefinition,
+  QualityVerdict,
+  OperationRoute,
+  RouteTarget,
+  OperationConfigView,
+  QuotaView,
+  RunResult,
+  AttemptOutcome,
+  AttemptRecord,
+  TokenUsage,
+  ModelPrice,
+  Provider,
+  PreparedProvider,
+  ProviderRequest,
+  ProviderResponse,
+  ProviderErrorKind,
+  ApiKeyResolver,
+  ConfigStore,
+  QuotaKey,
+  ReservationEnvelope,
+  UsageStore,
+} from './types'
+
+export { LLMSwitchError, ProviderError } from './errors'

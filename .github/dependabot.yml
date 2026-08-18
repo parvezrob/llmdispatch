@@ -19,6 +19,15 @@ updates:
     # The package has no runtime dependencies, so only the toolchain is updated here.
     allow:
       - dependency-type: development
+    # Two majors are held back deliberately. TypeScript stays on 5.9 until typescript-eslint
+    # supports a newer one, since the lint rules are what the strictness rests on; @types/node
+    # tracks the Node 20 floor in `engines`, so a major here would describe a Node the package
+    # does not claim to support. Both move by hand, with the reason in the pull request.
+    ignore:
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       dev-dependencies:
         patterns:
