@@ -32,12 +32,12 @@ not change the outcome: the run returns its result; settlement records `succeede
 | 0 | Signal already aborted | `ABORTED` | none |
 | 1 | Operation lookup (JS callers can pass unknown names) | `INVALID_INPUT` | none |
 | 2 | Input parse: `input.parseAsync(args.input)`. `ZodError` = validation failure; a **non-Zod exception from user transform code passes through unwrapped** (pre-quota user bug) | `INVALID_INPUT` | none |
-| 3 | Subject check: quota'd operation requires non-empty `subjectId` | `MISSING_SUBJECT` | none |
-| 4 | Config resolution (§2) — primary **and** fallback route | `INVALID_CONFIG` / `CONFIG_STORE_UNAVAILABLE` | none |
+| 3 | Subject check for a **declared** quota: an operation whose definition declares `quota` requires non-empty `subjectId` | `MISSING_SUBJECT` | none |
+| 4 | Config resolution (§2) — primary **and** fallback route — then, if the effective route enables a quota the definition does not declare, the same subject check | `INVALID_CONFIG` / `CONFIG_STORE_UNAVAILABLE` / `MISSING_SUBJECT` | none |
 | 5 | Readiness for **both** routes (§5a): registration + `prepare()` per unique provider | `INVALID_CONFIG` (`detectedAt:'local'`; `retryable` per §5a) | none |
 | 6 | Prompt build: `prompt(parsedInput)` (raced with abort). A non-string return is a user bug: descriptive `TypeError` passes through unwrapped | user exception unwrapped | none |
-| 7 | Quota reserve (§4) | `QUOTA_EXCEEDED` / `USAGE_STORE_UNAVAILABLE` | pending reservation (envelope held) |
-| 8 | Quota commit (§4 recovery table; signal checked before each recovery I/O) | `QUOTA_EXCEEDED` (denied re-reserve) / `USAGE_STORE_UNAVAILABLE` | committed on success; §4 table otherwise |
+| 7 | Quota reserve (§4), performed iff the run has an **effective** quota (§2) | `QUOTA_EXCEEDED` / `USAGE_STORE_UNAVAILABLE` | pending reservation (envelope held) |
+| 8 | Quota commit (§4 recovery table; same condition as 7; signal checked before each recovery I/O) | `QUOTA_EXCEEDED` (denied re-reserve) / `USAGE_STORE_UNAVAILABLE` | committed on success; §4 table otherwise |
 | 9 | Primary attempt: final signal check → dispatch via prepared dispatcher → output pipeline (§3) | classified per §5 | committed |
 | 10 | Fallback decision (§5) and, if eligible and configured, the fallback attempt (same sub-stages, fresh provider timeout) | terminal code per §5 | same slot — never a second reservation |
 | 11 | **Finalization (try/finally, before every post-commit return or throw):** settle (§4), then return/throw | settlement never changes the outcome | accounting only |
@@ -46,6 +46,11 @@ Fixed rules:
 
 - Quota work happens after config and readiness — local misconfiguration of either route
   never consumes quota.
+- **Subject-check precedence.** Stage 3 covers only a *declared* quota, so that check stays
+  ahead of all I/O. A quota that only the effective route enables is unknown until the route
+  resolves, so its check runs immediately after stage 4: for such an operation a config
+  failure or a malformed/unresolvable route (stage 4 reads the store, up to 5 s) is reported
+  **before** `MISSING_SUBJECT`. The stage numbering is unchanged — this is a sub-step of 4.
 - `INVALID_CONFIG` also arises **post-dispatch** (provider rejects credentials/model;
   `detectedAt:'provider'`). The slot stays committed.
 - Unwrapped user exceptions (stages 2/6 pre-quota; `output_schema_error`/`quality_error`
@@ -70,8 +75,17 @@ Per-operation resolution matrix:
   → `CONFIG_STORE_UNAVAILABLE` (fail-closed — a malformed container must never read as
   "no rows" and activate defaults). Rows are then validated strictly (unknown fields →
   malformed). A shape-valid row referencing an unregistered provider is malformed for
-  resolution (`INVALID_CONFIG`, isolated). In `getConfig()`, a malformed row reports
-  `stored: 'malformed'`, `effective: null`.
+  resolution (`INVALID_CONFIG`, isolated), as is a row whose `quota` fails its §6 validation
+  (shape or range). In `getConfig()`, a malformed row reports `stored: 'malformed'`,
+  `effective: null`.
+- **Effective quota.** The effective quota is the effective route's `quota` if the route
+  carries one, else the operation's declared `quota` (§6); the effective route is the stored
+  row when one resolves, else `defaultRoute`. Explicitly: a stored row **without** `quota`
+  does **not** inherit `defaultRoute.quota` — it falls back to the declared quota, and the
+  operation runs with no quota at all if the definition declares none. A stored `quota` on an
+  operation that declares none *enables* a quota (the row is valid, and the subject
+  requirement then applies, checked after stage 4 per §1). `resetConfig` deletes the row, so
+  `defaultRoute` and its `quota` apply again. A run's effective quota is fixed at stage 4 (§4).
 - **Cache coherence:** generation counter; every mutation outcome (success, timeout,
   rejection — any outcome whose non-application is not positively known) bumps the
   generation and invalidates locally. A read begun under an older generation cannot
@@ -89,12 +103,20 @@ Per-operation resolution matrix:
   | `getConfig()` | `getAll` | 5s | `CONFIG_STORE_UNAVAILABLE` | none (bypasses) |
   | `setConfig(op, route)` | `set` | 10s | `CONFIG_STORE_UNAVAILABLE` (retryable; unknown-ack) | invalidate + bump on every outcome |
   | `resetConfig(op)` | `delete` | 10s | same | same |
-  | `getQuota(op, subjectId)` | `snapshot` | 10s | `USAGE_STORE_UNAVAILABLE` | n/a. Non-quota operation → `INVALID_INPUT` |
+  | `getQuota(op, subjectId)` | config resolution, then `snapshot` | 5s + 10s | `INVALID_INPUT` / `CONFIG_STORE_UNAVAILABLE` / `INVALID_CONFIG` / `USAGE_STORE_UNAVAILABLE` (precedence below) | as the resolution matrix above (cache honoured and updated) |
 
 - `getConfig()` returns per operation `{ stored: OperationRoute | null | 'malformed',
   effective: OperationRoute | null }` (readiness not probed).
-- `setConfig` replace-only, validated (shape, registered provider IDs, §6 ranges).
-  Cache TTL default 5000ms (`configTtlMs`, 0–300 000; `0` = read every run).
+- `setConfig` replace-only, validated (shape, registered provider IDs, §6 ranges — including
+  `quota.perDay`). Cache TTL default 5000ms (`configTtlMs`, 0–300 000; `0` = read every run).
+- `getQuota` resolves the operation's config before reading usage, because the limit it
+  reports is the **effective** limit and may live on the route. Full precedence: unknown
+  operation → `INVALID_INPUT`; empty `subjectId` → `INVALID_INPUT`; config resolution failure
+  → `CONFIG_STORE_UNAVAILABLE`, `snapshot` not attempted; malformed row, or no row and no
+  `defaultRoute` → `INVALID_CONFIG` (an operation whose limit is declared in code still needs
+  a resolvable route); no effective quota → `INVALID_INPUT`; otherwise `snapshot`, whose
+  failure or timeout maps to `USAGE_STORE_UNAVAILABLE` as before. A fresh cache entry makes
+  the resolution free; the two deadlines are sequential (§6a).
 
 ## 3. Output pipeline (attempt sub-stages)
 
@@ -132,9 +154,18 @@ the core validates (`key` must equal the requested key; `day` must match the for
 carries verbatim through commit recovery and settlement. A re-reservation **replaces** the
 active envelope.
 
-- **reserve** atomically counts committed + unexpired pending slots for the store's current
-  UTC day; under `limit` → insert pending reservation, lease
-  `expiresAt = min(now + leaseMs, resetsAt)` (a lease never crosses the day boundary).
+- **reserve** — the `limit` passed is the run's **effective limit** (§2). The store atomically
+  counts committed + unexpired pending slots for the store's current UTC day; under `limit`
+  → insert pending reservation, lease `expiresAt = min(now + leaseMs, resetsAt)` (a lease
+  never crosses the day boundary).
+  **`limit === 0`:** the core **still calls `reserve`** and never short-circuits — `used` and
+  `resetsAt` must be store-authoritative. An available store returns the complete denial
+  `{ ok: false, used, resetsAt }` — `used` being the day's authoritative count, which may be
+  non-zero — **without inserting a reservation**, and the run ends `QUOTA_EXCEEDED`; a
+  transport error or timeout still maps to `USAGE_STORE_UNAVAILABLE`, so a zero limit during
+  a store outage refuses as an outage, not as a quota denial. `getQuota` at zero
+  returns `limit: 0`, `remaining: 0`, and that same authoritative `used`. How quickly a
+  newly written zero takes effect follows the cache rule below (5).
 - **commit** is idempotent, conditional: pending-and-unexpired → `'committed'`; already
   committed → `'committed'` (lost-ack recovery); expired → `'expired'`; unknown →
   `'missing'`.
@@ -166,6 +197,27 @@ active envelope.
   **safe** integers, timestamps parseable). Malformed results map to the corresponding
   `*_UNAVAILABLE` error; the core never dispatches without a validated `'committed'`.
 
+**Changing a limit while runs are in flight.** A limit is part of config (§2), so it can be
+edited between one run and the next:
+
+1. A run captures its effective limit at config resolution (stage 4). A later change never
+   alters that run's pending envelope, its commit recovery, or an in-flight re-reservation —
+   those complete against the captured limit.
+2. A limit lowered to at or below the day's current `used` denies **new** reservations
+   (`QUOTA_EXCEEDED` with the store's `resetsAt`); already-committed slots stand.
+3. `getQuota` may therefore report `used > limit` with `remaining: 0`, since `remaining` is
+   `max(0, limit - used)`.
+4. Removing the only quota — clearing `quota` from a stored row for an operation whose
+   definition declares none — makes new runs non-quota and `getQuota` return `INVALID_INPUT`;
+   reservations already pending or committed keep their normal lifecycle (expiry, commit,
+   settle, pruning) and their rows are untouched.
+5. Any change, including to 0, applies to new runs once it is cache-visible per §2, and never
+   to already-resolved work. This is not an upper bound: once a write is visible
+   to store reads, the core may still serve a stale result for one `configTtlMs` after the
+   read that preceded the write completes (that read may itself run to its 5 s deadline); an
+   external write does not bump another process's generation (§2, cache coherence), and
+   cross-process store visibility has no core-guaranteed wall-clock bound.
+
 Postgres adapter: single-statement atomic reserve/commit (row-level concurrency, no
 explicit table-wide locks), lease and day boundary enforced in SQL, schema-qualified
 identifiers, default `leaseMs` 120 000 (5 000–600 000). Migrations are packaged (§6b),
@@ -185,7 +237,7 @@ implementing exactly this.
 ### 5a. Readiness lifecycle
 
 - **Registration (`createSwitch`):** registration is the whole static check. Built-ins are
-  fetch-based and dependency-free (owner decision 2026-08-10).
+  fetch-based and dependency-free by design.
 - **Stage 5 (per run, before quota):** both routes' providers must be registered. If a
   provider declares **`prepare()`** (§6), it is invoked (raced with abort) **once per
   unique provider registration ID per run** — memoized, so a run whose primary and
@@ -198,7 +250,15 @@ implementing exactly this.
   **`retryable: true`**; any other failure → `retryable: false`. No quota consumed either
   way. `prepare` is public; built-ins have no private powers.
 - **Post-dispatch:** provider rejects credential/model → `auth`/`model_not_found` →
-  `INVALID_CONFIG` (`detectedAt:'provider'`), slot committed.
+  `INVALID_CONFIG` (`detectedAt:'provider'`), slot committed. Neither classification is
+  fallback-eligible unless `fallbackOnAuthOrModelNotFound` (§6) is on, and the flag governs
+  a **primary** attempt only — it never introduces a second fallback and does not touch the
+  local `INVALID_CONFIG` paths above. `detectedAt` is a property of the thrown
+  `LLMSwitchError`, never of an `AttemptRecord` (§6), and `detectedAt:'provider'` is set only
+  when the terminal code is `INVALID_CONFIG` from the final attempt: a primary rescued by its
+  fallback contributes an attempt record with outcome `auth`/`model_not_found` and the run
+  raises no error at all, while a fallback that itself ends `auth`/`model_not_found` is
+  terminal, so the run throws `INVALID_CONFIG` with `detectedAt:'provider'`.
 
 ### 5b. Classification table (exhaustive) with literal `retryable`
 
@@ -211,8 +271,8 @@ implementing exactly this.
 | `truncated` (`ProviderResponse.kind: 'truncated'` — max-token/length/context termination per §5c) | ✅ | `OUTPUT_REJECTED` | `true` |
 | `output_rejected` (JSON parse / object-shape / `ZodError` / quality `{ok:false}`) | ✅ | `OUTPUT_REJECTED` | `true` |
 | `refused` (`ProviderResponse.kind: 'refused'` — refusal/safety/policy block on a 200 per §5c) | ❌ | `PROVIDER_FAILED` | `false` |
-| `auth` | ❌ | `INVALID_CONFIG` (provider) | `false` |
-| `model_not_found` | ❌ | `INVALID_CONFIG` (provider) | `false` |
+| `auth` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
+| `model_not_found` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
 | `invalid_request` (content-dependent rejection, e.g. context overflow) | ❌ | `PROVIDER_FAILED` | `false` |
 | `aborted` (adapter observed the signal) | ❌ | `ABORTED` if caller signal fired, else re-classified `timeout` | `false` / `true` |
 | `provider_unclassified` (non-`ProviderError` thrown by custom code) | ❌ default; with `treatUnclassifiedAsTransient: true` → classifies `transient` (fallback ✅, `retryable: true`) | `PROVIDER_FAILED` | `false` (default) |
@@ -365,7 +425,7 @@ export interface Switch<Ops extends OperationsMap> {
   getConfig(): Promise<Record<keyof Ops & string, OperationConfigView>>
   setConfig(operation: keyof Ops & string, route: OperationRoute): Promise<void>
   resetConfig(operation: keyof Ops & string): Promise<void>
-  getQuota(operation: keyof Ops & string, subjectId: string): Promise<QuotaView> // non-quota op → INVALID_INPUT
+  getQuota(operation: keyof Ops & string, subjectId: string): Promise<QuotaView> // resolves config first (§2), so it may also fail CONFIG_STORE_UNAVAILABLE/INVALID_CONFIG; no effective quota → INVALID_INPUT
 }
 
 export interface CreateSwitchConfig<Ops extends OperationsMap> {
@@ -375,6 +435,7 @@ export interface CreateSwitchConfig<Ops extends OperationsMap> {
   pricing?: Record<string, Record<string, ModelPrice>>
   configTtlMs?: number                                   // default 5_000; 0–300_000
   treatUnclassifiedAsTransient?: boolean                 // default false
+  fallbackOnAuthOrModelNotFound?: boolean                // default false; primary attempt only (§5a/§5b)
   onSettlementError?: (error: unknown, record: SettlementFailure) => void | Promise<void>
   logger?: Logger
 }
@@ -397,7 +458,7 @@ export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType
   prompt: (input: z.output<In>) => string | Promise<string>
   format?: 'json' | 'json-any' | 'text'                  // default 'json' (§3)
   quality?: (ctx: { input: z.output<In>; data: z.output<Out> }) => QualityVerdict | Promise<QualityVerdict>
-  quota?: { perDay: number }                             // safe integer, 1–1_000_000
+  quota?: { perDay: number }                             // safe integer, 0–1_000_000 (0 = halted)
   timeoutMs?: number                                     // provider I/O timeout; default 60_000; 1_000–600_000
   defaultRoute?: OperationRoute
 }
@@ -409,6 +470,7 @@ export interface OperationRoute {
   model: string                                          // non-empty
   maxOutputTokens?: number                               // safe integer ≥ 1
   temperature?: number                                   // finite, 0–2 (profiles may clamp; §5c)
+  quota?: { perDay: number }                             // safe integer, 0–1_000_000; overrides the declared quota (§2)
   fallback?: RouteTarget | null
 }
 export interface RouteTarget {
@@ -418,7 +480,7 @@ export interface OperationConfigView {
   stored: OperationRoute | null | 'malformed'
   effective: OperationRoute | null
 }
-export interface QuotaView { limit: number; used: number; remaining: number; resetsAt: string } // remaining = max(0, limit - used); getQuota requires non-empty subjectId
+export interface QuotaView { limit: number; used: number; remaining: number; resetsAt: string } // limit = the effective limit (route override, else declared); remaining = max(0, limit - used); getQuota requires non-empty subjectId
 
 // ——— run results ———
 export interface RunResult<Out> {
@@ -540,7 +602,8 @@ dispatchers → `INVALID_CONFIG` (local).
 
 `ConfigStore.getAll` 5s; `set`/`delete` 10s (unknown-ack semantics per §2);
 `reserve`/`commit`/`snapshot` 10s; `settle` 10s per attempt including each detached retry.
-Constants in v0.1.
+`getQuota` may spend both in sequence — a `getAll` that is not served from cache, then
+`snapshot` — so its worst case is 15s. Constants in v0.1.
 
 ## 6b. Packaged operational surfaces (exact declarations)
 
@@ -609,21 +672,34 @@ discounts, tiered pricing, and request fees are out of scope in v0.1.
 
 ## 8. Conformance suite (adopter-facing)
 
-Runners per §6b. Coverage:
+Runners per §6b. Three of the cases below are new to this contract — two `UsageStore` cases
+(a `reserve` at limit 0, and a limit lowered below existing usage) and one `ConfigStore` case
+(a route carrying `quota`) — so a custom store can fail the suite without any change on its
+side: a `UsageStore` that treats a non-positive `limit` as unlimited, or a `ConfigStore` that
+persists only a whitelist of route fields, needs updating. Coverage:
 
 - **UsageStore:** reserve atomicity under concurrency (globally-unique reservation IDs;
   oversubscription: callers > limit), commit/settle idempotency, lost-ack commit retry,
   lease expiry (pending frees, committed never), lease capped at day boundary, day
   rollover via `setTime`, snapshot correctness including pending, settle
   duplicate/conflict/unknown-reservation behavior observed via `readSettled`,
-  envelope validity (key match, `YYYY-MM-DD` day format). (Settle-FAILURE isolation —
-  a rejecting store not affecting run outcomes — is core behavior, tested internally.)
+  envelope validity (key match, `YYYY-MM-DD` day format), a `reserve` call with `limit: 0`
+  denying without inserting a reservation, and a limit lowered below existing
+  pending/committed usage denying new reservations while leaving those rows intact.
+  (Settle-FAILURE isolation — a rejecting store not affecting run outcomes — is core
+  behavior, tested internally.)
 - **ConfigStore:** set/get/delete round-trip fidelity, raw-value persistence via
   `seedRaw` (the store must return exactly what was written — validation is the CORE's
-  job and is tested internally), delete-removes-row, read-your-writes.
+  job and is tested internally), delete-removes-row, read-your-writes, and a route carrying
+  `quota` returned verbatim like any other field.
 - **Provider:** mandatory success dispatch (correct `kind`/text/usage shape); honors
   `signal`; classifies each supplied scenario via `ProviderResponse.kind` or
   `ProviderError`; respects `responseFormat` per its capability; normalizes usage or
   returns `null`. Skipped optional scenarios are reported as unverified. Core-behavior
-  checks (state machine, matrices, sanitization, validation-on-read,
-  default-restoration) are internal package tests, not part of this suite.
+  checks are internal package tests, not part of this suite: state machine, matrices,
+  sanitization, validation-on-read, default-restoration, effective-quota precedence
+  (including a stored row without `quota`), a stored `quota` enabling subject enforcement and
+  its precedence after stage 4, `getQuota` under a fresh cache and under a config outage with
+  its full precedence order, `quota.perDay` range validation including 0, and
+  `fallbackOnAuthOrModelNotFound` (eligibility on the primary attempt only, terminal code per
+  §5b, and the `detectedAt` rule).

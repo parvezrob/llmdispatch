@@ -16,8 +16,8 @@ llmswitch gives you one place to declare your operations, and a control panel's 
 
 - **Per-operation routing** — each operation gets its own provider + model: store overrides with an optional code-declared default, editable at runtime without a redeploy.
 - **Schema-validated output** — every operation declares the shape it expects (a [Zod](https://zod.dev) schema); responses are validated before you see them.
-- **Automatic fallback** — if the primary route fails in a retry-worthy way, the call retries once on a fallback route, per an explicit classification matrix (spec §5).
-- **Per-user quotas** — daily limits per operation per subject, counted atomically in your database, fail-closed.
+- **Automatic fallback** — if the primary route fails in a retry-worthy way, the call retries once on a fallback route, per an explicit classification matrix (spec §5). Credential and unknown-model errors are excluded by default so a misconfiguration stays loud; opt in with `fallbackOnAuthOrModelNotFound` if you'd rather keep serving.
+- **Per-user quotas** — daily limits per operation per subject, counted atomically in your database, fail-closed, and editable at runtime like a route.
 - **Usage accounting** — provider-reported token counts per attempt; cost estimates if you supply your prices.
 
 What llmswitch deliberately is **not**: it doesn't auto-pick models for you (it's a switchboard, not a brain), it doesn't proxy traffic through anyone's servers, and v0.1 is text-only — no streaming, no PDF/image input yet (both on the [roadmap](#roadmap)).
@@ -60,13 +60,14 @@ const ai = createSwitch({
     }),
   }),
 
-  // 3. Wire storage: routing config + quota counters. Memory for dev, Postgres for prod.
+  // 3. Wire storage: runtime config (routes and limits) + quota counters.
+  //    Memory for dev, Postgres for prod.
   stores: memoryStores(),
 })
 
 const result = await ai.run('summarize', {
   input: { text: articleText },
-  subjectId: user.id, // required for operations with a quota
+  subjectId: user.id, // required whenever the operation has an effective quota
 })
 
 result.data          // { summary, keyPoints } — typed, validated against your output schema
@@ -105,16 +106,16 @@ Classified llmswitch failures throw `LLMSwitchError` with a stable `code` (excep
 | Code | Meaning | Retryable | Sensible HTTP |
 | --- | --- | --- | --- |
 | `INVALID_INPUT` | input failed the operation's input schema, or unknown operation name (JS callers) | no | 400 |
-| `MISSING_SUBJECT` | operation has a quota but no `subjectId` was passed | no | 500 (caller bug) |
-| `CONFIG_STORE_UNAVAILABLE` | no fresh cached route and the config store is unreachable — refused, fail-closed | yes | 503 |
-| `INVALID_CONFIG` | bad or missing route, unregistered provider, unresolvable API key (`detectedAt: 'local'`) — or the provider rejected credentials/model (`detectedAt: 'provider'`) | no — except a transient local `prepare()` failure (e.g. secrets service briefly down): yes | 500 |
+| `MISSING_SUBJECT` | operation has an effective quota — declared in code or set on its route — but no `subjectId` was passed | no | 500 (caller bug) |
+| `CONFIG_STORE_UNAVAILABLE` | no fresh cached route and the config store is unreachable — refused, fail-closed; `getQuota` can report it too, since the limit lives in config | yes | 503 |
+| `INVALID_CONFIG` | bad or missing route, unregistered provider, unresolvable API key (`detectedAt: 'local'`) — or the provider rejected credentials/model (`detectedAt: 'provider'`); `getQuota` can report it too, for the same route problems, even when the limit itself is declared in code | no — except a transient local `prepare()` failure (e.g. secrets service briefly down): yes | 500 |
 | `QUOTA_EXCEEDED` | subject hit the daily limit; `error.resetsAt` attached | no (`resetsAt` says when to try again) | 429 |
 | `USAGE_STORE_UNAVAILABLE` | quota store unreachable — refused, fail-closed | yes | 503 |
 | `ABORTED` | your `AbortSignal` fired — no fallback attempted | no | 499 |
 | `PROVIDER_FAILED` | the final attempt failed at the provider level (see `error.attempts` for the full path) | per final classification (spec §5b) | 502 |
 | `OUTPUT_REJECTED` | the final attempt's output failed schema/quality validation, or was truncated by a token limit | yes | 502 |
 
-The table is ordered: pre-dispatch checks run top-to-bottom (config before quota — a misconfigured operation never consumes quota), and for post-dispatch failures the code reflects the **final attempt's** classification, with every attempt detailed in `error.attempts` (including token usage of failed runs). A fallback attempt can itself end in `INVALID_CONFIG` or `ABORTED` — the terminal-code mapping is spec §5b.
+The table is ordered: pre-dispatch checks run top-to-bottom (config before quota — a misconfigured operation never consumes quota). One nuance for an operation whose *code* declares no quota and gets one only from its route: llmswitch can't know it is quota'd until config resolves, so for that case `CONFIG_STORE_UNAVAILABLE`/`INVALID_CONFIG` surfaces before `MISSING_SUBJECT`. An operation that declares a quota in code keeps the early check even when a route overrides the number. For post-dispatch failures the code reflects the **final attempt's** classification, with every attempt detailed in `error.attempts` (including token usage of failed runs). A fallback attempt can itself end in `INVALID_CONFIG` or `ABORTED` — the terminal-code mapping is spec §5b.
 
 **Error contents are sanitized by design**: classifications, HTTP status codes, safe metadata — never prompts, model output, or raw provider errors. Exceptions thrown by *your own* code (prompt builder, quality gate, schema transforms) pass through unwrapped; they're your bugs to see in full.
 
@@ -128,11 +129,13 @@ One fallback route per operation, one retry, decided by failure *classification*
 | Output rejected (JSON/schema/quality) | ✅ |
 | `truncated` (provider signaled a max-token/context cutoff) | ✅ |
 | `refused` (provider refusal/safety block — another model will likely refuse too) | ❌ `PROVIDER_FAILED` |
-| `auth`, `model_not_found` (config problems — retrying elsewhere hides them) | ❌ `INVALID_CONFIG` |
+| `auth`, `model_not_found` (config problems — retrying elsewhere hides them) | ❌ `INVALID_CONFIG` by default — opt in via `fallbackOnAuthOrModelNotFound` |
 | `invalid_request` (content-dependent rejection, e.g. context length) | ❌ `PROVIDER_FAILED` |
 | Unclassified exception from a custom provider (adapter bug until proven otherwise) | ❌ by default — opt in via `treatUnclassifiedAsTransient` |
 | Your `AbortSignal` fired | ❌ `ABORTED` |
 | Anything failing before dispatch (input, config, quota, stores) | ❌ |
+
+`fallbackOnAuthOrModelNotFound: true` on `createSwitch` (off by default) lets a *primary* attempt that dies on bad credentials or an unrecognized model name fall back anyway — availability over noise, when a stale key shouldn't take an operation down. It's off by default because a broken route is worth finding out about immediately, rather than paying another provider to hide it, and it changes nothing else: when the fallback *also* dies on credentials or an unknown model the terminal code is still `INVALID_CONFIG`, and otherwise the final attempt's own classification decides it, as always (spec §5b).
 
 Built-in adapters make exactly one client-side HTTP request per attempt — no retries in llmswitch's own HTTP layer, so `timeoutMs` and `attempts[]` mean what they say (a gateway host may retry upstream internally; that's outside our boundary). Truncated responses and provider refusals are detected from termination metadata (`finish_reason`/`stop_reason`), never passed off as good data — truncation falls back, refusals don't. Timeouts and caller cancellation are classified by llmswitch itself, not the adapter: a timeout is retry-worthy, a caller who hung up is not.
 
@@ -143,43 +146,50 @@ await ai.run('summarize', { input, subjectId }, { signal: controller.signal })
 
 ## Quotas
 
-Limits are per operation, per `subjectId`, per UTC day — and the *store's* clock owns the day boundary. The accounting unit is one **run**: a run and its fallback attempt share one slot. Lifecycle (spec §4 has the exact store contract):
+Limits are per operation, per `subjectId`, per UTC day — and the *store's* clock owns the day boundary. A limit can be declared in code and overridden at runtime from the config store, exactly like a route ([Runtime config](#runtime-config)). The accounting unit is one **run**: a run and its fallback attempt share one slot. Lifecycle (spec §4 has the exact store contract):
 
 1. **Reserve** — after config checks pass, one slot is atomically reserved. Over the limit → `QUOTA_EXCEEDED`, nothing dispatched.
 2. **Commit** — an idempotent, confirmed transition immediately before the first provider request. **Committed slots are never refunded** — a run that reaches a provider counts even if it fails, because refunding failures would let a failing user burn unlimited provider spend. llmswitch never dispatches without a confirmed commit.
 3. **Expire** — a reservation that never commits (crash before dispatch) expires after its lease and frees the slot — safe, because no provider was called.
 4. **Settle** — attempt records are written idempotently, best-effort with bounded retries and an `onSettlementError` hook. Settlement is accounting only: quota correctness was fixed at commit, and a settlement failure never changes an otherwise successful outcome (the initial write may delay delivery by up to its 10s deadline in the worst case).
 
-**Fail-closed** end to end: unreachable stores refuse calls; quota'd operations refuse without a `subjectId`. Derive `subjectId` server-side from your authenticated session — never accept it from the client, or users can spend each other's allowance.
+**Fail-closed** end to end: unreachable stores refuse calls; operations with an effective quota refuse without a `subjectId`. Derive `subjectId` server-side from your authenticated session — never accept it from the client, or users can spend each other's allowance.
 
 ```ts
 const q = await ai.getQuota('summarize', user.id)
 // { limit: 10, used: 3, remaining: 7, resetsAt: '2026-08-11T00:00:00.000Z' }
-// used and resetsAt come from the store (authoritative); limit from the operation's config.
+// used and resetsAt come from the store (authoritative); limit is the effective limit —
+// the route's override if it sets one, otherwise the value declared in code, so getQuota
+// reads config before usage.
 ```
+
+Set `perDay: 0` to halt an operation during an incident: every reservation is denied, nothing is inserted, and callers get `QUOTA_EXCEEDED` whenever the usage store answers — if that store is itself unreachable the call still refuses, as `USAGE_STORE_UNAVAILABLE`. It takes effect like any other config change (see the cache note below), and `getQuota` keeps reporting the day's real `used` while `limit` and `remaining` read 0.
 
 The Postgres adapter stores metadata only — operation, subject, day, states, token counts — **never prompts or outputs**, and ships with pruning guidance (spec §4).
 
 ## Runtime config
 
-Routing lives in the config store, with code-declared defaults underneath. Three functions — build any admin screen on top:
+Routing and daily limits live in the config store, with code-declared defaults underneath. Three functions — build any admin screen on top:
 
 ```ts
 await ai.getConfig()                    // authoritative: { stored, effective } per operation
 await ai.setConfig('summarize', {       // replace-only, validated, last-write-wins (late/racing writes possible cross-process; CAS is v0.2), privileged
   provider: 'openai',                   // must be a provider ID registered in code
   model: 'gpt-4.1-mini',
+  quota: { perDay: 50 },                // optional: overrides the limit declared in code
   fallback: null,
 })
 await ai.resetConfig('summarize')       // delete the stored row → defaultRoute applies again
 ```
+
+Because the limit rides on the route, changing a daily allowance is an edit on your admin surface, not a deploy: raise it for a customer who needs more, or set it to 0 to stop an operation while you investigate. Leave `quota` off the row and the operation uses the limit declared in its code — a stored row never inherits a `defaultRoute`'s limit — and `resetConfig` puts route and limit back together.
 
 The rules, stated plainly:
 
 - **Config can only reference registered provider IDs**, and secrets never enter the store. With built-in adapters, a tampered row can misroute among *your* registered endpoints but cannot redirect traffic to an arbitrary attacker URL. Scope honestly: for gateway-style providers (e.g. OpenRouter) the model string itself selects downstream infrastructure — protect store write access like the privileged surface it is.
 - Rows are **validated on every read**; a malformed row fails its own operation (`INVALID_CONFIG`) without poisoning others.
 - `defaultRoute` applies **only when a successful store read finds no row** — never as an outage fallback. Expired cache + unreachable store = `CONFIG_STORE_UNAVAILABLE`, fail-closed, so an outage can't silently undo an operator's route switch. Full resolution matrix: spec §2.
-- Reads are cached per process (default 5s, `configTtlMs`). Changes are visible to other instances within the TTL — "live switch" means live within 5 seconds everywhere.
+- Reads are cached per process (default 5s, `configTtlMs`), and a change — to a route or a limit — reaches another instance when that instance's cached entry expires and it re-reads. This is not an upper bound: an instance that read just before your write can keep serving the old value for one more TTL after that read finishes, and how fast your write becomes visible to other instances' reads is your store's business, not llmswitch's. Your own process sees its own writes immediately. In-flight runs always finish on the route and limit they resolved with.
 
 ## Stores
 
