@@ -93,7 +93,7 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^3.0.0",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^20.19.43",
+    "@types/node": "^26.2.0",
     "@vitest/coverage-v8": "^4.1.10",
     "dependency-cruiser": "^18.2.0",
     "eslint": "^10.8.1",
@@ -103,7 +103,7 @@
     "prettier": "^3.9.6",
     "publint": "^0.3.23",
     "tsdown": "^0.22.14",
-    "typescript": "~5.9.3",
+    "typescript": "~7.0.2",
     "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.10",
     "zod": "^4.4.3"
