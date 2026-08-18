@@ -1,0 +1,12 @@
+# Generated or byte-sensitive files: formatting them would change what a check compares.
+dist/
+coverage/
+api/
+package-lock.json
+test/fixtures/
+*.tgz
+
+# The published documents are edited as prose and kept byte-for-byte as written.
+README.md
+docs/spec.md
+LICENSE

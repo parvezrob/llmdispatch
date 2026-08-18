@@ -1,0 +1,30 @@
+# Hosts this repository is allowed to link to. One host per line; `#` starts a comment.
+# A link to anything else is a finding — add the host here, in a reviewed change, first.
+
+# This project and the tooling around it
+github.com
+npmjs.com
+registry.npmjs.org
+nodejs.org
+zod.dev
+
+# Provider documentation and endpoints named in the README and the specification
+docs.anthropic.com
+platform.claude.com
+api.anthropic.com
+platform.openai.com
+developers.openai.com
+api.openai.com
+ai.google.dev
+generativelanguage.googleapis.com
+openrouter.ai
+ollama.com
+
+# A local model server, used in examples
+localhost
+
+# Standards and reference texts
+opensource.org
+spdx.org
+semver.org
+keepachangelog.com

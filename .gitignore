@@ -1,7 +1,10 @@
 node_modules/
 dist/
+coverage/
+*.tsbuildinfo
+*.tgz
+test/consumers/**/node_modules
 .env
 .env.*
 *.log
 .DS_Store
-coverage/

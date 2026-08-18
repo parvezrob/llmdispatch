@@ -1,0 +1,111 @@
+{
+  "name": "llmswitch",
+  "version": "0.1.0",
+  "description": "Per-operation routing across LLM providers with fallback and daily quotas",
+  "keywords": [
+    "llm",
+    "anthropic",
+    "openai",
+    "gemini",
+    "routing",
+    "fallback",
+    "quota"
+  ],
+  "homepage": "https://github.com/parvezrob/llmswitch",
+  "bugs": "https://github.com/parvezrob/llmswitch/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/parvezrob/llmswitch.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./postgres": {
+      "import": {
+        "types": "./dist/postgres.d.ts",
+        "default": "./dist/postgres.js"
+      },
+      "require": {
+        "types": "./dist/postgres.d.cts",
+        "default": "./dist/postgres.cjs"
+      }
+    },
+    "./conformance": {
+      "import": {
+        "types": "./dist/conformance.d.ts",
+        "default": "./dist/conformance.js"
+      },
+      "require": {
+        "types": "./dist/conformance.d.cts",
+        "default": "./dist/conformance.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "docs/spec.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sizeBudget": 32768,
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "depcruise": "depcruise src --config .dependency-cruiser.cjs",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration --passWithNoTests",
+    "test:coverage": "vitest run --project unit --coverage",
+    "api:check": "node scripts/check-api.mjs",
+    "api:update": "node scripts/check-api.mjs --update",
+    "size": "node scripts/check-size.mjs",
+    "publint": "publint",
+    "attw": "attw --pack . --profile node16",
+    "licenses": "sh scripts/check-licenses.sh",
+    "audit:tarball": "node scripts/audit-tarball.mjs",
+    "test:consumers": "node scripts/test-consumers.mjs",
+    "scan": "node scripts/scan-denylist.mjs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run depcruise && npm run build && npm run publint && npm run attw && npm run api:check && npm run size && npm run test:coverage"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^3.0.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^20.19.43",
+    "@vitest/coverage-v8": "^4.1.10",
+    "dependency-cruiser": "^18.2.0",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "fast-check": "^4.9.0",
+    "license-checker-rseidelsohn": "^5.0.1",
+    "prettier": "^3.9.6",
+    "publint": "^0.3.23",
+    "tsdown": "^0.22.14",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.10",
+    "zod": "^4.4.3"
+  }
+}

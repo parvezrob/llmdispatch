@@ -1,0 +1,224 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      prove_canary:
+        description: Write a canary into the workspace so the scan job has to fail
+        type: boolean
+        default: false
+
+# Nothing here writes anywhere, and no step reads a secret.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24.19.0
+  NODE_VERSION_FLOOR: 20.20.2
+  # The package manager bundled with each Node above. Every job asserts the one it uses,
+  # so nothing here ever installs a package manager from the network.
+  NPM_VERSION: 11.17.0
+  NPM_VERSION_FLOOR: 10.8.2
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "$NPM_VERSION" ]'
+      - run: npm ci
+
+      - name: Check the lockfile is already in its canonical form
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          git diff --exit-code package-lock.json
+
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run depcruise
+      - run: npm run build
+      - run: npm run publint
+      - run: npm run attw
+      - run: npm run api:check
+      - run: npm run size
+      - name: Audit what an adopter would install
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit what builds this package
+        run: npm audit --audit-level=high
+      - run: npm run licenses
+
+      - name: Pack the package
+        id: pack
+        run: echo "tgz=$(npm pack --json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8"))[0].filename')" >> "$GITHUB_OUTPUT"
+      - name: Record the tarball hash
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: sha256sum "$TGZ" | tee tarball.sha256
+      - name: Audit what the tarball contains
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: npm run audit:tarball -- "$TGZ"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-tarball
+          path: |
+            ${{ steps.pack.outputs.tgz }}
+            tarball.sha256
+          if-no-files-found: error
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:14@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "$NPM_VERSION" ]'
+      - run: npm ci
+      - run: npm run test:coverage
+      - run: npm run test:integration
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-node24
+          path: coverage
+
+  # The lowest Node the package claims to support. Evidence that it runs there, nothing
+  # more: this leg never builds, and the toolchain is not expected to work on it.
+  test-node20:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION_FLOOR }}
+          cache: npm
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "$NPM_VERSION_FLOOR" ]'
+      - run: npm ci
+      - run: npm test
+
+  # Installs the audited tarball rather than a fresh build, so the fixtures exercise the
+  # exact bytes that were packed.
+  consumers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION_FLOOR }}
+          cache: npm
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "$NPM_VERSION_FLOOR" ]'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-tarball
+      - name: Check the tarball is the one that was audited
+        run: sha256sum -c tarball.sha256
+      # The name comes out of the hash file that was checked a moment ago, so the
+      # fixtures cannot be handed some other archive that happens to be lying around.
+      - name: Name the tarball that was just verified
+        id: tarball
+        run: |
+          set -euo pipefail
+          [ "$(wc -l < tarball.sha256)" -eq 1 ]
+          echo "tgz=$(cut -d' ' -f3- tarball.sha256)" >> "$GITHUB_OUTPUT"
+      - name: Install the tarball into ESM, CommonJS and TypeScript projects
+        env:
+          TGZ: ${{ steps.tarball.outputs.tgz }}
+        run: npm run test:consumers -- "$TGZ"
+
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "$NPM_VERSION" ]'
+
+      - name: Install the secret scanner from a verified download
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          archive="$RUNNER_TEMP/gitleaks/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP/gitleaks" gitleaks
+          echo "$RUNNER_TEMP/gitleaks" >> "$GITHUB_PATH"
+
+      # Assembled from pieces at run time: a matching string committed to this file would
+      # fail every ordinary run instead of only the one that asks for it. Registering it
+      # with git puts it in front of the tree scanner as well, which lists tracked paths.
+      - name: Write a canary so this job has to fail
+        if: ${{ inputs.prove_canary }}
+        run: |
+          set -euo pipefail
+          printf 'key = %s%s\naddress = %s@%s\n' 'AK' 'IA3QW7RTPLZC2MVHB4' 'someone' 'contoso.net' \
+            > canary.txt
+          git add --intent-to-add canary.txt
+
+      # Both scanners run whatever the earlier ones found, so a canary run shows which of
+      # them catch it rather than stopping at the first.
+      - name: Prove the tree scanner still catches what it is meant to catch
+        run: node scripts/scan-denylist.mjs --self-test
+      - name: Scan the tree
+        if: ${{ !cancelled() }}
+        run: node scripts/scan-denylist.mjs .
+      - name: Scan the working tree for secrets
+        if: ${{ !cancelled() }}
+        run: sh scripts/gitleaks-scan.sh dir .
+      - name: Scan the whole history, commit messages included
+        if: ${{ !cancelled() }}
+        run: sh scripts/gitleaks-scan.sh git .

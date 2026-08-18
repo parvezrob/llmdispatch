@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowJs": true,
+    // The maintenance scripts are checked too: a misspelt property or an unguarded
+    // `catch` is a bug there as much as anywhere. They are plain JavaScript with no
+    // annotations, so inferred parameter types stay implicit rather than filling the
+    // files with type comments; everything else strict still applies.
+    "checkJs": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true
+  },
+  "include": ["test", "scripts", "*.config.ts", "eslint.config.js"],
+  "exclude": ["test/consumers"]
+}
