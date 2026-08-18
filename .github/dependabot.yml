@@ -1,0 +1,25 @@
+version: 2
+
+# One grouped pull request per ecosystem per week. Grouping changes how updates are
+# proposed, not how versions are pinned: actions stay pinned to a commit SHA.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # The package has no runtime dependencies, so only the toolchain is updated here.
+    allow:
+      - dependency-type: development
+    groups:
+      dev-dependencies:
+        patterns:
+          - '*'

@@ -1,0 +1,106 @@
+name: publish
+
+# Manual only. The publish job additionally waits behind a protected environment,
+# so a dispatch alone cannot put anything on the registry.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: The reviewed commit on main this release must be built from
+        required: true
+        type: string
+
+# Workflow level is read-only on purpose: the ungated audit job must never hold
+# publish-capable authority.
+permissions:
+  contents: read
+
+jobs:
+  # Builds and inspects the exact bytes that would be published. No credentials here.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Read as an environment variable rather than interpolated into the shell.
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+    steps:
+      - name: Check this run is the reviewed commit on main
+        run: |
+          [ "$GITHUB_REF" = "refs/heads/main" ] || exit 1
+          [ "$GITHUB_SHA" = "$EXPECTED_SHA" ] || exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+      # The package manager is the one bundled with that Node, so no job ever fetches
+      # its own tooling from the network.
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "11.17.0" ]'
+      - run: npm ci
+      - run: npm run build
+
+      - name: Pack the package
+        id: pack
+        run: echo "tgz=$(npm pack --json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8"))[0].filename')" >> "$GITHUB_OUTPUT"
+      - name: Record the tarball hash
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: sha256sum "$TGZ" | tee tarball.sha256
+      - name: Audit what the tarball contains
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: npm run audit:tarball -- "$TGZ"
+
+      # The fixtures install the packed tarball on the lowest supported Node.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20.20.2
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "10.8.2" ]'
+      - name: Install the tarball into ESM, CommonJS and TypeScript projects
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: npm run test:consumers -- "$TGZ"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-tarball
+          path: |
+            ${{ steps.pack.outputs.tgz }}
+            tarball.sha256
+          if-no-files-found: error
+
+  # Publishes the artifact the audit job produced. The environment approval happens
+  # here: after the audit, immediately before the registry is changed.
+  publish:
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      # The only job that can mint a provenance token.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-tarball
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          registry-url: https://registry.npmjs.org
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "11.17.0" ]'
+      # The hash is rechecked in the same step that publishes, so there is no window
+      # between verifying the bytes and sending them.
+      - name: Verify the audited bytes and publish them
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha256sum -c tarball.sha256
+          npm publish ./*.tgz --provenance --access public --ignore-scripts
