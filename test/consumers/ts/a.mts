@@ -2,7 +2,7 @@
 import * as conformance from 'llmswitch/conformance'
 import * as postgres from 'llmswitch/postgres'
 import * as root from 'llmswitch'
-import { LLMSwitchError, ProviderError, type OperationRoute } from 'llmswitch'
+import { LLMSwitchError, ProviderError, memoryStores, type OperationRoute } from 'llmswitch'
 
 export const reached = [root, postgres, conformance].length
 
@@ -49,3 +49,11 @@ export function classify(error: unknown): string {
 }
 
 export const route: OperationRoute = { provider: 'claude', model: 'claude-sonnet-4-6' }
+
+// The in-memory stores through the `import` declarations: the union a reserve resolves with
+// narrows on `ok`, and only the admitted branch has an envelope.
+export async function reserveOne(): Promise<string | null> {
+  const stores = memoryStores()
+  const result = await stores.usage.reserve({ operation: 'summarize', subjectId: 'user-1' }, 1)
+  return result.ok ? result.reservation.reservationId : null
+}

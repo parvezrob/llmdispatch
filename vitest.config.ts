@@ -25,12 +25,22 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      // The two folders held to a threshold: what decides, and what is thrown.
-      include: ['src/core/**/*.ts', 'src/errors/**/*.ts'],
+      include: [
+        'src/core/**/*.ts',
+        'src/errors/**/*.ts',
+        'src/stores/**/*.ts',
+        'src/conformance/**/*.ts',
+      ],
       // `text` prints nothing at all when every measured file is fully covered, so
       // `text-summary` is what makes a green run say a number out loud.
       reporter: ['text', 'text-summary', 'lcov'],
-      thresholds: { lines: 90, branches: 90 },
+      // Held to a threshold: what decides, and what is thrown. The stores and the harnesses
+      // are measured and reported so their number is visible, and gated later rather than at
+      // 90 % on the day they land — a ratchet only ever goes up.
+      thresholds: {
+        'src/core/**/*.ts': { lines: 90, branches: 90 },
+        'src/errors/**/*.ts': { lines: 90, branches: 90 },
+      },
     },
   },
 })

@@ -12,6 +12,7 @@
  * Exit codes: 0 everything agrees, 1 something does not, 2 bad arguments.
  */
 
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
@@ -435,6 +436,52 @@ function readPending() {
   return pending
 }
 
+/** The pending list as the released branch has it, or `null` when it cannot be read. */
+function releasedPending() {
+  for (const ref of ['origin/main', 'main']) {
+    const shown = spawnSync('git', ['show', `${ref}:test/types/spec-pending.json`], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    })
+    if (shown.status !== 0 || typeof shown.stdout !== 'string') continue
+    try {
+      return JSON.parse(shown.stdout)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+/**
+ * The pending list may only ever shrink.
+ *
+ * Each scope removes the names it lands. Adding one back would hide an export that used to be
+ * published, or excuse a name the spec declares and nothing implements any more.
+ */
+function checkPendingShrinks(problems) {
+  const released = releasedPending()
+  if (released === null) {
+    problems.push(
+      'the pending list could not be compared with main: fetch it (a shallow checkout has ' +
+        'neither origin/main nor main) so a name cannot be added back unnoticed',
+    )
+    return
+  }
+  const current = JSON.parse(readFileSync(PENDING, 'utf8'))
+  for (const { entry } of ENTRY_POINTS) {
+    for (const kind of ['value', 'type']) {
+      const before = new Set(released[entry]?.[kind] ?? [])
+      for (const name of current[entry]?.[kind] ?? []) {
+        if (before.has(name)) continue
+        problems.push(
+          `spec-pending.json lists ${name} as a pending ${kind} of '${entry}', which main does not: the list may only shrink`,
+        )
+      }
+    }
+  }
+}
+
 /** Compares one entry point's spec surface with what the two builds publish. */
 function comparePublished(entry, found, pending, problems) {
   const { spec, esm, cjs } = found
@@ -522,6 +569,9 @@ function main() {
   if (problems.length > 0) return report(problems)
 
   const specProgram = compileSurfaces(problems)
+  if (problems.length > 0) return report(problems)
+
+  checkPendingShrinks(problems)
   if (problems.length > 0) return report(problems)
 
   // `--update` has to work on a checkout that was never built, or a spec edit could not be

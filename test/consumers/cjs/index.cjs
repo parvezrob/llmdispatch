@@ -62,6 +62,40 @@ async function main() {
   )
 
   console.log('cjs consumer reached all three entry points and recognised errors across builds')
+
+  // The in-memory stores, reached from the installed package: a reservation is admitted,
+  // committed, counted and settled, and the day's only slot is then gone.
+  const stores = root.memoryStores()
+  const key = { operation: 'summarize', subjectId: 'user-1' }
+  const attempt = {
+    provider: 'claude',
+    model: 'claude-sonnet-4-6',
+    outcome: 'succeeded',
+    usage: { inputTokens: 12, outputTokens: 34 },
+    costUsd: null,
+    durationMs: 120,
+  }
+
+  const reserved = await stores.usage.reserve(key, 1)
+  check('the in-memory store denied the first reservation of the day', reserved.ok)
+  check(
+    'committing a live reservation did not answer committed',
+    (await stores.usage.commit(reserved.reservation.reservationId)) === 'committed',
+  )
+  await stores.usage.settle(reserved.reservation, 'succeeded', [attempt])
+  check('the committed slot was not counted', (await stores.usage.snapshot(key)).used === 1)
+  check(
+    'the day admitted a second reservation at a limit of one',
+    !(await stores.usage.reserve(key, 1)).ok,
+  )
+
+  await stores.config.set('summarize', { provider: 'claude', model: 'claude-sonnet-4-6' })
+  check(
+    'the config store did not return the route it was given',
+    (await stores.config.getAll()).summarize.model === 'claude-sonnet-4-6',
+  )
+
+  console.log('cjs consumer round-tripped a reservation through the in-memory stores')
 }
 
 main().catch((error) => {

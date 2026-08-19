@@ -41,3 +41,4 @@ export type {
 } from './types'
 
 export { LLMSwitchError, ProviderError } from './errors'
+export { memoryStores } from './stores/memory'

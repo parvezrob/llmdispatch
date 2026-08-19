@@ -6,7 +6,6 @@
       "defineOperation",
       "defineOperations",
       "gemini",
-      "memoryStores",
       "openaiCompatible",
       "postgresStores"
     ],
@@ -17,11 +16,7 @@
     "type": []
   },
   "conformance": {
-    "value": [
-      "runConfigStoreConformance",
-      "runProviderConformance",
-      "runUsageStoreConformance"
-    ],
-    "type": ["ConformanceResult"]
+    "value": ["runProviderConformance"],
+    "type": []
   }
 }

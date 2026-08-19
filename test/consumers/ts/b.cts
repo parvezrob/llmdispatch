@@ -46,3 +46,10 @@ export function classify(error: unknown): string {
 }
 
 export const route: root.OperationRoute = { provider: 'claude', model: 'claude-sonnet-4-6' }
+
+// The same store, through the `require` declarations.
+export async function reserveOne(): Promise<string | null> {
+  const stores: root.StorePair = root.memoryStores()
+  const result = await stores.usage.reserve({ operation: 'summarize', subjectId: 'user-1' }, 1)
+  return result.ok ? result.reservation.reservationId : null
+}

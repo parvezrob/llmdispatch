@@ -239,7 +239,8 @@ function main() {
     problems.length === 0
       ? `all fixtures reached ${String(SUBPATHS.length)} entry points, recognised a ProviderError ` +
           'across the ESM and CommonJS builds in both directions, rejected the values that only ' +
-          'look like one, and narrowed LLMSwitchError by code — ' +
+          'look like one, narrowed LLMSwitchError by code, and round-tripped a reservation ' +
+          'through the in-memory stores — ' +
           `from sha256 ${before}\n`
       : `${String(problems.length)} problem(s)\n`,
   )

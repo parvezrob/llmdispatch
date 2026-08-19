@@ -263,3 +263,10 @@ export interface UsageStore {
 //
 // The shapes `llmswitch/postgres` and `llmswitch/conformance` publish are declared below this
 // line and re-exported by those entry points alone, so the root surface stays exactly §6.
+
+/** What a conformance run reports. `passed` is true exactly when `failures` is empty. */
+export interface ConformanceResult {
+  passed: boolean
+  failures: string[]
+  skipped: string[]
+}
