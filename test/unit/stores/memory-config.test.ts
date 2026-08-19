@@ -73,6 +73,25 @@ describe('the in-memory config store', () => {
     expect(typeof {}.toString).toBe('function')
   })
 
+  it('keeps the reading of a route that it checked, not a later one', async () => {
+    const { config } = memoryStores()
+    let reads = 0
+    const route = {
+      get model() {
+        reads += 1
+        return reads === 1 ? 'checked' : 'swapped'
+      },
+      provider: 'claude',
+      quota: { perDay: 5 },
+    }
+
+    await config.set('summarize', route)
+
+    expect(await config.getAll()).toEqual({
+      summarize: { provider: 'claude', model: 'checked', quota: { perDay: 5 } },
+    })
+  })
+
   it('is detached from the object a caller passes in and from the one it reads', async () => {
     const { config } = memoryStores()
     const written = { ...ROUTE, fallback: { ...ROUTE.fallback } } as OperationRoute

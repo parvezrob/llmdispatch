@@ -2,6 +2,7 @@
 import root = require('llmswitch')
 import postgres = require('llmswitch/postgres')
 import conformance = require('llmswitch/conformance')
+import pg = require('pg')
 
 export const reached = [root, postgres, conformance].length
 
@@ -53,3 +54,8 @@ export async function reserveOne(): Promise<string | null> {
   const result = await stores.usage.reserve({ operation: 'summarize', subjectId: 'user-1' }, 1)
   return result.ok ? result.reservation.reservationId : null
 }
+
+// The same pool, through the `require` declarations.
+export const production: root.StorePair = root.postgresStores({ pool: new pg.Pool() })
+
+export const migration: string = postgres.migrationSql({ schema: 'llmswitch' }).sql

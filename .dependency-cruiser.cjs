@@ -99,11 +99,10 @@ module.exports = {
     },
     {
       name: 'postgres-entry-is-narrow',
-      comment:
-        'the SQL entry point exposes the PostgreSQL store and its migrations, nothing else.',
+      comment: 'the SQL entry point exposes the packaged migrations, nothing else.',
       severity: 'error',
       from: { path: '^src/postgres\\.ts$' },
-      to: { path: '^src/', pathNot: '^src/stores/postgres/' },
+      to: { path: '^src/', pathNot: '^src/stores/postgres/migrations/' },
     },
     {
       name: 'conformance-entry-is-narrow',

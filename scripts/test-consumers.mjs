@@ -32,6 +32,8 @@ const FIXTURES = join(ROOT, 'test', 'consumers')
 /** Pinned so a fixture run is reproducible; change them here and nowhere else. */
 const ZOD = 'zod@4.4.3'
 const TYPESCRIPT = 'typescript@5.9.3'
+/** Only the TypeScript fixture needs a driver: it is there to prove a real pool compiles. */
+const DRIVER = ['pg@8.23.0', '@types/pg@8.23.1', '@types/node@20.19.43']
 
 const SUBPATHS = ['llmswitch', 'llmswitch/postgres', 'llmswitch/conformance']
 const DECLARATIONS = {
@@ -174,11 +176,11 @@ function checkResolutions(trace, problems) {
   }
 }
 
-function runFixture(name, workspace, tarballPath, reference, problems) {
+function runFixture(name, workspace, tarballPath, reference, problems, hashes) {
   const project = join(workspace, name)
   cpSync(join(FIXTURES, name), project, { recursive: true })
 
-  const packages = [tarballPath, ZOD, ...(name === 'ts' ? [TYPESCRIPT] : [])]
+  const packages = [tarballPath, ZOD, ...(name === 'ts' ? [TYPESCRIPT, ...DRIVER] : [])]
   const install = run('npm', ['install', '--ignore-scripts', '--no-save', ...packages], project)
   if (!install.ok) {
     problems.push(`${name}: install failed\n${install.output}`)
@@ -189,7 +191,13 @@ function runFixture(name, workspace, tarballPath, reference, problems) {
   if (name === 'esm' || name === 'cjs') {
     const entry = name === 'esm' ? 'index.mjs' : 'index.cjs'
     const result = run(process.execPath, [entry], project)
-    if (!result.ok) problems.push(`${name}: ${entry} did not run\n${result.output}`)
+    if (!result.ok) {
+      problems.push(`${name}: ${entry} did not run\n${result.output}`)
+      return
+    }
+    const reported = /migration sha256 ([0-9a-f]{64})/.exec(result.output)
+    if (reported === null) problems.push(`${name}: did not report the migration hash`)
+    else hashes[name] = reported[1]
     return
   }
 
@@ -222,10 +230,18 @@ function main() {
   const before = hash(tarballPath)
   const workspace = mkdtempSync(join(tmpdir(), 'consumer-fixtures-'))
   const problems = []
+  const hashes = {}
   try {
     const reference = unpackReference(tarballPath, workspace)
     for (const name of ['esm', 'cjs', 'ts']) {
-      runFixture(name, workspace, tarballPath, reference, problems)
+      runFixture(name, workspace, tarballPath, reference, problems, hashes)
+    }
+    // The two builds render the same migration or an adopter's two halves disagree about
+    // which schema they applied.
+    if (hashes.esm !== hashes.cjs) {
+      problems.push(
+        `the builds rendered different migrations: ${String(hashes.esm)} and ${String(hashes.cjs)}`,
+      )
     }
   } finally {
     rmSync(workspace, { recursive: true, force: true })
@@ -240,8 +256,8 @@ function main() {
       ? `all fixtures reached ${String(SUBPATHS.length)} entry points, recognised a ProviderError ` +
           'across the ESM and CommonJS builds in both directions, rejected the values that only ' +
           'look like one, narrowed LLMSwitchError by code, and round-tripped a reservation ' +
-          'through the in-memory stores — ' +
-          `from sha256 ${before}\n`
+          'through the in-memory stores, and rendered the same packaged migration from both ' +
+          `builds — from sha256 ${before}\n`
       : `${String(problems.length)} problem(s)\n`,
   )
   return problems.length === 0 ? 0 : 1

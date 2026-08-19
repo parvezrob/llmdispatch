@@ -98,3 +98,12 @@ check(
 )
 
 console.log('esm consumer round-tripped a reservation through the in-memory stores')
+
+// The packaged migration, from the subpath: the hash the two builds render has to be the same
+// one, or an adopter's ESM and CommonJS code would disagree about which schema they applied.
+const migration = postgres.migrationSql()
+check(
+  'the migration still carries its schema placeholder',
+  !migration.sql.includes('__SCHEMA__'),
+)
+console.log(`esm consumer migration sha256 ${migration.sha256}`)

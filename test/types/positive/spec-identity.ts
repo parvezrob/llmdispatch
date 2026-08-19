@@ -10,9 +10,11 @@
 import type { z } from 'zod'
 
 import type * as Conformance from 'llmswitch/conformance'
+import type * as Postgres from 'llmswitch/postgres'
 import type * as Package from 'llmswitch'
 
 import type * as SpecConformance from '../spec-surface-conformance'
+import type * as SpecPostgres from '../spec-surface-postgres'
 import type * as Spec from '../spec-surface'
 
 // Two types are identical when the compiler resolves these two conditional types to the same
@@ -79,6 +81,7 @@ export type SectionSixValues = [
     >
   >,
   Holds<Identical<typeof Package.memoryStores, typeof Spec.memoryStores>>,
+  Holds<Identical<typeof Package.postgresStores, typeof Spec.postgresStores>>,
 ]
 
 export type SectionSixB = [
@@ -95,4 +98,9 @@ export type SectionSixB = [
       typeof SpecConformance.runConfigStoreConformance
     >
   >,
+]
+
+export type SectionSixBPostgres = [
+  Holds<Identical<typeof Postgres.MIGRATIONS, typeof SpecPostgres.MIGRATIONS>>,
+  Holds<Identical<typeof Postgres.migrationSql, typeof SpecPostgres.migrationSql>>,
 ]

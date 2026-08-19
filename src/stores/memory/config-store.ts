@@ -7,8 +7,8 @@
  * @module
  */
 
-import type { ConfigStore, OperationRoute } from '../../types'
-import { assertStoreString } from '../shared/domain'
+import type { ConfigStore } from '../../types'
+import { assertStoreString, validatedRoute } from '../shared/domain'
 import { asPromise } from '../shared/promise'
 
 /** The store plus the controls the conformance runner and the package's tests need. */
@@ -16,15 +16,6 @@ export interface MemoryConfigStore {
   store: ConfigStore
   reset: () => void
   seedRaw: (operation: string, value: unknown) => void
-}
-
-/** Every string of a route a store has to be able to hold. */
-function assertRoute(route: OperationRoute): void {
-  assertStoreString(route.provider, 'route.provider')
-  assertStoreString(route.model, 'route.model')
-  if (route.fallback === undefined || route.fallback === null) return
-  assertStoreString(route.fallback.provider, 'route.fallback.provider')
-  assertStoreString(route.fallback.model, 'route.fallback.model')
 }
 
 /** Builds an in-memory config store. */
@@ -43,9 +34,9 @@ export function createMemoryConfigStore(): MemoryConfigStore {
       set: (operation, route) =>
         asPromise(() => {
           assertStoreString(operation, 'operation')
-          assertRoute(route)
-          // A copy on the way in: editing the object afterwards must not edit the store.
-          rows.set(operation, structuredClone(route))
+          // The checked copy is what is kept, so editing the caller's object afterwards — or
+          // answering differently on a second read — cannot change what the store holds.
+          rows.set(operation, validatedRoute(route))
         }),
       delete: (operation) =>
         asPromise(() => {

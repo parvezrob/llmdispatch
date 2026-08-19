@@ -396,6 +396,69 @@ describe('the string domain both stores share', () => {
     }
   })
 
+  it('refuses a day that is not a calendar date, whatever it looks like', async () => {
+    const { stores, controls } = await fixture()
+    const envelope = admitted(await stores.usage.reserve(KEY, 1))
+
+    for (const day of [
+      '2026-02-30',
+      '0000-01-01',
+      '2026-1-15',
+      '15-01-2026',
+      '2026-01-15T00:00:00.000Z',
+    ]) {
+      await expect(
+        stores.usage.settle({ ...envelope, day }, 'succeeded', [RECORD]),
+      ).rejects.toBeInstanceOf(StoreDomainError)
+    }
+
+    expect(await controls.readSettled(envelope.reservationId)).toBeNull()
+
+    // The first year PostgreSQL has: the bound is year zero, not an era of its own.
+    await stores.usage.settle({ ...envelope, day: '0001-01-01' }, 'succeeded', [RECORD])
+    expect((await controls.readSettled(envelope.reservationId))?.reservation.day).toBe(
+      '0001-01-01',
+    )
+  })
+
+  it('keeps the reading of a key that it checked, not a later one', async () => {
+    const { stores, controls } = await fixture()
+    let reads = 0
+    const key = {
+      get operation() {
+        reads += 1
+        return reads === 1 ? 'checked' : 'swapped'
+      },
+      subjectId: 'user-1',
+    }
+
+    const envelope = admitted(await stores.usage.reserve(key, 1))
+
+    expect(envelope.key.operation).toBe('checked')
+    expect(await controls.inspect({ operation: 'checked', subjectId: 'user-1' }, DAY)).toEqual({
+      reservations: 1,
+      counter: { used: 1, lastAdmitted: true },
+    })
+  })
+
+  it('records the reading of an envelope that it checked', async () => {
+    const { stores, controls } = await fixture()
+    const issued = admitted(await stores.usage.reserve(KEY, 1))
+    let reads = 0
+    const envelope = {
+      reservationId: issued.reservationId,
+      day: issued.day,
+      get key() {
+        reads += 1
+        return reads === 1 ? KEY : { operation: 'swapped', subjectId: 'swapped' }
+      },
+    }
+
+    await stores.usage.settle(envelope, 'succeeded', [RECORD])
+
+    expect((await controls.readSettled(issued.reservationId))?.reservation.key).toEqual(KEY)
+  })
+
   it('writes nothing when it refuses a settle', async () => {
     const { stores, controls } = await fixture()
     const envelope = admitted(await stores.usage.reserve(KEY, 1))

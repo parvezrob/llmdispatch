@@ -15,9 +15,12 @@ export default defineConfig({
   // the published surface.
   hash: false,
   tsconfig: 'tsconfig.build.json',
-  // Zod is a peer dependency, so it is resolved from the consumer and never bundled.
-  // tsdown keeps peer dependencies external on its own; this is here to say so out loud.
-  deps: { neverBundle: ['zod'] },
+  // Zod is a peer dependency, so it is resolved from the consumer and never bundled; tsdown
+  // keeps peer dependencies external on its own, and this says so out loud. Node's own modules
+  // belong to the runtime as well: the entry that hashes its migration reaches for
+  // `node:crypto`, and the bundler has to leave that import exactly where it is rather than
+  // try to resolve it for a neutral platform.
+  deps: { neverBundle: ['zod', /^node:/] },
   // Report a manifest or declaration problem at build time rather than at install time.
   publint: true,
   // `node16` rather than the strictest profile: the exports map deliberately has no

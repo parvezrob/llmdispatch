@@ -14,8 +14,6 @@ export default defineConfig({
         },
       },
       {
-        // No integration tests exist yet, which is why `test:integration` passes
-        // `--passWithNoTests`. That flag comes off when the first one lands.
         test: {
           name: 'integration',
           environment: 'node',

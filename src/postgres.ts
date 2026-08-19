@@ -1,15 +1,11 @@
 /**
  * PostgreSQL entry point — `import { … } from 'llmswitch/postgres'`.
  *
- * Kept separate from the root so that an application using the in-memory stores never
- * pulls in the SQL surface. It will export the PostgreSQL-backed config and usage
- * stores plus the packaged migrations, which you apply yourself: the package ships the
- * SQL and its checksum, and never runs DDL on your database.
- *
- * The exact surface is specified in `docs/spec.md` §6b. Nothing is exported yet — the
- * package is pre-release and the implementation lands before the first publish.
+ * The packaged migrations, and nothing else: `MIGRATIONS` is every published version with its
+ * template hash, and `migrationSql()` renders them for your schema. The stores themselves are
+ * exported from the root, so an application that has already migrated never loads the DDL.
  *
  * @module
  */
 
-export {}
+export { MIGRATIONS, migrationSql } from './stores/postgres/migrations'

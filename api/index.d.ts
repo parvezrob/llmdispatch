@@ -58,5 +58,26 @@ declare class ProviderError extends Error {
  */
 declare function memoryStores(): StorePair;
 //#endregion
-export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMSwitchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, memoryStores };
+//#region src/stores/postgres/index.d.ts
+/**
+ * Builds the PostgreSQL config and usage stores (spec §6): no query runs at construction, the
+ * schema is validated and the database is not touched.
+ *
+ * @param opts `pool` is your own driver pool, which must run at `READ COMMITTED`
+ * (PostgreSQL's default; a stricter level makes concurrent reserves abort rather than deny);
+ * `schema` defaults to `llmswitch` and `leaseMs` to 120 000.
+ * @throws `RangeError` when `schema` is not a name llmswitch may own, or `leaseMs` is outside
+ * 5 000–600 000.
+ */
+declare function postgresStores(opts: {
+  pool: {
+    query(sql: string, params?: unknown[]): Promise<{
+      rows: unknown[];
+    }>;
+  };
+  schema?: string;
+  leaseMs?: number;
+}): StorePair;
+//#endregion
+export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMSwitchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, memoryStores, postgresStores };
 //# sourceMappingURL=index.d.ts.map

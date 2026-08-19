@@ -6,13 +6,12 @@
       "defineOperation",
       "defineOperations",
       "gemini",
-      "openaiCompatible",
-      "postgresStores"
+      "openaiCompatible"
     ],
     "type": []
   },
   "postgres": {
-    "value": ["MIGRATIONS", "migrationSql"],
+    "value": [],
     "type": []
   },
   "conformance": {

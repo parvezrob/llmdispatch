@@ -14,8 +14,8 @@ npm run check
 
 `npm run check` is the whole local pass: formatting, lint, types — the compile fixtures
 included — module boundaries, the build, then the subset of those fixtures whose imports
-already exist in the build compiled against it (5 of 13 today; the rest join as the remaining
-exports land), the export inventory comparing `dist/` with the specification, package
+already exist in the build compiled against it (the rest join as the remaining exports land),
+the export inventory comparing `dist/` with the specification, package
 linting, package typing, the public type surface, the size budget, and the unit tests with
 coverage. If it is green, continuous integration will almost certainly agree — it runs the
 same thing plus a few checks that need a database, a second Node, or a network download.
@@ -78,7 +78,19 @@ provider adapter throws, and it is recognised with `ProviderError.is()` — neve
 prompt, a model's output, or a raw provider error.
 
 **Tests.** Vitest. Unit tests run everywhere; the ones that need PostgreSQL live in
-`test/integration` and read `DATABASE_URL`. `src/core` and `src/errors` are held at 90%
+`test/integration` and read `DATABASE_URL`. They are skipped when it is unset — except in
+continuous integration, where a missing database is a failure rather than a quiet pass. The
+version they are written against is the one CI runs:
+
+```bash
+docker run -d --name llmswitch-pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
+  postgres:14@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
+until docker exec llmswitch-pg pg_isready -U postgres; do sleep 1; done
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres npm run test:integration
+docker rm -f llmswitch-pg
+```
+
+`src/core` and `src/errors` are held at 90%
 lines and branches. A test name should read as a sentence about behaviour, and each test
 should be about one behaviour.
 

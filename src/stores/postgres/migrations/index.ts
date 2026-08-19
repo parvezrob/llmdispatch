@@ -1,4 +1,3 @@
-//#region src/stores/postgres/migrations/index.d.ts
 /**
  * The packaged migrations (spec §6b).
  *
@@ -9,12 +8,15 @@
  *
  * @module
  */
+
+import { render, sha256, templateSha256 } from './001-initial'
+
 /** Every published migration, in the order they are applied. */
-declare const MIGRATIONS: readonly {
+export const MIGRATIONS: readonly {
   /** Which migration this is; the number the schema records. */
-  version: number;
+  version: number
   /** The hash of the template, schema placeholder still in place. */
-  templateSha256: string;
+  templateSha256: string
   /**
    * Renders this migration for one schema.
    *
@@ -22,13 +24,9 @@ declare const MIGRATIONS: readonly {
    * @returns The SQL to apply, and the hash of exactly those bytes.
    * @throws `RangeError` when the schema is not a name llmswitch may own.
    */
-  render(opts?: {
-    schema?: string;
-  }): {
-    sql: string;
-    sha256: string;
-  };
-}[];
+  render(opts?: { schema?: string }): { sql: string; sha256: string }
+}[] = Object.freeze([Object.freeze({ version: 1, templateSha256, render })])
+
 /**
  * Every migration rendered for one schema and concatenated in version order, with the sha256
  * of exactly the bytes it hands back.
@@ -36,12 +34,7 @@ declare const MIGRATIONS: readonly {
  * @param opts `schema` defaults to `llmswitch` and is validated, then quoted.
  * @throws `RangeError` when the schema is not a name llmswitch may own.
  */
-declare function migrationSql(opts?: {
-  schema?: string;
-}): {
-  sql: string;
-  sha256: string;
-};
-//#endregion
-export { MIGRATIONS, migrationSql };
-//# sourceMappingURL=postgres.d.ts.map
+export function migrationSql(opts?: { schema?: string }): { sql: string; sha256: string } {
+  const sql = MIGRATIONS.map((migration) => migration.render(opts).sql).join('\n')
+  return { sql, sha256: sha256(sql) }
+}

@@ -96,6 +96,14 @@ async function main() {
   )
 
   console.log('cjs consumer round-tripped a reservation through the in-memory stores')
+
+  // The same migration, rendered by the other build.
+  const migration = postgres.migrationSql()
+  check(
+    'the migration still carries its schema placeholder',
+    !migration.sql.includes('__SCHEMA__'),
+  )
+  console.log(`cjs consumer migration sha256 ${migration.sha256}`)
 }
 
 main().catch((error) => {

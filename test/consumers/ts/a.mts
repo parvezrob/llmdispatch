@@ -1,8 +1,17 @@
 // An ES module: TypeScript must reach the `import` declarations of every entry point.
+import { Pool } from 'pg'
+
 import * as conformance from 'llmswitch/conformance'
 import * as postgres from 'llmswitch/postgres'
 import * as root from 'llmswitch'
-import { LLMSwitchError, ProviderError, memoryStores, type OperationRoute } from 'llmswitch'
+import {
+  LLMSwitchError,
+  ProviderError,
+  memoryStores,
+  postgresStores,
+  type OperationRoute,
+  type StorePair,
+} from 'llmswitch'
 
 export const reached = [root, postgres, conformance].length
 
@@ -57,3 +66,9 @@ export async function reserveOne(): Promise<string | null> {
   const result = await stores.usage.reserve({ operation: 'summarize', subjectId: 'user-1' }, 1)
   return result.ok ? result.reservation.reservationId : null
 }
+
+// The driver pool an adopter already has, handed to the store factory as it is: no cast, no
+// adapter, no widening. This is the one claim only a real `pg` install can make.
+export const production: StorePair = postgresStores({ pool: new Pool(), schema: 'llmswitch' })
+
+export const migration: string = postgres.migrationSql({ schema: 'llmswitch' }).sql

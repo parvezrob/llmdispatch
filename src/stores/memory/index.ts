@@ -7,69 +7,17 @@
  * @module
  */
 
-import type { QuotaKey, StorePair } from '../../types'
-import type { SettlementRecord, UsageInspection } from './usage-store'
+import type { StorePair } from '../../types'
+import type { InternalStores } from '../shared/controls'
+import { createStoreClock } from '../shared/clock'
+import { DEFAULT_LEASE_MS, assertLeaseMs } from '../shared/lease'
 import { createMemoryConfigStore } from './config-store'
 import { createMemoryUsageStore } from './usage-store'
-
-/** The lease `memoryStores()` uses, matching the PostgreSQL store's default (spec §4). */
-const DEFAULT_LEASE_MS = 120_000
-
-const MIN_LEASE_MS = 5_000
-const MAX_LEASE_MS = 600_000
 
 /** The clock and lease the internal factory accepts; `memoryStores()` takes neither (§6). */
 export interface MemoryStoreOptions {
   now?: () => Date
   leaseMs?: number
-}
-
-/** The test controls the store pair exposes to the conformance runners (spec §6b). */
-export interface MemoryStoreControls {
-  setTime: (date: Date) => Promise<void>
-  reset: () => Promise<void>
-  readSettled: (reservationId: string) => Promise<SettlementRecord | null>
-  seedRaw: (operation: string, value: unknown) => Promise<void>
-  inspect: (key: QuotaKey, day: string) => Promise<UsageInspection>
-}
-
-/** A store pair with its controls, as the internal factory builds it. */
-export interface MemoryStores {
-  stores: StorePair
-  controls: MemoryStoreControls
-}
-
-/**
- * The store clock: real time, or the instant a control pinned it to.
- *
- * A pinned clock never moves backwards, since the reservation fence (§4) reads "already
- * expired" off it and an answer that flipped back would stop being final.
- */
-function createClock(now: (() => Date) | undefined) {
-  let pinned: number | null = null
-  return {
-    now: () => (pinned === null ? (now?.() ?? new Date()) : new Date(pinned)),
-    setTime(date: Date) {
-      const at = date.getTime()
-      if (Number.isNaN(at)) throw new RangeError('setTime needs a valid date')
-      if (pinned !== null && at < pinned) {
-        throw new RangeError('setTime must not move the store clock backwards before reset')
-      }
-      pinned = at
-    },
-    unpin() {
-      pinned = null
-    },
-  }
-}
-
-/** Rejects a lease the PostgreSQL store could not accept either, naming the option. */
-function checkLeaseMs(leaseMs: number): void {
-  if (!Number.isSafeInteger(leaseMs) || leaseMs < MIN_LEASE_MS || leaseMs > MAX_LEASE_MS) {
-    throw new RangeError(
-      `leaseMs must be a safe integer between ${String(MIN_LEASE_MS)} and ${String(MAX_LEASE_MS)}`,
-    )
-  }
 }
 
 /**
@@ -78,11 +26,13 @@ function checkLeaseMs(leaseMs: number): void {
  * @param options `now` replaces the clock; `leaseMs` the reservation lease.
  * @throws `RangeError` when `leaseMs` is outside 5 000–600 000.
  */
-export function createMemoryStores(options: MemoryStoreOptions): MemoryStores {
+export function createMemoryStores(options: MemoryStoreOptions): InternalStores {
   const leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS
-  checkLeaseMs(leaseMs)
-  const clock = createClock(options.now)
-  const usage = createMemoryUsageStore({ now: clock.now, leaseMs })
+  assertLeaseMs(leaseMs)
+  const clock = createStoreClock(options.now)
+  // Nothing pinned and no clock supplied means real time here; the PostgreSQL store leaves
+  // that case to the database instead.
+  const usage = createMemoryUsageStore({ now: () => clock.at() ?? new Date(), leaseMs })
   const config = createMemoryConfigStore()
 
   return {

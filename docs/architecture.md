@@ -29,7 +29,7 @@ graph TD
   root --> stores
   root --> errors
   root --> types
-  pg --> stores
+  pg --> migrations["stores/postgres/migrations/<br/>the packaged DDL"]
   conf --> suites
   core --> errors
   providers --> errors
@@ -75,8 +75,8 @@ They exercise whatever implementation they are handed, purely through its interf
 harness that imported a built-in would end up testing the built-in.
 
 The three entry modules are thin. `index.ts` is the only place the pieces are assembled;
-`postgres.ts` and `conformance.ts` exist so that an application that wants neither the SQL
-surface nor the harnesses does not load them.
+`postgres.ts` and `conformance.ts` exist so that an application that wants neither the DDL
+nor the harnesses does not load them.
 
 Each folder carries a `README.md` restating its own rule, next to the code it governs.
 
@@ -97,9 +97,11 @@ These are the ones `.dependency-cruiser.cjs` enforces:
   constructing an error must not touch the outside world.
 - The public types module imports nothing but `zod`. It is shapes, not behaviour.
 - `index.ts` is the one module allowed to import `core/` together with `providers/` and
-  `stores/`. `postgres.ts` reaches the PostgreSQL store and nothing else at all;
-  `conformance.ts` reaches the harnesses and nothing else at all. Both re-export what
-  those folders already expose, so neither needs the error surface directly.
+  `stores/`. `postgres.ts` reaches the packaged migrations and nothing else at all — the
+  PostgreSQL stores themselves are exported from the root, as the specification declares
+  them, so an application that has already migrated never loads the DDL. `conformance.ts`
+  reaches the harnesses and nothing else at all. Both re-export what those folders already
+  expose, so neither needs the error surface directly.
 - The only package `src/` may import is `zod`, which is a peer dependency. The published
   package has no runtime dependencies of its own.
 - No cycles, and no module that nothing imports — except the three entry modules, which

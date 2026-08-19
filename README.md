@@ -204,6 +204,25 @@ stores: postgresStores({ pool, schema: 'llmswitch' })  // production — plain S
 
 `postgresStores` ships a versioned SQL migration (you run it — llmswitch never touches your schema on its own) and uses single-statement atomic operations, safe under concurrency. The exact `ConfigStore`/`UsageStore` contracts — including the idempotent commit protocol and lease semantics — are spec §4 and §6, and a **conformance test suite** ships with the package: passing it verifies your custom adapter against every executed case, concurrency included — check its `skipped` list, because scenarios you don't supply are unverified, not passed.
 
+The pool you hand it must run at `READ COMMITTED`, which is PostgreSQL's default: that is the level the single-statement reserve is built for, and under `REPEATABLE READ` or `SERIALIZABLE` two concurrent reserves abort with a serialization failure (surfaced as the usage store being unavailable) instead of one of them being cleanly denied.
+
+Applying the schema is your job, not the library's: `migrationSql()` from `llmswitch/postgres` returns the SQL and its sha256, and you run it with whatever tool you already use, in a schema dedicated to llmswitch. Re-running the same file is safe — every statement is idempotent, so "apply twice" and "re-run after a failure" are the same operation — and a *different* version-1 template is refused by the version record at the end of the file. The file carries no transaction control of its own, though, because migration tools differ on whether they supply theirs: a tool that commits statement by statement leaves the earlier DDL in place when that final record is the thing that conflicts, and re-running the same file is what completes a partial apply.
+
+Apply the whole rendered file in one transaction on one connection, which is also what makes an advisory lock cover the DDL rather than just the call that took it:
+
+```sql
+BEGIN;
+SELECT pg_advisory_xact_lock(4711);  -- any constant your team reserves for this
+-- the SQL from migrationSql()
+COMMIT;
+```
+
+```ts
+import { migrationSql } from 'llmswitch/postgres'
+
+const { sql } = migrationSql({ schema: 'llmswitch' })   // your migration tool runs this
+```
+
 Whatever store you write it against, the strings llmswitch hands a store — operation names, provider IDs, models, subject IDs, reservation IDs — are well-formed Unicode, free of U+0000, and at most 1 000 bytes of UTF-8, checked before every store call, so any relational backend can hold them verbatim (spec §6).
 
 ## Providers

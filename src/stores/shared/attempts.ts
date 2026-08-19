@@ -19,23 +19,24 @@ import { assertStoreString } from './domain'
  */
 export function projectAttempts(attempts: readonly AttemptRecord[]): AttemptRecord[] {
   return attempts.map((attempt, index) => {
-    assertStoreString(attempt.provider, `attempts[${String(index)}].provider`)
-    assertStoreString(attempt.model, `attempts[${String(index)}].model`)
+    // Every field read exactly once, then the projection is what gets checked: a getter that
+    // answers differently the second time cannot pass the check with one value and be written
+    // with another.
+    const { provider, model, outcome, usage, costUsd, durationMs, status } = attempt
     const record: AttemptRecord = {
-      provider: attempt.provider,
-      model: attempt.model,
-      outcome: attempt.outcome,
+      provider,
+      model,
+      outcome,
       usage:
-        attempt.usage === null
+        usage === null
           ? null
-          : {
-              inputTokens: attempt.usage.inputTokens,
-              outputTokens: attempt.usage.outputTokens,
-            },
-      costUsd: attempt.costUsd,
-      durationMs: attempt.durationMs,
+          : { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+      costUsd,
+      durationMs,
     }
-    if (attempt.status !== undefined) record.status = attempt.status
+    if (status !== undefined) record.status = status
+    assertStoreString(record.provider, `attempts[${String(index)}].provider`)
+    assertStoreString(record.model, `attempts[${String(index)}].model`)
     return record
   })
 }
