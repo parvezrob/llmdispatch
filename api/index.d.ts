@@ -1,4 +1,5 @@
 import { C as RunResult, D as TokenUsage, E as Switch, O as UsageStore, S as RouteTarget, T as StorePair, _ as ProviderResponse, b as QuotaView, c as ModelPrice, d as OperationRoute, f as OperationsMap, g as ProviderRequest, h as ProviderErrorKind, i as ConfigStore, l as OperationConfigView, m as Provider, n as AttemptOutcome, o as CreateSwitchConfig, p as PreparedProvider, r as AttemptRecord, s as Logger, t as ApiKeyResolver, u as OperationDefinition, v as QualityVerdict, w as SettlementFailure, x as ReservationEnvelope, y as QuotaKey } from "./types.js";
+import { z } from "zod";
 //#region src/errors/llmswitch-error.d.ts
 /** A classified llmswitch failure: a stable `code`, a literal `retryable`, no content. */
 declare class LLMSwitchError extends Error {
@@ -79,5 +80,47 @@ declare function postgresStores(opts: {
   leaseMs?: number;
 }): StorePair;
 //#endregion
-export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMSwitchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, memoryStores, postgresStores };
+//#region src/core/create-switch.d.ts
+/**
+ * Ties one operation's schemas to its callbacks so inference flows between them.
+ *
+ * Identity at runtime; the value is the correlation of `In` and `Out` across `prompt`,
+ * `quality` and the run result (spec §6). Every entry handed to {@link defineOperations}
+ * must be wrapped in this.
+ *
+ * @param definition The operation exactly as it will run.
+ * @returns The same definition, its two schema types correlated.
+ */
+declare function defineOperation<In extends z.ZodType, Out extends z.ZodType>(definition: OperationDefinition<In, Out>): OperationDefinition<In, Out>;
+/**
+ * Collects operations for `createSwitch`.
+ *
+ * An identity collector (spec §6): it returns exactly the object it was given and does not
+ * itself restore inference — that is {@link defineOperation}'s job, per entry.
+ *
+ * @param operations The map of operations, each wrapped in `defineOperation`.
+ * @returns The same object.
+ */
+declare function defineOperations<Ops extends OperationsMap>(operations: Ops): Ops;
+//#endregion
+//#region src/index.d.ts
+/**
+ * Builds a configured switch: providers, operations and stores in; `run` plus the admin
+ * surface out (spec §6).
+ *
+ * Construction is pure wiring — no store is called, no provider is prepared, no network is
+ * touched — plus the §6 validation of every range and name, so a misconfiguration fails
+ * here, loudly, rather than on the first request.
+ *
+ * @param config Who can be called, what the app does, and where config and counters live.
+ * @throws `LLMSwitchError` with code `INVALID_CONFIG` naming the field that failed.
+ * @example
+ * ```ts
+ * const ai = createSwitch({ providers, operations, stores: memoryStores() })
+ * const result = await ai.run('summarize', { input: { text }, subjectId: user.id })
+ * ```
+ */
+declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
+//#endregion
+export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMSwitchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, createSwitch, defineOperation, defineOperations, memoryStores, postgresStores };
 //# sourceMappingURL=index.d.ts.map
