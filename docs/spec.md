@@ -149,15 +149,17 @@ Per-operation resolution matrix:
 
 One **run** = one slot, shared with its fallback attempt. The **store's clock owns the UTC
 day**. `reserve()` returns the store-created immutable **`ReservationEnvelope`** —
-`{ reservationId, key, day }` with `day` as `YYYY-MM-DD` (UTC, chosen by the store) — which
-the core validates (`key` must equal the requested key; `day` must match the format) and
+`{ reservationId, key, day }` with `day` as `YYYY-MM-DD` (UTC, chosen by the store; years
+0001–9999 — year 0000 is invalid, because PostgreSQL has no year zero where JavaScript
+would accept it, and substitutability requires the shared bound) — which
+the core validates (`key` must equal the requested key; `day` must match the domain) and
 carries verbatim through commit recovery and settlement. A re-reservation **replaces** the
 active envelope.
 
 - **reserve** — the `limit` passed is the run's **effective limit** (§2). The store atomically
-  counts committed + unexpired pending slots for the store's current UTC day; under `limit`
-  → insert pending reservation, lease `expiresAt = min(now + leaseMs, resetsAt)` (a lease
-  never crosses the day boundary).
+  counts committed + unexpired pending slots for the store's current UTC day (`used`) and
+  admits iff `used < limit`: insert pending reservation, lease
+  `expiresAt = min(now + leaseMs, resetsAt)` (a lease never crosses the day boundary).
   A denial's `used` is authoritative for that `reserve`'s own snapshot-and-lock point: it is
   never lower than live usage, and it exceeds live usage only by rows that lapsed or appeared
   while that `reserve` waited for the counter.
@@ -223,8 +225,11 @@ edited between one run and the next:
 
 Postgres adapter: single-statement atomic reserve/commit (row-level concurrency, no
 explicit table-wide locks), lease and day boundary enforced in SQL, schema-qualified
-identifiers, default `leaseMs` 120 000 (5 000–600 000). Migrations are packaged (§6b),
-schema-aware, and never auto-run.
+identifiers, default `leaseMs` 120 000 (5 000–600 000). Every method sends one command, so
+each call runs in a transaction of its own; the pool must run at READ COMMITTED
+(PostgreSQL's default) — under REPEATABLE READ or SERIALIZABLE, concurrent reserves abort
+with a serialization failure instead of one being denied: fail-closed, never
+over-admitting. Migrations are packaged (§6b), schema-aware, and never auto-run.
 
 **Persisted data (privacy boundary):** operation, `subjectId` (verbatim), UTC day,
 reservation state, timestamps, and the complete `AttemptRecord` fields per attempt
@@ -590,7 +595,9 @@ export declare class LLMSwitchError extends Error {
   readonly resetsAt?: string
   readonly detectedAt?: 'local' | 'provider'
   readonly attempts?: AttemptRecord[]
-  // Sanitized: no prompts, no model output, no raw provider errors.
+  // Sanitized, scoped to the package's own fields: they never carry prompts, model
+  // output, or raw provider errors from a dispatched attempt. A pre-dispatch error may
+  // chain the adopter's own thrown store/prepare failure as `cause`, verbatim.
 }
 ```
 
@@ -642,9 +649,13 @@ export declare function migrationSql(opts?: { schema?: string }): { sql: string;
 export interface ConformanceResult { passed: boolean; failures: string[]; skipped: string[] }
 export declare function runUsageStoreConformance(opts: {
   // create returns the store under test plus REQUIRED test controls:
-  // setTime drives the STORE's authoritative clock (for Postgres: a session/test hook the
-  // adapter documents) and is called with non-decreasing instants between reset() calls;
-  // reset wipes state; readSettled exposes what settle() persisted so
+  // setTime drives the STORE's authoritative clock and is called with non-decreasing
+  // instants between reset() calls. For the packaged PostgreSQL store the supported
+  // convention is statement-level: every usage-protocol statement begins with the
+  // exported USAGE_STORE_MARKER comment and carries the clock override as its TRAILING
+  // parameter (null = the database's own clock), so a harness that reaches the store only
+  // through an adopter-shaped pool recognises marked statements and substitutes that
+  // final parameter. reset wipes state; readSettled exposes what settle() persisted so
   // duplicate/conflict/unknown-reservation behavior is observable.
   create(): Promise<{
     store: UsageStore

@@ -190,5 +190,7 @@ export declare class LLMSwitchError extends Error {
   readonly resetsAt?: string
   readonly detectedAt?: 'local' | 'provider'
   readonly attempts?: AttemptRecord[]
-  // Sanitized: no prompts, no model output, no raw provider errors.
+  // Sanitized, scoped to the package's own fields: they never carry prompts, model
+  // output, or raw provider errors from a dispatched attempt. A pre-dispatch error may
+  // chain the adopter's own thrown store/prepare failure as `cause`, verbatim.
 }

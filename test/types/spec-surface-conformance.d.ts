@@ -7,9 +7,13 @@ import type { AttemptRecord, ConfigStore, Provider, ProviderRequest, Reservation
 export interface ConformanceResult { passed: boolean; failures: string[]; skipped: string[] }
 export declare function runUsageStoreConformance(opts: {
   // create returns the store under test plus REQUIRED test controls:
-  // setTime drives the STORE's authoritative clock (for Postgres: a session/test hook the
-  // adapter documents) and is called with non-decreasing instants between reset() calls;
-  // reset wipes state; readSettled exposes what settle() persisted so
+  // setTime drives the STORE's authoritative clock and is called with non-decreasing
+  // instants between reset() calls. For the packaged PostgreSQL store the supported
+  // convention is statement-level: every usage-protocol statement begins with the
+  // exported USAGE_STORE_MARKER comment and carries the clock override as its TRAILING
+  // parameter (null = the database's own clock), so a harness that reaches the store only
+  // through an adopter-shaped pool recognises marked statements and substitutes that
+  // final parameter. reset wipes state; readSettled exposes what settle() persisted so
   // duplicate/conflict/unknown-reservation behavior is observable.
   create(): Promise<{
     store: UsageStore

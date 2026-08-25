@@ -1,7 +1,7 @@
 import { C as RunResult, D as TokenUsage, E as Switch, O as UsageStore, S as RouteTarget, T as StorePair, _ as ProviderResponse, b as QuotaView, c as ModelPrice, d as OperationRoute, f as OperationsMap, g as ProviderRequest, h as ProviderErrorKind, i as ConfigStore, l as OperationConfigView, m as Provider, n as AttemptOutcome, o as CreateSwitchConfig, p as PreparedProvider, r as AttemptRecord, s as Logger, t as ApiKeyResolver, u as OperationDefinition, v as QualityVerdict, w as SettlementFailure, x as ReservationEnvelope, y as QuotaKey } from "./types.js";
 import { z } from "zod";
 //#region src/errors/llmswitch-error.d.ts
-/** A classified llmswitch failure: a stable `code`, a literal `retryable`, no content. */
+/** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
 declare class LLMSwitchError extends Error {
   private constructor();
   /** What went wrong, as a closed set (spec §5b). */

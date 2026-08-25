@@ -30,7 +30,7 @@ interface LLMSwitchErrorInit {
  */
 let construct: (init: LLMSwitchErrorInit) => LLMSwitchError
 
-/** A classified llmswitch failure: a stable `code`, a literal `retryable`, no content. */
+/** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
 export class LLMSwitchError extends Error {
   private constructor(init: LLMSwitchErrorInit) {
     // Presence, not value: `new Error(m, { cause: undefined })` carries a `cause`, and a
@@ -72,7 +72,9 @@ export class LLMSwitchError extends Error {
   /** Every dispatched attempt, in dispatch order. */
   declare readonly attempts?: AttemptRecord[]
 
-  // Sanitized: no prompts, no model output, no raw provider errors.
+  // Sanitized, scoped to the class's own fields: they never carry prompts, model output,
+  // or raw provider errors from a dispatched attempt. A pre-dispatch error may chain the
+  // adopter's own thrown store/prepare failure as `cause`, verbatim.
 
   static {
     construct = (init) => new LLMSwitchError(init)
