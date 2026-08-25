@@ -35,7 +35,7 @@ describe('aggregation', () => {
     expect(result.usageComplete).toBe(false) // the primary attempt has usage null
     expect(result.cost).toBeNull() // a dispatched attempt without usage → cost null
     expect(result.attempts[0]!.costUsd).toBeNull()
-    expect(result.attempts[1]!.costUsd).toBeCloseTo((10 * 500) / 1e6 + (5 * 500) / 1e6)
+    expect(result.attempts[1]!.costUsd).toBeCloseTo((10 * 500) / 1e6 + (5 * 500) / 1e6, 10)
   })
 
   it('reports complete usage and a summed cost when every dispatched attempt has both', async () => {
@@ -51,7 +51,7 @@ describe('aggregation', () => {
     expect(result.usageComplete).toBe(true)
     const truncatedCost = (7 * 1000) / 1e6 + (3 * 2000) / 1e6 // billable failed attempt
     const successCost = (10 * 500) / 1e6 + (5 * 500) / 1e6
-    expect(result.cost).toBeCloseTo(truncatedCost + successCost)
+    expect(result.cost).toBeCloseTo(truncatedCost + successCost, 10)
   })
 
   it('aggregates {0,0} with usageComplete true for a single usage-bearing attempt of zero tokens', async () => {
@@ -100,6 +100,6 @@ describe('aggregation', () => {
     f.p1.nextResolve({ kind: 'refused', text: '', usage: { inputTokens: 4, outputTokens: 0 } })
     const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
     expect(error.attempts?.[0]?.usage).toEqual({ inputTokens: 4, outputTokens: 0 })
-    expect(error.attempts?.[0]?.costUsd).toBeCloseTo((4 * 1000) / 1e6)
+    expect(error.attempts?.[0]?.costUsd).toBeCloseTo((4 * 1000) / 1e6, 10)
   })
 })

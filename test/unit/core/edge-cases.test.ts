@@ -206,6 +206,25 @@ describe('the remaining createSwitch shape checks', () => {
       field: 'outputPerM',
     },
     {
+      name: 'a null operation definition',
+      config: { operations: { echo: null } },
+      field: 'operation definition',
+    },
+    {
+      name: 'a null quota',
+      config: {
+        operations: {
+          echo: { input: ECHO_INPUT, output: ECHO_OUTPUT, prompt: () => 'p', quota: null },
+        },
+      },
+      field: 'quota',
+    },
+    {
+      name: 'a null pricing entry',
+      config: { pricing: { p1: { m1: null } } },
+      field: 'm1',
+    },
+    {
       name: 'a missing config store',
       config: { stores: { usage: {} } },
       field: 'stores.config',
@@ -230,6 +249,16 @@ describe('the remaining createSwitch shape checks', () => {
       expect((caught as LLMSwitchError).message).toContain(field)
     })
   }
+})
+
+describe('readiness captured at registration', () => {
+  it('dispatches through the validated complete after the provider object is mutated', async () => {
+    const f = fixture()
+    ;(f.p1.provider as { complete?: unknown }).complete = undefined
+    const result = await f.ai.run('echo', INPUT)
+    expect(result.usedFallback).toBe(false) // no post-quota provider_unclassified
+    expect(f.p1.completeCalls()).toBe(1)
+  })
 })
 
 describe('the remaining route-validator arms', () => {

@@ -59,10 +59,21 @@ export interface ValidatedOperation {
   defaultRoute: OperationRoute | undefined
 }
 
+/**
+ * A provider as registered, with the `complete` `createSwitch` validated bound to it.
+ *
+ * Readiness is decided once (§5a); `provider` is retained only for the per-run
+ * `prepare()` read.
+ */
+export interface RegisteredProvider {
+  provider: Provider
+  complete: PreparedProvider['complete']
+}
+
 /** Everything a run needs, assembled once by `createSwitch`. */
 export interface SwitchContext {
   runtime: CoreRuntime
-  providers: ReadonlyMap<string, Provider>
+  providers: ReadonlyMap<string, RegisteredProvider>
   operations: ReadonlyMap<string, ValidatedOperation>
   configService: ConfigService
   usageStore: UsageStore
@@ -261,13 +272,14 @@ async function prepareDispatchers(
   }
   const dispatchers = new Map<string, PreparedProvider>()
   for (const id of ids) {
-    const provider = ctx.providers.get(id)
-    if (provider === undefined) {
+    const registered = ctx.providers.get(id)
+    if (registered === undefined) {
       throw invalidConfigLocal(operation, `provider "${id}" is not registered`)
     }
+    const { provider } = registered
     const prepare = provider.prepare?.bind(provider)
     if (prepare === undefined) {
-      dispatchers.set(id, { complete: (request) => provider.complete(request) })
+      dispatchers.set(id, { complete: registered.complete })
       continue
     }
     let prepared: unknown
@@ -289,13 +301,15 @@ async function prepareDispatchers(
         cause: error,
       })
     }
-    if (!isRecord(prepared) || typeof prepared.complete !== 'function') {
+    const complete = isRecord(prepared) ? prepared.complete : undefined
+    if (typeof complete !== 'function') {
       throw invalidConfigLocal(
         operation,
         `provider "${id}" prepare() returned no complete function`,
       )
     }
-    dispatchers.set(id, prepared as unknown as PreparedProvider)
+    // Read once: a later mutation of what `prepare()` returned cannot move this dispatch.
+    dispatchers.set(id, { complete: complete.bind(prepared) as PreparedProvider['complete'] })
   }
   return dispatchers
 }
@@ -389,7 +403,7 @@ async function runAttempts(
   throw terminalFor(operation, primary.kind, copyAttempts(attempts))
 }
 
-/** What reading a `ProviderResponse` produced, with the body left untouched until needed. */
+/** What reading a `ProviderResponse` produced; only a `complete` body travels onward. */
 type ReadResponse =
   | { kind: 'complete'; text: string; usage: AttemptRecord['usage'] }
   | { kind: 'truncated' | 'refused'; usage: AttemptRecord['usage'] }
@@ -398,25 +412,22 @@ type ReadResponse =
 /**
  * Validates a resolved `ProviderResponse` (spec §3, §6).
  *
- * Termination before content: `kind` is read first, and for `'truncated'`/`'refused'` the
- * body is never touched — those classify on the termination alone, usage retained. Every
- * property is read once, behind a guard, so a hostile response classifies
- * `malformed_response` rather than throwing into the state machine.
+ * Termination before content: a `'truncated'`/`'refused'` body never reaches the §3
+ * pipeline, but `text: string` belongs to every variant of the union, so a non-string body
+ * is still a §6 shape failure. Every property is read once behind a guard, so a hostile
+ * response classifies `malformed_response` instead of throwing into the state machine.
  */
 function readResponse(response: unknown): ReadResponse {
   try {
     if (!isRecord(response)) return { kind: 'malformed', usage: null }
     const kind = response.kind
-    if (kind === 'truncated' || kind === 'refused') {
-      return { kind, usage: normalizeUsage(response.usage) }
+    const usage = normalizeUsage(response.usage)
+    if (kind !== 'complete' && kind !== 'truncated' && kind !== 'refused') {
+      return { kind: 'malformed', usage }
     }
-    if (kind === 'complete') {
-      const usage = normalizeUsage(response.usage)
-      const text = response.text
-      if (typeof text !== 'string') return { kind: 'malformed', usage }
-      return { kind: 'complete', text, usage }
-    }
-    return { kind: 'malformed', usage: normalizeUsage(response.usage) }
+    const text = response.text
+    if (typeof text !== 'string') return { kind: 'malformed', usage }
+    return kind === 'complete' ? { kind, text, usage } : { kind, usage }
   } catch {
     return { kind: 'malformed', usage: null }
   }

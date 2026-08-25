@@ -1,8 +1,8 @@
 /**
  * The output pipeline and the provider seam (spec §3): fence unwrap, the format
- * matrix, termination-before-content with a throwing body getter, the quality verdict
- * matrix, settled-then-unwrapped user errors, full request forwarding, the fresh fallback
- * timeout, and the hostile ProviderResponse matrix.
+ * matrix, termination-before-content and the body shape it still requires, the quality
+ * verdict matrix, settled-then-unwrapped user errors, full request forwarding, the fresh
+ * fallback timeout, and the hostile ProviderResponse matrix.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -113,8 +113,13 @@ describe('parsing and the format matrix', () => {
 })
 
 describe('termination before content', () => {
-  for (const kind of ['refused', 'truncated'] as const) {
-    it(`classifies ${kind} without ever touching the body`, async () => {
+  const TERMINATIONS = [
+    { kind: 'refused', code: 'PROVIDER_FAILED' },
+    { kind: 'truncated', code: 'OUTPUT_REJECTED' },
+  ] as const
+
+  for (const { kind, code } of TERMINATIONS) {
+    it(`classifies ${kind} on the termination alone, leaving the §3 stages unrun`, async () => {
       let outputParses = 0
       let qualityCalls = 0
       const operations = {
@@ -135,26 +140,54 @@ describe('termination before content', () => {
         },
       } as unknown as OperationsMap
       const f = fixture({ operations })
-      let textReads = 0
-      const response = { kind, usage: { inputTokens: 1, outputTokens: 2 } }
-      Object.defineProperty(response, 'text', {
-        get(): string {
-          textReads += 1
-          throw new Error('the body must not be read for a non-complete termination')
-        },
-        enumerable: true,
+      // A well-shaped, parseable body: the termination decides, the content stages never run.
+      f.p1.nextResolve({
+        kind,
+        text: '{"answer":"partial"}',
+        usage: { inputTokens: 1, outputTokens: 2 },
       })
-      f.p1.nextResolve(response as unknown as ProviderResponse)
-      const error = await expectCode(
-        f.ai.run('echo', INPUT),
-        kind === 'refused' ? 'PROVIDER_FAILED' : 'OUTPUT_REJECTED',
-      )
+      const error = await expectCode(f.ai.run('echo', INPUT), code)
       expect(error.attempts?.[0]?.outcome).toBe(kind)
       expect(error.attempts?.[0]?.usage).toEqual({ inputTokens: 1, outputTokens: 2 }) // billable
-      expect(textReads).toBe(0) // a parse-first or merely read-first implementation fails
       expect(outputParses).toBe(0)
       expect(qualityCalls).toBe(0)
     })
+  }
+
+  // §6: `text: string` belongs to every variant of the union, so a terminated response whose
+  // body fails the shape is malformed_response — retryable and fallback-eligible.
+  const badBodies: { name: string; make: (kind: string) => unknown }[] = [
+    { name: 'no text at all', make: (kind) => ({ kind, usage: null }) },
+    { name: 'a non-string text', make: (kind) => ({ kind, text: 42, usage: null }) },
+    {
+      name: 'a throwing text getter',
+      make: (kind) => {
+        const response = { kind, usage: null }
+        Object.defineProperty(response, 'text', {
+          get(): string {
+            throw new Error('hostile body')
+          },
+          enumerable: true,
+        })
+        return response
+      },
+    },
+  ]
+  for (const { kind } of TERMINATIONS) {
+    for (const { name, make } of badBodies) {
+      it(`classifies ${kind} with ${name} as malformed_response, fallback-eligible`, async () => {
+        const f = fixture()
+        f.p1.nextResolve(make(kind) as ProviderResponse)
+        f.p2.nextResolve(make(kind) as ProviderResponse)
+        const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
+        expect(error.retryable).toBe(true)
+        expect(f.p2.requests.length).toBe(1) // the fallback IS attempted
+        expect(error.attempts?.map((a) => a.outcome)).toEqual([
+          'malformed_response',
+          'malformed_response',
+        ])
+      })
+    }
   }
 })
 
@@ -213,9 +246,9 @@ describe('the quality gate', () => {
     expect(f.p2.requests.length).toBe(0)
   })
 
-  it('treats a non-Zod output transform exception as output_schema_error, settled and unwrapped', async () => {
-    const bug = new RangeError('transform exploded')
-    const operations = {
+  /** The standard echo operation, quota'd, whose output transform throws `bug`. */
+  function throwingTransform(bug: unknown): OperationsMap {
+    return {
       echo: {
         input: ECHO_INPUT,
         output: ECHO_OUTPUT.transform(() => {
@@ -229,12 +262,31 @@ describe('the quality gate', () => {
           fallback: { provider: 'p2', model: 'm2' },
         },
       },
-    } as unknown as OperationsMap
-    const f = fixture({ operations })
+    }
+  }
+
+  it('treats a non-Zod output transform exception as output_schema_error, settled and unwrapped', async () => {
+    const bug = new RangeError('transform exploded')
+    const f = fixture({ operations: throwingTransform(bug) })
     await expectSameRejection(f.ai.run('echo', { ...INPUT, subjectId: 'u' }), bug)
     expect(f.s.settle.calls.length).toBe(1)
     expect(f.s.settle.calls[0]![2].map((a) => a.outcome)).toEqual(['output_schema_error'])
     expect(f.p2.requests.length).toBe(0) // no further fallback
+  })
+
+  it('keeps a thrown object whose name getter throws on the non-Zod path, attempt recorded', async () => {
+    const bug: Record<string, unknown> = {}
+    Object.defineProperty(bug, 'name', {
+      get(): string {
+        throw new Error('the ZodError probe must not escape processOutput')
+      },
+      enumerable: true,
+    })
+    const f = fixture({ operations: throwingTransform(bug) })
+    await expectSameRejection(f.ai.run('echo', { ...INPUT, subjectId: 'u' }), bug) // Object.is
+    expect(f.s.settle.calls.length).toBe(1)
+    expect(f.s.settle.calls[0]![1]).toBe('failed')
+    expect(f.s.settle.calls[0]![2].map((a) => a.outcome)).toEqual(['output_schema_error'])
   })
 })
 

@@ -295,6 +295,29 @@ describe('the mutation mutex', () => {
     void gateB
   })
 
+  it('drains waiters FIFO: queued mutations reach the store in submission order', async () => {
+    const f = fixture()
+    const gate = f.s.set.nextHang()
+    const held = observe(f.ai.setConfig('echo', { provider: 'p1', model: 'held' }))
+    await flushMicrotasks()
+    const queued = ['a', 'b', 'c'].map((model) =>
+      observe(f.ai.setConfig('echo', { provider: 'p1', model })),
+    )
+    await flushMicrotasks()
+    expect(f.s.set.calls.length).toBe(1) // all three wait behind the holder
+    gate.resolve(undefined)
+    await flushMicrotasks()
+    expect(held.state).toBe('resolved')
+    expect(queued.map((q) => q.state)).toEqual(['resolved', 'resolved', 'resolved'])
+    // A waiters.pop() implementation drains c, b, a and fails here.
+    expect(f.s.set.calls.map((call) => (call[1] as { model: string }).model)).toEqual([
+      'held',
+      'a',
+      'b',
+      'c',
+    ])
+  })
+
   it('keeps operations independent: one hung mutation never blocks another operation', async () => {
     const f = twoOps()
     const gate = f.s.set.nextHang()
@@ -497,6 +520,17 @@ describe('the admin matrix', () => {
     })
   })
 
+  it('getConfig lists an operation with neither a stored row nor a defaultRoute as all-null', async () => {
+    const f = fixture({
+      operations: {
+        bare: { input: ECHO_INPUT, output: ECHO_OUTPUT, prompt: () => 'p' },
+      } as unknown as OperationsMap,
+    })
+    const view = await f.ai.getConfig()
+    expect(Object.hasOwn(view, 'bare')).toBe(true) // the key is present …
+    expect(view.bare).toEqual({ stored: null, effective: null }) // … with nothing to report
+  })
+
   it('setConfig is replace-only: the store receives exactly the validated route', async () => {
     const f = fixture()
     f.s.getAll.always(() => ({
@@ -693,6 +727,34 @@ describe('strict route validation at all three seats', () => {
       const error = await expectCode(f.ai.run('echo', INPUT), 'INVALID_CONFIG')
       expect(error.detectedAt).toBe('local')
       expect(f.s.log).toEqual(['getAll'])
+    })
+  }
+
+  /** `plain`, plus one own enumerable getter that throws — the hostile store-result shape. */
+  function withThrowingGetter(
+    plain: Record<string, unknown>,
+    name: string,
+  ): Record<string, unknown> {
+    return Object.defineProperty({ ...plain }, name, {
+      enumerable: true,
+      get: () => {
+        throw new Error(`hostile getter: ${name}`)
+      },
+    })
+  }
+
+  for (const [where, rows] of [
+    ['a stored row', () => ({ echo: withThrowingGetter({ provider: 'p1' }, 'model') })],
+    ['the getAll container', () => withThrowingGetter({}, 'echo')],
+  ] as const) {
+    it(`treats a throwing field getter on ${where} as a malformed row, isolated and uncached`, async () => {
+      const f = fixture()
+      f.s.getAll.always(rows)
+      const error = await expectCode(f.ai.run('echo', INPUT), 'INVALID_CONFIG')
+      expect(error.detectedAt).toBe('local')
+      await expectCode(f.ai.run('echo', INPUT), 'INVALID_CONFIG') // never cached: re-read
+      expect(f.s.log).toEqual(['getAll', 'getAll']) // and no dependent store call
+      expect((await f.ai.getConfig()).echo).toEqual({ stored: 'malformed', effective: null })
     })
   }
 })

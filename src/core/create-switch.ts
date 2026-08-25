@@ -28,10 +28,11 @@ import { readSnapshot } from './quota'
 import type { QuotaContext } from './quota'
 import type { CoreRuntime } from './runtime'
 import { executeRun } from './run'
-import type { RunArguments, SwitchContext, ValidatedOperation } from './run'
+import type { RegisteredProvider, RunArguments, SwitchContext, ValidatedOperation } from './run'
 import type { PricingTable } from './usage'
 import {
   configTtlMsProblem,
+  isRecord,
   perDayProblem,
   priceProblem,
   storeStringProblem,
@@ -80,8 +81,10 @@ export function defineOperations<Ops extends OperationsMap>(operations: Ops): Op
 }
 
 /** Validates the provider registry and answers it as a prototype-safe map. */
-function validateProviders(providers: Record<string, Provider>): Map<string, Provider> {
-  const registry = new Map<string, Provider>()
+function validateProviders(
+  providers: Record<string, Provider>,
+): Map<string, RegisteredProvider> {
+  const registry = new Map<string, RegisteredProvider>()
   for (const [id, provider] of Object.entries(providers)) {
     const problem = storeStringProblem(id)
     if (problem !== null) {
@@ -94,19 +97,26 @@ function validateProviders(providers: Record<string, Provider>): Map<string, Pro
         `providers[${JSON.stringify(id)}] must be an object`,
       )
     }
-    if (typeof provider.complete !== 'function') {
+    // §5a: each callable is read once, as data, and the validated reference is what
+    // dispatch runs, so mutating the registered object afterwards cannot move it.
+    const complete = (candidate as { complete?: unknown }).complete
+    const prepare = (candidate as { prepare?: unknown }).prepare
+    if (typeof complete !== 'function') {
       throw invalidConfigLocal(
         SWITCH_SCOPE,
         `providers[${JSON.stringify(id)}].complete must be a function`,
       )
     }
-    if (provider.prepare !== undefined && typeof provider.prepare !== 'function') {
+    if (prepare !== undefined && typeof prepare !== 'function') {
       throw invalidConfigLocal(
         SWITCH_SCOPE,
         `providers[${JSON.stringify(id)}].prepare must be a function when present`,
       )
     }
-    registry.set(id, provider)
+    registry.set(id, {
+      provider,
+      complete: (complete as Provider['complete']).bind(provider),
+    })
   }
   return registry
 }
@@ -121,6 +131,7 @@ function validatePricing(
     const byModel = new Map<string, ModelPrice>()
     for (const [model, price] of Object.entries(models)) {
       const label = `pricing[${JSON.stringify(providerId)}][${JSON.stringify(model)}]`
+      if (!isRecord(price)) throw invalidConfigLocal(SWITCH_SCOPE, `${label} must be an object`)
       const inputProblem = priceProblem(price.inputPerM)
       if (inputProblem !== null) {
         throw invalidConfigLocal(SWITCH_SCOPE, `${label}.inputPerM ${inputProblem}`)
@@ -146,7 +157,7 @@ function validateOperation(
   if (nameProblem !== null) {
     throw invalidConfigLocal(name, `operation name ${nameProblem}`)
   }
-  if (typeof definition !== 'object') {
+  if (!isRecord(definition)) {
     throw invalidConfigLocal(name, 'operation definition must be an object')
   }
   const schemas: { field: string; value: unknown }[] = [
@@ -170,6 +181,9 @@ function validateOperation(
   }
   let quota: { perDay: number } | undefined
   if (definition.quota !== undefined) {
+    if (!isRecord(definition.quota)) {
+      throw invalidConfigLocal(name, 'quota must be an object when present')
+    }
     const problem = perDayProblem(definition.quota.perDay)
     if (problem !== null) throw invalidConfigLocal(name, `quota.perDay ${problem}`)
     quota = { perDay: definition.quota.perDay }
