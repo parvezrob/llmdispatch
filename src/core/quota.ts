@@ -128,8 +128,14 @@ async function reserveOnce(
       () => ctx.store.reserve(key, limit),
     )
   } catch (error) {
+    // The awaited call has settled; the abort rule now wins over the failure (§1).
+    checkRecoverySignal(ctx)
     throw usageStoreUnavailable(ctx.operation, error)
   }
+  // §1: an in-flight reserve is awaited to its result first — then, before that result is
+  // interpreted, an abort ends the run. Whatever state was reached stands: a granted
+  // envelope simply expires on its own; a denial changed nothing.
+  checkRecoverySignal(ctx)
   if (!isRecord(answer)) {
     throw usageStoreUnavailable(
       ctx.operation,
@@ -247,10 +253,17 @@ async function commitWithTransportRetries(
         () => ctx.store.commit(reservationId),
       )
     } catch (error) {
+      // The awaited call has settled; the abort rule wins over the transport failure (§1).
+      checkRecoverySignal(ctx)
       lastError = error
       continue
     }
-    if (answer === 'committed' || answer === 'expired' || answer === 'missing') return answer
+    // A validated 'committed' counts (§1): the run proceeds into the post-commit region,
+    // whose first boundary check reports the abort — with settlement. Every other answer
+    // yields to the abort before it is interpreted.
+    if (answer === 'committed') return answer
+    checkRecoverySignal(ctx)
+    if (answer === 'expired' || answer === 'missing') return answer
     throw usageStoreUnavailable(
       ctx.operation,
       new MalformedStoreResult('commit()', 'not one of committed, expired, missing'),

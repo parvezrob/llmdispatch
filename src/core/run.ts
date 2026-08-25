@@ -356,7 +356,12 @@ async function runAttempts(
   if (route.temperature !== undefined) primaryTarget.temperature = route.temperature
   const primary = await executeAttempt(ctx, op, dispatchers, primaryTarget, shared)
   if (primary.type === 'success') return buildResult(primary.data, primaryTarget, false)
-  if (primary.type === 'user-error') throw primary.error // settled by finalization first
+  if (primary.type === 'user-error') {
+    // Only an abort after a SUCCESSFUL attempt is outcome-immune (§1): at this boundary a
+    // fired signal wins over the user's error. Finalization still settles, as 'failed'.
+    if (callerAborted()) throw abortedWithAttempts()
+    throw primary.error // settled by finalization first
+  }
   if (primary.kind === 'aborted') throw abortedWithAttempts()
 
   // Stage 10 boundary: the abort rule wins over the fallback decision.
@@ -372,7 +377,10 @@ async function runAttempts(
     // Same sub-stages, fresh provider timeout, at most once (§1 stage 10).
     const fallback = await executeAttempt(ctx, op, dispatchers, fallbackTarget, shared)
     if (fallback.type === 'success') return buildResult(fallback.data, fallbackTarget, true)
-    if (fallback.type === 'user-error') throw fallback.error
+    if (fallback.type === 'user-error') {
+      if (callerAborted()) throw abortedWithAttempts()
+      throw fallback.error
+    }
     if (fallback.kind === 'aborted') throw abortedWithAttempts()
     if (callerAborted()) throw abortedWithAttempts()
     throw terminalFor(operation, fallback.kind, copyAttempts(attempts))

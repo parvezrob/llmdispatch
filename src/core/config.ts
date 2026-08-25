@@ -17,7 +17,7 @@ import { configStoreUnavailable, invalidConfigLocal } from '../errors'
 import type { ConfigStore, OperationConfigView, OperationRoute } from '../types'
 import { DeadlineExceeded, callWithDeadline, suppress } from './abort'
 import type { CoreRuntime } from './runtime'
-import { cloneRoute, isRecord, validateRoute } from './validate'
+import { cloneRoute, isPlainRecord, validateRoute } from './validate'
 
 /** The §6a config-store deadlines. */
 const GET_ALL_DEADLINE_MS = 5000
@@ -94,7 +94,7 @@ export function createConfigService(opts: {
       'referenced',
       () => store.getAll(),
     )
-    if (!isRecord(raw)) {
+    if (!isPlainRecord(raw)) {
       // Fail-closed: a malformed container must never read as "no rows" and activate
       // defaults (§2).
       throw new MalformedContainer()

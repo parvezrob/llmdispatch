@@ -166,6 +166,117 @@ describe('abort at stage boundaries', () => {
   })
 })
 
+describe('abort precedence over non-successful awaited quota results', () => {
+  it('ends ABORTED, not QUOTA_EXCEEDED, when an abort lands during a reserve that is then denied', async () => {
+    const { ai, s } = fixture({ quota: { perDay: 5 } })
+    const controller = new AbortController()
+    const gate = s.reserve.nextHang()
+    const run = observe(
+      ai.run('echo', { ...INPUT, subjectId: 'u' }, { signal: controller.signal }),
+    )
+    await flushMicrotasks()
+    expect(s.log).toEqual(['getAll', 'reserve u 5'])
+    controller.abort()
+    await flushMicrotasks()
+    expect(run.state).toBe('pending') // awaited to its result first (§1)
+    gate.resolve({ ok: false, used: 5, resetsAt: '2026-08-27T00:00:00.000Z' })
+    await flushMicrotasks()
+    expect(run.state).toBe('rejected')
+    expect((run.error as LLMSwitchError).code).toBe('ABORTED') // the abort wins over the denial
+    expect((run.error as LLMSwitchError).attempts).toBeUndefined()
+    expect(s.log).toEqual(['getAll', 'reserve u 5']) // no commit, no settle
+  })
+
+  it('ends ABORTED, not USAGE_STORE_UNAVAILABLE, when an abort lands during a reserve that then fails', async () => {
+    const { ai, s } = fixture({ quota: { perDay: 5 } })
+    const controller = new AbortController()
+    const gate = s.reserve.nextHang()
+    const run = observe(
+      ai.run('echo', { ...INPUT, subjectId: 'u' }, { signal: controller.signal }),
+    )
+    await flushMicrotasks()
+    controller.abort()
+    await flushMicrotasks()
+    expect(run.state).toBe('pending')
+    gate.reject(new Error('store down'))
+    await flushMicrotasks()
+    expect(run.state).toBe('rejected')
+    expect((run.error as LLMSwitchError).code).toBe('ABORTED')
+    expect(s.log).toEqual(['getAll', 'reserve u 5'])
+  })
+
+  it("ends ABORTED, not USAGE_STORE_UNAVAILABLE, when an abort lands during a commit that answers 'missing'", async () => {
+    const f = fixture({ quota: { perDay: 5 } })
+    const controller = new AbortController()
+    const gate = f.s.commit.nextHang()
+    const run = observe(
+      f.ai.run('echo', { ...INPUT, subjectId: 'u' }, { signal: controller.signal }),
+    )
+    await flushMicrotasks()
+    expect(f.s.commit.calls.length).toBe(1)
+    controller.abort()
+    await flushMicrotasks()
+    expect(run.state).toBe('pending')
+    gate.resolve('missing')
+    await flushMicrotasks()
+    expect(run.state).toBe('rejected')
+    expect((run.error as LLMSwitchError).code).toBe('ABORTED')
+    // Nothing was validated committed, so nothing settles; quota state stands as reached.
+    expect(f.s.settle.calls.length).toBe(0)
+    expect(f.p1.requests.length).toBe(0)
+  })
+})
+
+describe('abort precedence at the finalization boundary over user-error paths', () => {
+  it('ends ABORTED with attempts, settled failed, when the output transform fails after the abort', async () => {
+    const controller = new AbortController()
+    const bug = new RangeError('transform exploded')
+    const operations = {
+      echo: {
+        input: ECHO_INPUT,
+        output: {
+          parseAsync: () => {
+            // The signal fires with the user bug already decided: the boundary check must
+            // report the abort, not hand back the raw error (§1 — only an abort after a
+            // SUCCESSFUL attempt is outcome-immune).
+            controller.abort()
+            throw bug
+          },
+        },
+        prompt: () => 'p',
+        quota: { perDay: 5 },
+        defaultRoute: { provider: 'p1', model: 'm1' },
+      },
+    } as unknown as OperationsMap
+    const f = fixture({ operations })
+    const error = await expectCode(
+      f.ai.run('echo', { ...INPUT, subjectId: 'u' }, { signal: controller.signal }),
+      'ABORTED',
+    )
+    expect(error.attempts?.map((a) => a.outcome)).toEqual(['output_schema_error'])
+    expect(f.s.settle.calls.length).toBe(1) // settlement still ran, exactly once …
+    expect(f.s.settle.calls[0]![1]).toBe('failed') // … with the failed outcome
+  })
+
+  it('ends ABORTED with attempts, settled failed, when the quality gate fails after the abort', async () => {
+    const controller = new AbortController()
+    const f = fixture({
+      quota: { perDay: 5 },
+      quality: () => {
+        controller.abort()
+        throw new Error('gate exploded')
+      },
+    })
+    const error = await expectCode(
+      f.ai.run('echo', { ...INPUT, subjectId: 'u' }, { signal: controller.signal }),
+      'ABORTED',
+    )
+    expect(error.attempts?.map((a) => a.outcome)).toEqual(['quality_error'])
+    expect(f.s.settle.calls.length).toBe(1)
+    expect(f.s.settle.calls[0]![1]).toBe('failed')
+  })
+})
+
 describe('suppression companions — what must NOT be suppressed', () => {
   it('propagates a seam rejection raw when no abort happened', async () => {
     const bug = new Error('prompt exploded')

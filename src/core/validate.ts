@@ -106,6 +106,19 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * Whether a value is a plain record and nothing else: prototype `null` or `Object.prototype`.
+ *
+ * The `getAll()` container is held to this stricter shape (§2 fail-closed): a `Map`, a
+ * `Date`, or a class instance has no enumerable own rows, and reading one as "no rows"
+ * would activate defaults during what is really an outage-shaped answer.
+ */
+export function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false
+  const prototype: unknown = Object.getPrototypeOf(value)
+  return prototype === null || prototype === Object.prototype
+}
+
 /** A route field in the §6 string domain and non-empty, or the reason it is not. */
 function routeStringProblem(value: unknown, field: string): string | null {
   const domain = storeStringProblem(value)

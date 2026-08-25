@@ -201,7 +201,8 @@ export function createSwitchCore<Ops extends OperationsMap>(
   config: CreateSwitchConfig<Ops>,
   runtime: CoreRuntime,
 ): Switch<Ops> {
-  if (typeof config !== 'object') {
+  const candidate: unknown = config
+  if (typeof candidate !== 'object' || candidate === null) {
     throw invalidConfigLocal(SWITCH_SCOPE, 'config must be an object')
   }
   if (config.configTtlMs !== undefined) {

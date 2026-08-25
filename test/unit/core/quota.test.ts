@@ -523,16 +523,29 @@ describe('changing a limit while runs are in flight (§4 rules 1–5)', () => {
     expect(f.s.reserve.calls.map((call) => call[1])).toEqual([5, 5])
   })
 
-  it('rule 4 (in flight): removing the quota mid-run lets the pending envelope finish its lifecycle', async () => {
-    const f = quotaFixture()
+  it('rule 4 (in flight): removing the ONLY quota mid-run — the pending envelope finishes, new runs are quota-less', async () => {
+    // The definition declares no quota: the only quota is the stored route's, so removing
+    // it removes quota governance entirely (§4 rule 4).
+    const f = fixture() // no declared quota
+    let row: Record<string, unknown> = { provider: 'p1', model: 'm1', quota: { perDay: 5 } }
+    f.s.getAll.always(() => ({ echo: { ...row } }))
     const gate = f.s.commit.nextHang()
     const run = observe(f.ai.run('echo', ARGS))
     await flushMicrotasks()
-    await f.ai.setConfig('echo', { provider: 'p1', model: 'm1' }) // no quota anywhere now? — the declared one remains
+    expect(f.s.reserve.calls.map((call) => call[1])).toEqual([5]) // governed by the route quota
+    // While the reservation is pending: clear the quota from the stored row.
+    await f.ai.setConfig('echo', { provider: 'p1', model: 'm1' })
+    row = { provider: 'p1', model: 'm1' }
     gate.resolve('committed')
     await flushMicrotasks()
+    // The in-flight run's captured limit still governed it through commit and settlement.
     expect(run.state).toBe('resolved')
-    expect(f.s.settle.calls.length).toBe(1) // commit and settle still ran to completion
+    expect(f.s.settle.calls.length).toBe(1)
+    // A new, cache-visible run is non-quota: no reserve at all, and getQuota refuses.
+    await f.ai.run('echo', ARGS)
+    expect(f.s.reserve.calls.length).toBe(1)
+    expect(f.s.settle.calls.length).toBe(1) // nothing further to settle either
+    await expectCode(f.ai.getQuota('echo', 'u'), 'INVALID_INPUT')
   })
 
   it('rules 2, 3 and 4, end-to-end on the in-memory store', async () => {
