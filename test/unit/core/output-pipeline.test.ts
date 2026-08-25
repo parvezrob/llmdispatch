@@ -1,5 +1,5 @@
 /**
- * P6 — the output pipeline and the provider seam (spec §3): fence unwrap, the format
+ * The output pipeline and the provider seam (spec §3): fence unwrap, the format
  * matrix, termination-before-content with a throwing body getter, the quality verdict
  * matrix, settled-then-unwrapped user errors, full request forwarding, the fresh fallback
  * timeout, and the hostile ProviderResponse matrix.

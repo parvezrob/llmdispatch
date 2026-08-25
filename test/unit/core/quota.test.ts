@@ -1,7 +1,7 @@
 /**
- * P4 — the quota lifecycle (spec §4): commit recovery with exact backoff, abort×recovery
+ * The quota lifecycle (spec §4): commit recovery with exact backoff, abort×recovery
  * interleavings, the hostile store-result matrix, settlement detachment and hook isolation
- * (D11), the attempt-record snapshot, the changing-limit rules, and the §6a deadlines.
+ *, the attempt-record snapshot, the changing-limit rules, and the §6a deadlines.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -401,7 +401,7 @@ describe('settlement detachment and retries', () => {
   })
 })
 
-describe('settlement hook isolation (D11)', () => {
+describe('settlement hook isolation', () => {
   type Poison = 'throws' | 'rejects' | 'never-resolves'
   const poisons: Poison[] = ['throws', 'rejects', 'never-resolves']
 

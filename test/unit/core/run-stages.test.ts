@@ -1,5 +1,5 @@
 /**
- * P1 — the run state machine: every outgoing transition of every stage, the quota effect of
+ * The run state machine: every outgoing transition of every stage, the quota effect of
  * each (asserted on the store call log), attempts presence, and the fallback obligations.
  */
 

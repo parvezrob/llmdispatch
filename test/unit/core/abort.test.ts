@@ -1,5 +1,5 @@
 /**
- * P2 — the abort rule: cancellation while each raced seam is pending, rigorous suppression
+ * The abort rule: cancellation while each raced seam is pending, rigorous suppression
  * of the loser's late rejection, the in-flight reserve/commit exception, re-classification
  * of adapter-reported aborts, the composed signal's two independent sources, non-cooperative
  * providers, and cleanup (timers and listeners) after every completion.
