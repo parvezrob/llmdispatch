@@ -97,6 +97,44 @@ async function main() {
 
   console.log('cjs consumer round-tripped a reservation through the in-memory stores')
 
+  // The core pipeline end to end, from this build, with the other build's factory checked.
+  const { z } = require('zod')
+  check('the ESM build does not export createSwitch', typeof esm.createSwitch === 'function')
+  const ai = root.createSwitch({
+    providers: {
+      fixture: {
+        complete: (request) =>
+          Promise.resolve({
+            kind: 'complete',
+            text: JSON.stringify({ echoed: request.prompt }),
+            usage: { inputTokens: 1, outputTokens: 2 },
+          }),
+      },
+    },
+    operations: root.defineOperations({
+      echo: root.defineOperation({
+        input: z.object({ text: z.string() }),
+        output: z.object({ echoed: z.string() }),
+        prompt: ({ text }) => `say ${text}`,
+        quota: { perDay: 2 },
+        defaultRoute: { provider: 'fixture', model: 'm' },
+      }),
+    }),
+    stores: root.memoryStores(),
+  })
+  const run = await ai.run('echo', { input: { text: 'hello' }, subjectId: 'consumer' })
+  check('the run did not build and echo the prompt', run.data.echoed === 'say hello')
+  check(
+    'the run misreported its route',
+    run.route.provider === 'fixture' && run.usedFallback === false,
+  )
+  check(
+    'usage was not aggregated from the attempt',
+    run.usage.inputTokens === 1 && run.usage.outputTokens === 2 && run.usageComplete,
+  )
+  check('the committed run was not counted', (await ai.getQuota('echo', 'consumer')).used === 1)
+  console.log('cjs consumer ran an operation end to end through createSwitch')
+
   // The same migration, rendered by the other build.
   const migration = postgres.migrationSql()
   check(

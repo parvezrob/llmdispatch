@@ -82,6 +82,9 @@ export type SectionSixValues = [
   >,
   Holds<Identical<typeof Package.memoryStores, typeof Spec.memoryStores>>,
   Holds<Identical<typeof Package.postgresStores, typeof Spec.postgresStores>>,
+  Holds<Identical<typeof Package.createSwitch, typeof Spec.createSwitch>>,
+  Holds<Identical<typeof Package.defineOperation, typeof Spec.defineOperation>>,
+  Holds<Identical<typeof Package.defineOperations, typeof Spec.defineOperations>>,
 ]
 
 export type SectionSixB = [

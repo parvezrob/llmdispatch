@@ -67,7 +67,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "sizeBudget": 32768,
+  "sizeBudget": 28672,
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && node scripts/check-types-fixtures.mjs --target spec",

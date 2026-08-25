@@ -1,4 +1,4 @@
-// @targets spec
+// @targets spec, package
 // The quality gate sees the output schema's type, so a field that schema does not declare
 // cannot be read from `data`.
 import { defineOperation, defineOperations } from 'llmswitch'
