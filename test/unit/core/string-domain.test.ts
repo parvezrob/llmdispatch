@@ -98,6 +98,25 @@ describe('violations at the createSwitch boundary — no store method called at 
       expectInvalidConfigThrow(make)
       expect(s.log).toEqual([])
     })
+
+    it(`rejects a declared FALLBACK model carrying ${name}`, () => {
+      const { s, make } = buildSwitch({
+        operations: {
+          echo: {
+            input: ECHO_INPUT,
+            output: ECHO_OUTPUT,
+            prompt: () => 'p',
+            defaultRoute: {
+              provider: 'p1',
+              model: 'm1',
+              fallback: { provider: 'p1', model: value },
+            },
+          },
+        },
+      })
+      expectInvalidConfigThrow(make)
+      expect(s.log).toEqual([])
+    })
   }
 })
 
@@ -145,6 +164,16 @@ describe('violations in store-originated values — no dependent call', () => {
       expect(f.s.log).toEqual(['getAll']) // nothing after the read
     })
 
+    it(`treats a stored FALLBACK model carrying ${name} as a malformed row`, async () => {
+      const f = fixture()
+      f.s.getAll.nextResolve({
+        echo: { provider: 'p1', model: 'm1', fallback: { provider: 'p2', model: value } },
+      })
+      const error = await expectCode(f.ai.run('echo', INPUT), 'INVALID_CONFIG')
+      expect(error.detectedAt).toBe('local')
+      expect(f.s.log).toEqual(['getAll'])
+    })
+
     it(`refuses an envelope reservationId carrying ${name} before commit`, async () => {
       const f = fixture({ quota: { perDay: 5 } })
       f.s.reserve.next((key) => ({
@@ -189,6 +218,41 @@ describe('violations in store-originated values — no dependent call', () => {
     await flushMicrotasks()
     expect(s.settle.calls.length).toBe(0) // no store call, initial or retry
     expect(hookCalls.length).toBe(1) // the failure still reaches the hook
+  })
+
+  it('never calls settle for a violating attempt record behind a valid envelope', async () => {
+    // The envelope passes; the attempt strings do not — the re-check must still refuse the
+    // store call, and the failure still travels the retry-then-hook path.
+    const runtime = fakeRuntime()
+    const s = scriptedStores()
+    const hookCalls: unknown[] = []
+    const awaited = settleDetached(
+      {
+        runtime,
+        store: s.stores.usage,
+        onSettlementError: (error) => {
+          hookCalls.push(error)
+        },
+        logger: undefined,
+      },
+      { reservationId: 'r-ok', key: { operation: 'echo', subjectId: 'u' }, day: '2026-08-26' },
+      'failed',
+      [
+        {
+          provider: 'p1',
+          model: 'm\u0000odel', // outside the §6 domain
+          outcome: 'transient',
+          usage: null,
+          costUsd: null,
+          durationMs: 5,
+        },
+      ],
+    )
+    await awaited
+    await runtime.advance(40_000)
+    await flushMicrotasks()
+    expect(s.settle.calls.length).toBe(0)
+    expect(hookCalls.length).toBe(1)
   })
 })
 

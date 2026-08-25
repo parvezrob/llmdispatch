@@ -117,6 +117,18 @@ describe('synchronously hostile stores', () => {
 })
 
 describe('the remaining createSwitch shape checks', () => {
+  it('rejects a null config with INVALID_CONFIG rather than a raw TypeError', () => {
+    let caught: unknown
+    try {
+      createSwitchCore(null as never, fakeRuntime())
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(LLMSwitchError)
+    expect((caught as LLMSwitchError).code).toBe('INVALID_CONFIG')
+    expect((caught as LLMSwitchError).message).toContain('config')
+  })
+
   function build(config: Record<string, unknown>): () => unknown {
     const runtime = fakeRuntime()
     const s = scriptedStores()

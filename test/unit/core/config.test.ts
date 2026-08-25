@@ -111,7 +111,12 @@ describe('the §2 resolution matrix and the cache', () => {
   })
 
   it('fails closed on a non-record container instead of reading it as "no rows"', async () => {
-    for (const container of [null, [], 42, 'rows']) {
+    class RowsLike {
+      rows = 0
+    }
+    // A Map or a class instance has no enumerable own rows: reading it as empty would
+    // activate defaults during an outage-shaped answer — the exact §2 hazard.
+    for (const container of [null, [], 42, 'rows', new Map(), new Date(0), new RowsLike()]) {
       const { ai } = fixture()
       const f = fixture()
       void ai
