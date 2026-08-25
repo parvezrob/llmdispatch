@@ -1,4 +1,4 @@
-// @targets spec
+// @targets spec, package
 // Operation names are typed: a misspelt one does not compile, which is why INVALID_INPUT
 // for an unknown name is documented as a JavaScript caller's failure.
 import { createSwitch, defineOperation, defineOperations, memoryStores } from 'llmswitch'

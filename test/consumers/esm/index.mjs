@@ -99,6 +99,49 @@ check(
 
 console.log('esm consumer round-tripped a reservation through the in-memory stores')
 
+// The core pipeline end to end, from the installed package: an in-fixture provider, a
+// declared operation, and a run that parses, validates and counts against a quota. The
+// other build's createSwitch is checked too — both module systems reach the same factory.
+const { z } = await import('zod')
+check(
+  'the CommonJS build does not export createSwitch',
+  typeof commonjs.createSwitch === 'function',
+)
+const ai = root.createSwitch({
+  providers: {
+    fixture: {
+      complete: (request) =>
+        Promise.resolve({
+          kind: 'complete',
+          text: JSON.stringify({ echoed: request.prompt }),
+          usage: { inputTokens: 1, outputTokens: 2 },
+        }),
+    },
+  },
+  operations: root.defineOperations({
+    echo: root.defineOperation({
+      input: z.object({ text: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      prompt: ({ text }) => `say ${text}`,
+      quota: { perDay: 2 },
+      defaultRoute: { provider: 'fixture', model: 'm' },
+    }),
+  }),
+  stores: root.memoryStores(),
+})
+const run = await ai.run('echo', { input: { text: 'hello' }, subjectId: 'consumer' })
+check('the run did not build and echo the prompt', run.data.echoed === 'say hello')
+check(
+  'the run misreported its route',
+  run.route.provider === 'fixture' && run.usedFallback === false,
+)
+check(
+  'usage was not aggregated from the attempt',
+  run.usage.inputTokens === 1 && run.usage.outputTokens === 2 && run.usageComplete,
+)
+check('the committed run was not counted', (await ai.getQuota('echo', 'consumer')).used === 1)
+console.log('esm consumer ran an operation end to end through createSwitch')
+
 // The packaged migration, from the subpath: the hash the two builds render has to be the same
 // one, or an adopter's ESM and CommonJS code would disagree about which schema they applied.
 const migration = postgres.migrationSql()

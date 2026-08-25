@@ -1,4 +1,4 @@
-// @targets spec
+// @targets spec, package
 // A quality gate answers `{ ok: true }` or `{ ok: false, reason? }`. Anything else is a
 // malformed verdict, and the type system says so before a run ever can.
 import { defineOperation, defineOperations } from 'llmswitch'

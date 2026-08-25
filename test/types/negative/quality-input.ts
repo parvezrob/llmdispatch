@@ -1,4 +1,4 @@
-// @targets spec
+// @targets spec, package
 // The other half of the same rule: `input` in a quality gate is the input schema's parsed
 // type, not whatever the caller happened to pass.
 import { defineOperation, defineOperations } from 'llmswitch'
