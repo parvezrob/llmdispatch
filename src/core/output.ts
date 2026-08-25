@@ -31,9 +31,11 @@ export type OutputResult =
  * accessors must answer `false`, not escape and cost the attempt its record.
  */
 export function isZodError(value: unknown): boolean {
-  if (value instanceof z.ZodError) return true
-  if (typeof value !== 'object' || value === null) return false
   try {
+    // Inside the try: Zod's `Symbol.hasInstance` reads a brand off the value, so even
+    // `instanceof` can throw on a hostile proxy.
+    if (value instanceof z.ZodError) return true
+    if (typeof value !== 'object' || value === null) return false
     const candidate = value as { name?: unknown; issues?: unknown }
     return (
       (candidate.name === 'ZodError' || candidate.name === '$ZodError') &&
