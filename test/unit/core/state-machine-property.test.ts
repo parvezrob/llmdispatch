@@ -1,5 +1,5 @@
 /**
- * P11 — the state-machine property test (standards §4): over arbitrary sequences of
+ * The state-machine property test: over arbitrary sequences of
  * provider outcomes, store outcomes and signal timings — never two reservations per run
  * beyond the single §4 re-reserve, never a lost settle on a post-commit path, `retryable`
  * always the literal, cleanup invariants as postconditions, and the terminal-code

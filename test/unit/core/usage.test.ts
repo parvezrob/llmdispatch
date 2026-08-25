@@ -1,5 +1,5 @@
 /**
- * P8 — usage and cost aggregation (spec §7): field-wise sums over non-null attempts, the
+ * Usage and cost aggregation (spec §7): field-wise sums over non-null attempts, the
  * safe-integer clamp, `usageComplete`, per-attempt pricing, and null propagation to `cost`.
  */
 

@@ -1,5 +1,5 @@
 /**
- * P5 — sanitization, scoped as §2 pins it: sentinel strings seeded into prompt text, input,
+ * Sanitization: sentinel strings seeded into prompt text, input,
  * provider error messages and model output must never appear in any core-constructed field
  * of any `LLMSwitchError` — message, own enumerable properties, attempts, or the cause
  * chain — while an adopter's own thrown value passes into `cause` verbatim, which is the

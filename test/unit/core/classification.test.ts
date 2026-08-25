@@ -1,5 +1,5 @@
 /**
- * P7 — classification and whose-bug (spec §5b): every row at the classification level with
+ * Classification and whose-bug (spec §5b): every row at the classification level with
  * the kind↔outcome agreement invariant, fallback eligibility per row, the read-once TOCTOU
  * defence for `kind` and `status`, and the crossed-origin fixtures — origin decides, never
  * the thrown class.
@@ -174,7 +174,7 @@ describe('every §5b row at the classification level', () => {
   }
 
   it("classifies the adapter's 'aborted' as ABORTED only when the caller's signal fired", async () => {
-    // Both directions live in P2; here the row's terminal columns are pinned once more.
+    // Both directions live in the abort suite; here the row's terminal columns are pinned once more.
     const f = fixture({ fallback: false })
     const controller = new AbortController()
     f.p1.next(() => {

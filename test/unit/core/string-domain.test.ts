@@ -1,5 +1,5 @@
 /**
- * P10 — the §6 string domain: every persisted string type × each violation class at its
+ * The §6 string domain: every persisted string type × each violation class at its
  * pinned boundary, with the per-origin no-dependent-call proof, the exact-1000-byte
  * positive oracle, and the valid-hostile keys that a prototype-unsafe registry would break.
  */

@@ -1,5 +1,5 @@
 /**
- * P3 — config resolution (spec §2): the resolution matrix, TTL semantics, the
+ * Config resolution (spec §2): the resolution matrix, TTL semantics, the
  * generation-coherence matrix with call counts, the observable mutex oracle, the numeric
  * validation matrix, the admin method matrix, strict route validation at all three seats,
  * and the effective-quota precedence oracle.
