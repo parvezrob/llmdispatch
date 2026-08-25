@@ -49,13 +49,18 @@ export function classifyThrown(
   opts: { callerAborted: boolean; treatUnclassifiedAsTransient: boolean },
 ): ClassifiedThrow {
   if (ProviderError.is(error)) {
+    // Each read is guarded on its own: a hostile `status` getter must not be able to move
+    // the classification a well-read `kind` decides, and vice versa.
     let kind: unknown
     let status: unknown
     try {
       kind = error.kind
-      status = error.status
     } catch {
       kind = undefined
+    }
+    try {
+      status = error.status
+    } catch {
       status = undefined
     }
     const validStatus = typeof status === 'number' ? status : undefined
