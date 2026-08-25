@@ -21,6 +21,7 @@ import {
   scriptedStores,
   ECHO_INPUT,
   ECHO_OUTPUT,
+  withThrowingGetter,
 } from './helpers'
 
 const INPUT = { input: { text: 'hi' } }
@@ -727,19 +728,6 @@ describe('strict route validation at all three seats', () => {
       const error = await expectCode(f.ai.run('echo', INPUT), 'INVALID_CONFIG')
       expect(error.detectedAt).toBe('local')
       expect(f.s.log).toEqual(['getAll'])
-    })
-  }
-
-  /** `plain`, plus one own enumerable getter that throws — the hostile store-result shape. */
-  function withThrowingGetter(
-    plain: Record<string, unknown>,
-    name: string,
-  ): Record<string, unknown> {
-    return Object.defineProperty({ ...plain }, name, {
-      enumerable: true,
-      get: () => {
-        throw new Error(`hostile getter: ${name}`)
-      },
     })
   }
 

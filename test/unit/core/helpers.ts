@@ -459,3 +459,16 @@ export async function expectSameRejection(
   }
   throw new Error('expected a rejection, but the promise resolved')
 }
+
+/** A store answer carrying `plain` fields plus one own enumerable getter that throws. */
+export function withThrowingGetter(
+  plain: Record<string, unknown>,
+  name: string,
+): Record<string, unknown> {
+  return Object.defineProperty({ ...plain }, name, {
+    enumerable: true,
+    get: () => {
+      throw new Error(`hostile getter: ${name}`)
+    },
+  })
+}

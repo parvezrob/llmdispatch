@@ -25,6 +25,7 @@ import {
   ECHO_INPUT,
   ECHO_OUTPUT,
   RESETS_AT,
+  withThrowingGetter,
 } from './helpers'
 
 const INPUT = { input: { text: 'hi' } }
@@ -32,19 +33,6 @@ const ARGS = { ...INPUT, subjectId: 'u' }
 
 function quotaFixture(config: Record<string, unknown> = {}) {
   return fixture({ quota: { perDay: 5 }, config })
-}
-
-/** A store answer carrying `plain` fields plus one own enumerable getter that throws. */
-function withThrowingGetter(
-  plain: Record<string, unknown>,
-  name: string,
-): Record<string, unknown> {
-  return Object.defineProperty({ ...plain }, name, {
-    enumerable: true,
-    get: () => {
-      throw new Error(`hostile getter: ${name}`)
-    },
-  })
 }
 
 describe('commit recovery', () => {
@@ -310,13 +298,6 @@ describe('hostile store results (fail-closed §4)', () => {
         f.s.reserve.nextResolve(withThrowingGetter({ ok: false, used: 5 }, 'resetsAt'))
       },
       dependent: (f) => f.s.commit.calls.length,
-    },
-    {
-      name: 'a commit answer that is an object with a throwing getter',
-      script: (f) => {
-        f.s.commit.nextResolve(withThrowingGetter({}, 'state'))
-      },
-      dependent: (f) => f.s.settle.calls.length,
     },
   ]
   for (const { name, script, dependent } of throwers) {

@@ -286,6 +286,35 @@ describe('stage 5 — readiness', () => {
     expect(shared.completeCalls()).toBe(0)
   })
 
+  it('dispatches through the captured prepared complete after the dispatcher object is mutated', async () => {
+    const shared = preparingProvider()
+    const { ai } = build(
+      { p1: shared.provider },
+      { provider: 'p1', model: 'm1', fallback: { provider: 'p1', model: 'm2' } },
+    )
+    // The first dispatch strips `complete` off the prepared object; the memoized dispatcher
+    // must keep dispatching through the callable captured at memoization time.
+    const provider = shared.provider
+    const prepare = provider.prepare?.bind(provider)
+    provider.prepare = () => {
+      const dispatcher = prepare?.() as { requests: ProviderRequest[]; complete: unknown }
+      let first = true
+      dispatcher.complete = (request: ProviderRequest) => {
+        dispatcher.requests.push(request)
+        if (first) {
+          first = false
+          dispatcher.complete = undefined
+          return Promise.reject(new ProviderError('transient'))
+        }
+        return Promise.resolve(okResponse())
+      }
+      return dispatcher as never
+    }
+    const result = await ai.run('echo', INPUT)
+    expect(result.usedFallback).toBe(true)
+    expect(shared.dispatchers[0]!.requests.length).toBe(2)
+  })
+
   it('gives two overlapping runs their own dispatchers', async () => {
     const gates = [deferred<undefined>(), deferred<undefined>()]
     const dispatchers: { requests: ProviderRequest[] }[] = []
