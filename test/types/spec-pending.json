@@ -1,13 +1,6 @@
 {
   "index": {
-    "value": [
-      "anthropic",
-      "createSwitch",
-      "defineOperation",
-      "defineOperations",
-      "gemini",
-      "openaiCompatible"
-    ],
+    "value": ["anthropic", "gemini", "openaiCompatible"],
     "type": []
   },
   "postgres": {

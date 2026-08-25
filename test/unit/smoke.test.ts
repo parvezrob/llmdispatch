@@ -6,16 +6,19 @@ import * as postgres from '../../src/postgres'
 
 describe('entry points', () => {
   it('loads every entry module the manifest advertises', () => {
-    // A module namespace lists its names in sorted order, so this is the published set of
-    // runtime exports and not an artefact of how the entry file happens to be written.
-    expect(Object.keys(index)).toEqual([
+    // Compared sorted: this is the published set of runtime exports, not an artefact of how
+    // the entry file happens to be written (or of the test runner's module transform).
+    expect(Object.keys(index).sort()).toEqual([
       'LLMSwitchError',
       'ProviderError',
+      'createSwitch',
+      'defineOperation',
+      'defineOperations',
       'memoryStores',
       'postgresStores',
     ])
-    expect(Object.keys(postgres)).toEqual(['MIGRATIONS', 'migrationSql'])
-    expect(Object.keys(conformance)).toEqual([
+    expect(Object.keys(postgres).sort()).toEqual(['MIGRATIONS', 'migrationSql'])
+    expect(Object.keys(conformance).sort()).toEqual([
       'runConfigStoreConformance',
       'runUsageStoreConformance',
     ])

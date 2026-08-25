@@ -40,6 +40,33 @@ export type {
   UsageStore,
 } from './types'
 
+import { createSwitchCore } from './core/create-switch'
+import { createGlobalRuntime } from './runtime'
+import type { CreateSwitchConfig, OperationsMap, Switch } from './types'
+
 export { LLMSwitchError, ProviderError } from './errors'
 export { memoryStores } from './stores/memory'
 export { postgresStores } from './stores/postgres'
+export { defineOperation, defineOperations } from './core/create-switch'
+
+/**
+ * Builds a configured switch: providers, operations and stores in; `run` plus the admin
+ * surface out (spec §6).
+ *
+ * Construction is pure wiring — no store is called, no provider is prepared, no network is
+ * touched — plus the §6 validation of every range and name, so a misconfiguration fails
+ * here, loudly, rather than on the first request.
+ *
+ * @param config Who can be called, what the app does, and where config and counters live.
+ * @throws `LLMSwitchError` with code `INVALID_CONFIG` naming the field that failed.
+ * @example
+ * ```ts
+ * const ai = createSwitch({ providers, operations, stores: memoryStores() })
+ * const result = await ai.run('summarize', { input: { text }, subjectId: user.id })
+ * ```
+ */
+export function createSwitch<Ops extends OperationsMap>(
+  config: CreateSwitchConfig<Ops>,
+): Switch<Ops> {
+  return createSwitchCore(config, createGlobalRuntime())
+}

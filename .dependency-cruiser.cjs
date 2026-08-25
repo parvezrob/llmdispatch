@@ -94,8 +94,18 @@ module.exports = {
       from: { path: '^src/index\\.ts$' },
       to: {
         path: '^src/',
-        pathNot: '^(src/core/|src/errors/|src/providers/|src/stores/|src/types\\.ts$)',
+        pathNot:
+          '^(src/core/|src/errors/|src/providers/|src/stores/|src/types\\.ts$|src/runtime\\.ts$)',
       },
+    },
+    {
+      name: 'runtime-adapts-timers-only',
+      comment:
+        'the runtime adapter turns globalThis timers into the seam the core is handed; it ' +
+        'may know the seam type and nothing else, and only the root entry wires it in.',
+      severity: 'error',
+      from: { path: '^src/runtime\\.ts$' },
+      to: { path: '^src/', pathNot: '^src/core/runtime\\.ts$' },
     },
     {
       name: 'postgres-entry-is-narrow',
