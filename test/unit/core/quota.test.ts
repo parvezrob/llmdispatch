@@ -12,6 +12,7 @@ import { createGlobalRuntime } from '../../../src/runtime'
 import { createSwitchCore } from '../../../src/core/create-switch'
 import { createMemoryStores } from '../../../src/stores/memory'
 import type { OperationsMap, SettlementFailure } from '../../../src/types'
+import type { Fixture } from './helpers'
 import {
   expectCode,
   fixture,
@@ -31,6 +32,19 @@ const ARGS = { ...INPUT, subjectId: 'u' }
 
 function quotaFixture(config: Record<string, unknown> = {}) {
   return fixture({ quota: { perDay: 5 }, config })
+}
+
+/** A store answer carrying `plain` fields plus one own enumerable getter that throws. */
+function withThrowingGetter(
+  plain: Record<string, unknown>,
+  name: string,
+): Record<string, unknown> {
+  return Object.defineProperty({ ...plain }, name, {
+    enumerable: true,
+    get: () => {
+      throw new Error(`hostile getter: ${name}`)
+    },
+  })
 }
 
 describe('commit recovery', () => {
@@ -258,6 +272,63 @@ describe('hostile store results (fail-closed §4)', () => {
     })
   }
 
+  // A store answer whose own getters throw is malformed like any other: the throw is mapped,
+  // never escaping the fail-closed guards raw, and it lands before the dependent store call.
+  const throwers: {
+    name: string
+    script: (f: Fixture) => void
+    dependent: (f: Fixture) => number
+  }[] = [
+    {
+      name: 'a reserve answer whose ok getter throws',
+      script: (f) => {
+        f.s.reserve.nextResolve(withThrowingGetter({}, 'ok'))
+      },
+      dependent: (f) => f.s.commit.calls.length,
+    },
+    {
+      name: 'a grant whose reservation getter throws',
+      script: (f) => {
+        f.s.reserve.nextResolve(withThrowingGetter({ ok: true }, 'reservation'))
+      },
+      dependent: (f) => f.s.commit.calls.length,
+    },
+    {
+      name: 'a grant whose envelope day getter throws',
+      script: (f) => {
+        f.s.reserve.next((key) => ({
+          ok: true,
+          reservation: withThrowingGetter({ reservationId: 'r', key }, 'day'),
+          expiresAt: RESETS_AT,
+        }))
+      },
+      dependent: (f) => f.s.commit.calls.length,
+    },
+    {
+      name: 'a denial whose resetsAt getter throws',
+      script: (f) => {
+        f.s.reserve.nextResolve(withThrowingGetter({ ok: false, used: 5 }, 'resetsAt'))
+      },
+      dependent: (f) => f.s.commit.calls.length,
+    },
+    {
+      name: 'a commit answer that is an object with a throwing getter',
+      script: (f) => {
+        f.s.commit.nextResolve(withThrowingGetter({}, 'state'))
+      },
+      dependent: (f) => f.s.settle.calls.length,
+    },
+  ]
+  for (const { name, script, dependent } of throwers) {
+    it(`refuses ${name} before the dependent store call`, async () => {
+      const f = quotaFixture()
+      script(f)
+      const error = await expectCode(f.ai.run('echo', ARGS), 'USAGE_STORE_UNAVAILABLE')
+      expect(error.retryable).toBe(true)
+      expect(dependent(f)).toBe(0)
+    })
+  }
+
   it('refuses an unknown commit string immediately, without transport retries', async () => {
     const f = quotaFixture()
     f.s.commit.nextResolve('acknowledged')
@@ -271,6 +342,7 @@ describe('hostile store results (fail-closed §4)', () => {
       { used: -1, resetsAt: RESETS_AT },
       { used: 0.5, resetsAt: RESETS_AT },
       { used: 3, resetsAt: 'later' },
+      withThrowingGetter({ used: 3 }, 'resetsAt'), // a throwing getter is malformed too
       null,
     ]) {
       const f = quotaFixture()
@@ -303,6 +375,33 @@ describe('settlement detachment and retries', () => {
     expect(f.runtime.pendingDelays('unreferenced')).toEqual([25_000])
     await f.runtime.advance(25_000)
     expect(f.s.settle.calls.length).toBe(4)
+  })
+
+  it('stops the chain at a recovered retry: no 5 s or 25 s attempt, no hook, no log', async () => {
+    const hookCalls: unknown[] = []
+    const loggerCalls: unknown[] = []
+    const f = quotaFixture({
+      onSettlementError: (error: unknown) => {
+        hookCalls.push(error)
+      },
+      logger: {
+        info: () => undefined,
+        warn: () => undefined,
+        error: (message: string) => {
+          loggerCalls.push(message)
+        },
+      },
+    })
+    f.s.settle.nextReject(new Error('settle 1')) // only the initial attempt fails
+    await f.ai.run('echo', ARGS)
+    await f.runtime.advance(1000)
+    expect(f.s.settle.calls.length).toBe(2) // the 1 s retry ran — and succeeded
+    await f.runtime.advance(5000)
+    await f.runtime.advance(25_000)
+    expect(f.s.settle.calls.length).toBe(2) // a chain that keeps going fails here
+    expect(f.runtime.pending()).toBe(0)
+    expect(hookCalls).toEqual([])
+    expect(loggerCalls).toEqual([])
   })
 
   it('gives each detached retry its own 10 s deadline, in unreferenced mode', async () => {

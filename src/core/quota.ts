@@ -47,6 +47,25 @@ export interface QuotaContext {
 }
 
 /**
+ * Reads named properties off a store-originated object, totally (spec §4 fail-closed).
+ *
+ * A store may answer an object whose getters throw; routing every store-field read through
+ * here turns that throw into a malformed-answer problem instead of a raw escape.
+ */
+function readFields<K extends string>(
+  value: Record<string, unknown>,
+  names: readonly K[],
+): { fields: Record<K, unknown> } | { problem: string } {
+  const fields = {} as Record<K, unknown>
+  try {
+    for (const name of names) fields[name] = value[name]
+  } catch {
+    return { problem: `reading ${names.join('/')} threw` }
+  }
+  return { fields }
+}
+
+/**
  * Validates a `reserve` grant's envelope and answers a plain copy (spec §4, §6).
  *
  * The copy is what the run carries verbatim through commit recovery and settlement, so the
@@ -57,12 +76,16 @@ function envelopeProblem(
   key: QuotaKey,
 ): { envelope: ReservationEnvelope } | { problem: string } {
   if (!isRecord(value)) return { problem: 'reservation is not an object' }
-  const { reservationId, key: envelopeKey, day } = value
+  const outer = readFields(value, ['reservationId', 'key', 'day'])
+  if ('problem' in outer) return outer
+  const { reservationId, key: envelopeKey, day } = outer.fields
   if (storeStringProblem(reservationId) !== null) {
     return { problem: 'reservationId is outside the string domain' }
   }
   if (!isRecord(envelopeKey)) return { problem: 'reservation key is not an object' }
-  const { operation, subjectId } = envelopeKey
+  const inner = readFields(envelopeKey, ['operation', 'subjectId'])
+  if ('problem' in inner) return inner
+  const { operation, subjectId } = inner.fields
   if (operation !== key.operation || subjectId !== key.subjectId) {
     return { problem: 'reservation key does not match the requested key' }
   }
@@ -90,6 +113,20 @@ class QuotaRecoveryFailure extends Error {
     super(message)
     this.name = 'QuotaRecoveryFailure'
   }
+}
+
+/** `readFields` at a seat whose malformed classification is `USAGE_STORE_UNAVAILABLE`. */
+function storeFields<K extends string>(
+  ctx: QuotaContext,
+  call: string,
+  value: Record<string, unknown>,
+  names: readonly K[],
+): Record<K, unknown> {
+  const read = readFields(value, names)
+  if ('problem' in read) {
+    throw usageStoreUnavailable(ctx.operation, new MalformedStoreResult(call, read.problem))
+  }
+  return read.fields
 }
 
 /**
@@ -142,9 +179,12 @@ async function reserveOnce(
       new MalformedStoreResult('reserve()', 'not an object'),
     )
   }
-  const { ok } = answer
+  const { ok } = storeFields(ctx, 'reserve()', answer, ['ok'])
   if (ok === true) {
-    const { reservation, expiresAt } = answer
+    const { reservation, expiresAt } = storeFields(ctx, 'reserve()', answer, [
+      'reservation',
+      'expiresAt',
+    ])
     const checked = envelopeProblem(reservation, key)
     if ('problem' in checked) {
       throw usageStoreUnavailable(
@@ -161,7 +201,7 @@ async function reserveOnce(
     return { ok: true, envelope: checked.envelope }
   }
   if (ok === false) {
-    const { used, resetsAt } = answer
+    const { used, resetsAt } = storeFields(ctx, 'reserve()', answer, ['used', 'resetsAt'])
     if (!isCount(used)) {
       throw usageStoreUnavailable(
         ctx.operation,
@@ -299,7 +339,7 @@ export async function readSnapshot(
       new MalformedStoreResult('snapshot()', 'not an object'),
     )
   }
-  const { used, resetsAt } = answer
+  const { used, resetsAt } = storeFields(ctx, 'snapshot()', answer, ['used', 'resetsAt'])
   if (!isCount(used)) {
     throw usageStoreUnavailable(
       ctx.operation,

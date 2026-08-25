@@ -26,15 +26,22 @@ export type OutputResult =
  *
  * `instanceof` covers the copy the core loaded; the structural check covers a schema from a
  * second copy (spec §3 keys the decision on `ZodError`, not on one module instance).
+ *
+ * Total: it runs inside `catch` blocks over user code, so a thrown object with hostile
+ * accessors must answer `false`, not escape and cost the attempt its record.
  */
 export function isZodError(value: unknown): boolean {
   if (value instanceof z.ZodError) return true
   if (typeof value !== 'object' || value === null) return false
-  const candidate = value as { name?: unknown; issues?: unknown }
-  return (
-    (candidate.name === 'ZodError' || candidate.name === '$ZodError') &&
-    Array.isArray(candidate.issues)
-  )
+  try {
+    const candidate = value as { name?: unknown; issues?: unknown }
+    return (
+      (candidate.name === 'ZodError' || candidate.name === '$ZodError') &&
+      Array.isArray(candidate.issues)
+    )
+  } catch {
+    return false
+  }
 }
 
 /**

@@ -19,6 +19,36 @@ import { DeadlineExceeded, callWithDeadline, suppress } from './abort'
 import type { CoreRuntime } from './runtime'
 import { cloneRoute, isPlainRecord, validateRoute } from './validate'
 
+/** What one operation's row in a `getAll()` container reads as. */
+type RowReading =
+  | { state: 'absent' }
+  | { state: 'valid'; route: OperationRoute }
+  | { state: 'malformed'; problem: string }
+
+/**
+ * Reads and validates one operation's row, totally.
+ *
+ * The container's row lookup and `validateRoute`'s own field reads share one guard, so a
+ * store whose getters throw yields the §2 malformed-row classification (isolated, never
+ * cached) rather than a raw error escaping resolution.
+ */
+function readRow(
+  rows: Record<string, unknown>,
+  operation: string,
+  registered: ReadonlySet<string>,
+): RowReading {
+  let checked: ReturnType<typeof validateRoute>
+  try {
+    if (!Object.hasOwn(rows, operation)) return { state: 'absent' }
+    checked = validateRoute(rows[operation], registered)
+  } catch {
+    return { state: 'malformed', problem: 'could not be read' }
+  }
+  return checked.ok
+    ? { state: 'valid', route: checked.value }
+    : { state: 'malformed', problem: checked.problem }
+}
+
 /** The §6a config-store deadlines. */
 const GET_ALL_DEADLINE_MS = 5000
 const MUTATION_DEADLINE_MS = 10_000
@@ -120,7 +150,8 @@ export function createConfigService(opts: {
       // §2: `defaultRoute` is never an outage fallback, and outages are not cached.
       throw configStoreUnavailable(operation, error)
     }
-    if (!Object.hasOwn(rows, operation)) {
+    const reading = readRow(rows, operation, registered)
+    if (reading.state === 'absent') {
       const defaultRoute = declared?.defaultRoute
       if (defaultRoute === undefined) {
         throw invalidConfigLocal(operation, 'no stored route and no defaultRoute')
@@ -129,13 +160,12 @@ export function createConfigService(opts: {
       install(operation, defaultRoute, readGeneration)
       return defaultRoute
     }
-    const checked = validateRoute(rows[operation], registered)
-    if (!checked.ok) {
+    if (reading.state === 'malformed') {
       // Malformed rows are isolated to this operation and never cached (§2).
-      throw invalidConfigLocal(operation, `stored route ${checked.problem}`)
+      throw invalidConfigLocal(operation, `stored route ${reading.problem}`)
     }
-    install(operation, checked.value, readGeneration)
-    return checked.value
+    install(operation, reading.route, readGeneration)
+    return reading.route
   }
 
   async function view(): Promise<Record<string, OperationConfigView>> {
@@ -150,14 +180,15 @@ export function createConfigService(opts: {
     for (const [operation, declared] of operations) {
       const defaultRoute =
         declared.defaultRoute === undefined ? null : cloneRoute(declared.defaultRoute)
-      if (!Object.hasOwn(rows, operation)) {
+      const reading = readRow(rows, operation, registered)
+      if (reading.state === 'absent') {
         views[operation] = { stored: null, effective: defaultRoute }
         continue
       }
-      const checked = validateRoute(rows[operation], registered)
-      views[operation] = checked.ok
-        ? { stored: checked.value, effective: cloneRoute(checked.value) }
-        : { stored: 'malformed', effective: null }
+      views[operation] =
+        reading.state === 'valid'
+          ? { stored: reading.route, effective: cloneRoute(reading.route) }
+          : { stored: 'malformed', effective: null }
     }
     return views
   }
