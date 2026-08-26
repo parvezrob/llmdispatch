@@ -274,12 +274,17 @@ function asSwitchError(error: unknown, code: LLMSwitchError['code']): LLMSwitchE
 
 describe('completeness: the switch-built case list against the review-time inventory', () => {
   it('enumerates both unions in full and routes every row to exactly one block', () => {
+    // These two cannot fail at runtime — their type annotations are the actual gate, and
+    // a union change fails `tsc`, not vitest. Kept as documentation of that mechanism.
     expect(outcomesExhaustive).toBe(true)
     expect(kindsExhaustive).toBe(true)
     expect(ATTEMPT_OUTCOMES).toHaveLength(INVENTORY.attemptOutcomes)
     expect(PROVIDER_ERROR_KINDS).toHaveLength(INVENTORY.providerErrorKinds)
     for (const kind of PROVIDER_ERROR_KINDS) expect(ATTEMPT_OUTCOMES).toContain(kind)
 
+    // Only the dispatched-failure partition is mechanically tied to generated cases
+    // (FAILURE_ROWS drives them); the success, abort-timing, and raw-unwrap partitions
+    // are pinned by their named describes below, which this file carries by hand.
     const dispatched = ATTEMPT_OUTCOMES.filter(
       (outcome) => classify(outcome) === 'dispatched-failure',
     )
@@ -329,6 +334,9 @@ describe('dispatched-failure rows over the fallback axis', () => {
         row.arrange(f, 'p2')
         const run = observe(f.ai.run('echo', ARGS))
         await landAttempt(f, row)
+        // Timer rows must still be pending here: the fallback attempt gets a fresh
+        // timeout budget, so one advance cannot land both attempts.
+        if (row.land !== undefined) expect(run.state).toBe('pending')
         await landAttempt(f, row)
         expect(run.state).toBe('rejected')
         const error = asSwitchError(run.error, row.code)
@@ -346,6 +354,7 @@ describe('dispatched-failure rows over the fallback axis', () => {
         const error = asSwitchError(run.error, row.code)
         expect(error.retryable).toBe(row.retryable)
         expect(error.detectedAt).toBe(row.detectedAt)
+        expect(error.attempts?.map((a) => a.outcome)).toEqual([row.outcome])
         expect(f.p2.requests.length).toBe(0)
         expect(quotaLog(f)).toEqual(['reserve', 'commit', 'settle failed'])
       })
@@ -383,6 +392,9 @@ describe('the flag axis: fallbackOnAuthOrModelNotFound governs its two rows, pri
       },
       (f) => {
         f.p1.nextReject(new ProviderError('invalid_request', { status: 413 }))
+      },
+      (f) => {
+        f.p1.nextReject(new Error('a plain failure')) // provider_unclassified
       },
     ]
     for (const arrange of arrangements) {
@@ -428,6 +440,16 @@ describe('the aborted row: caller-signal timing at the composition level', () =>
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['aborted'])
     expect(f.p2.requests.length).toBe(0)
     expect(quotaLog(f)).toEqual(['reserve', 'commit', 'settle failed'])
+  })
+
+  it("an adapter-reported 'aborted' with no caller signal re-classifies timeout, still fallback-eligible", async () => {
+    // The row's other half (spec §5b): the adapter saw the core's own timeout, not the
+    // caller's abort, so the timeout row's columns govern — including its eligibility.
+    const f = fixture(TABLE)
+    f.p1.nextReject(new ProviderError('aborted'))
+    const result = await f.ai.run('echo', ARGS)
+    expect(result.usedFallback).toBe(true)
+    expect(result.attempts.map((a) => a.outcome)).toEqual(['timeout', 'succeeded'])
   })
 
   it('abort during the fallback attempt -> ABORTED with the primary failure in the trail', async () => {
@@ -477,24 +499,19 @@ describe('raw-unwrap rows: the user error by identity, settled first, no fallbac
   }
 
   for (const name of ['output_schema_error', 'quality_error'] as const) {
-    it(`${name}: identity preserved, settlement observed before the throw, quota log intact`, async () => {
-      const order: string[] = []
+    it(`${name}: identity preserved, and the run holds until settlement completes`, async () => {
       const bug = new Error(`${name} bug`)
       const f = rawFixture(name, bug)
-      f.s.settle.next(() => {
-        order.push('settle')
-        return undefined
-      })
-      const run = observe(
-        f.ai.run('echo', ARGS).catch((error: unknown) => {
-          order.push('thrown')
-          throw error
-        }),
-      )
+      // Falsifiable ordering: settlement is gated open, so a core that stopped awaiting
+      // settle before rethrowing would surface the rejection while the gate still holds.
+      const gate = f.s.settle.nextHang()
+      const run = observe(f.ai.run('echo', ARGS))
+      await flushMicrotasks()
+      expect(run.state).toBe('pending')
+      gate.resolve(undefined)
       await flushMicrotasks()
       expect(run.state).toBe('rejected')
       expect(run.error).toBe(bug)
-      expect(order).toEqual(['settle', 'thrown'])
       expect(f.p2.requests.length).toBe(0)
       expect(quotaLog(f)).toEqual(['reserve', 'commit', 'settle failed'])
       expect(f.s.settle.calls[0]?.[2]?.map((a) => a.outcome)).toEqual([name])

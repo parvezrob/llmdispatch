@@ -2,9 +2,9 @@
  * Prepared-dispatcher concurrency under load (spec §5a): N overlapping runs over one
  * shared provider registered as both primary and fallback, each run resolving its own
  * credential — proof that nothing prepared leaks across runs — plus store reconciliation
- * at quiescence, admin mutations racing in-flight runs, and a seeded stochastic smoke
- * over shuffled settlement orders. The scripted interleavings are the gate; the seeded
- * shuffle is evidence.
+ * at quiescence, admin writes interleaved with in-flight runs, and a seeded stochastic
+ * smoke over shuffled settlement orders. The scripted interleavings are the gate; the
+ * seeded shuffle is evidence.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -66,7 +66,10 @@ describe('the alternating-credentials race', () => {
         return currentKey
       },
     })
-    const internal = createMemoryStores({})
+    // Pinned clock: no UTC-midnight straddle, and time moves only when the test says so —
+    // the zero-pending proof at the end depends on that.
+    let nowMs = Date.parse('2026-08-26T12:00:00.000Z')
+    const internal = createMemoryStores({ now: () => new Date(nowMs), leaseMs: 60_000 })
     const recorded = recordingStores(internal.stores)
     const ai = createSwitch({
       providers: { shared: provider },
@@ -107,6 +110,9 @@ describe('the alternating-credentials race', () => {
       call.respond(openaiSuccess(`rescued-${String(runIndexOf(call))}`))
     }
     await until(() => runs.every((run) => run.state !== 'pending'), 'all runs settled')
+    // Still exactly one preparation per run: a core that redundantly prepared again for
+    // the fallback wave would have moved this counter after the first assertion above.
+    expect(resolverCalls).toBe(N)
 
     // The named oracle: every dispatched request — primary and fallback alike — carries
     // exactly the key its run resolved.
@@ -130,10 +136,13 @@ describe('the alternating-credentials race', () => {
       }
     })
 
-    // Quiescence reconciliation: committed slots == runs that dispatched (the fallback
-    // shares its run's slot, so attempts != slots), every committed slot observed settled,
-    // and the public snapshot agrees — which also means zero reservations are left pending.
+    // Quiescence reconciliation. What each line pins: N grants observed, N commit acks
+    // observed (committed == runs that dispatched — the fallback shares its run's slot,
+    // so attempts != slots), every granted slot settled with its run's attempt count,
+    // and the public snapshot agreeing with the committed count.
     expect(recorded.envelopes).toHaveLength(N)
+    expect(recorded.commits).toHaveLength(N)
+    expect(new Set(recorded.commits).size).toBe(N)
     const key = { operation: 'echo', subjectId: 'load' }
     const snapshot = await recorded.stores.usage.snapshot(key)
     expect(snapshot.used).toBe(N)
@@ -150,10 +159,19 @@ describe('the alternating-credentials race', () => {
       attemptTotal += settled?.attempts.length ?? 0
     }
     expect(attemptTotal).toBe(N + N / 2)
+
+    // Zero pending, proven directly: a reservation left pending would lapse once the
+    // lease ran out and drop from the snapshot; only committed rows survive the jump.
+    nowMs += 90_000
+    expect((await recorded.stores.usage.snapshot(key)).used).toBe(N)
   })
 })
 
-describe('admin mutations racing in-flight runs', () => {
+describe('admin writes interleaved with in-flight runs', () => {
+  // What this proves is invalidation-on-write while earlier runs are still in flight —
+  // every run resolves exactly the write before it, never a stale cache entry. The
+  // generation guard against a *read* racing a write is owned by the config suite
+  // (test/unit/core/config.test.ts), whose scripted store can hold a read open.
   it('every run resolves the write before it; nothing serves a stale cache entry', async () => {
     const wire = wireFetch()
     const provider = openaiCompatible({ apiKey: () => 'sk-admin' })
@@ -197,11 +215,12 @@ describe('admin mutations racing in-flight runs', () => {
 
 describe('seeded stochastic smoke', () => {
   it('shuffled settlement over a mixed outcome draw: results coherent, store reconciled', async () => {
-    // The seed is the whole reproduction recipe; the draw and both shuffles derive from it.
+    // The seed pins the outcome draw and both shuffles; which run receives which drawn
+    // outcome follows dispatch arrival order.
     const random = mulberry32(0x2105)
     const wire = wireFetch()
     const provider = openaiCompatible({ apiKey: () => 'sk-load' })
-    const internal = createMemoryStores({})
+    const internal = createMemoryStores({ now: () => new Date('2026-08-26T12:00:00.000Z') })
     const recorded = recordingStores(internal.stores)
     const N = 32
     const ai = createSwitch({
@@ -250,6 +269,9 @@ describe('seeded stochastic smoke', () => {
         call.respond(jsonResponse(503, { error: { message: 'still overloaded' } }))
       }
     }
+    // Both fallback outcomes must occur, or the terminal-failure branch below goes
+    // silently unexercised after a seed or threshold change.
+    expect(new Set(fallbackOutcome.values())).toEqual(new Set(['success', 'transient']))
     await until(() => runs.every((run) => run.state !== 'pending'), 'all runs settled')
 
     runs.forEach((run, i) => {
@@ -272,9 +294,10 @@ describe('seeded stochastic smoke', () => {
       }
     })
 
-    // Reconciliation holds regardless of the draw: one slot per run, every slot settled,
-    // and the settlement outcomes match the run results one for one.
+    // Reconciliation holds regardless of the draw: one granted and committed slot per
+    // run, every slot settled, and the settlement outcomes match the run results.
     expect(recorded.envelopes).toHaveLength(N)
+    expect(recorded.commits).toHaveLength(N)
     const snapshot = await recorded.stores.usage.snapshot({
       operation: 'echo',
       subjectId: 'smoke',

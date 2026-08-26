@@ -27,7 +27,9 @@ export interface Wire {
 /**
  * Stubs global `fetch` so every call parks in `calls` until the test resolves it.
  *
- * An already-aborted signal rejects immediately, as the real fetch does. Restore with
+ * An already-aborted signal rejects immediately, as the real fetch does. A signal firing
+ * *after* dispatch is deliberately ignored — no composition test aborts a parked call, and
+ * a future one would need an abort listener here first. Restore with
  * `vi.unstubAllGlobals()` in `afterEach`.
  */
 export function wireFetch(): Wire {
@@ -83,24 +85,33 @@ export function runIndexOf(call: WireCall): number {
   return Number(index)
 }
 
-/** A store pair whose usage store records every granted reservation envelope. */
+/**
+ * A store pair whose usage store records every granted reservation envelope and every
+ * acknowledged commit, so "committed == dispatched runs" is a direct assertion.
+ */
 export function recordingStores(inner: StorePair): {
   stores: StorePair
   envelopes: ReservationEnvelope[]
+  commits: string[]
 } {
   const envelopes: ReservationEnvelope[] = []
+  const commits: string[] = []
   const usage: UsageStore = {
     async reserve(key, limit) {
       const result = await inner.usage.reserve(key, limit)
       if (result.ok) envelopes.push(result.reservation)
       return result
     },
-    commit: (reservationId) => inner.usage.commit(reservationId),
+    async commit(reservationId) {
+      const result = await inner.usage.commit(reservationId)
+      if (result === 'committed') commits.push(reservationId)
+      return result
+    },
     settle: (reservation, outcome, attempts) =>
       inner.usage.settle(reservation, outcome, attempts),
     snapshot: (key) => inner.usage.snapshot(key),
   }
-  return { stores: { config: inner.config, usage }, envelopes }
+  return { stores: { config: inner.config, usage }, envelopes, commits }
 }
 
 /** Flushes microtask turns until `predicate` holds; fails loudly instead of hanging. */
@@ -112,7 +123,10 @@ export async function until(predicate: () => boolean, what: string): Promise<voi
   throw new Error(`timed out waiting for ${what}`)
 }
 
-/** mulberry32: a tiny deterministic PRNG; the seed is the whole reproduction recipe. */
+/**
+ * mulberry32: a tiny deterministic PRNG. The seed pins the draw sequence exactly; which
+ * run receives which drawn outcome also depends on dispatch arrival order.
+ */
 export function mulberry32(seed: number): () => number {
   let state = seed >>> 0
   return () => {
