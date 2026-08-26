@@ -120,6 +120,7 @@ section.
 | `node scripts/build-provider-reference.mjs --check`      | fail if `docs/providers.md` no longer matches spec §5c               |
 | `node scripts/check-docs-links.mjs`                      | every markdown link and anchor resolves                              |
 | `node scripts/verify-quickstart.mjs [tgz]`               | follow the README quickstart in a clean directory (needs network)    |
+| `node scripts/verify-examples.mjs [tgz]`                 | run both `examples/` end to end against that tarball (needs network) |
 | `npm run audit:tarball -- <tgz>`                         | what a packed tarball contains and whether it would run anything     |
 | `npm run test:consumers -- <tgz>`                        | install that tarball into ESM, CommonJS and TypeScript projects      |
 

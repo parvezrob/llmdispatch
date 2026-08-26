@@ -7,8 +7,9 @@
  * The install is the documented command with only the unpublished registry argument
  * `llmswitch` replaced by the tarball path; the code fence is written byte-for-byte to its
  * own file — never edited, wrapped or rewritten — and executed by a two-line harness that
- * imports it. Provider API keys are scrubbed from the child environment, so the run cannot
- * become live billed traffic: without a key, the documented outcome is an `LLMSwitchError`
+ * imports it. The child environment is the shared allowlist, which carries no provider key
+ * and no `NODE_OPTIONS`, so the run cannot become live billed traffic and nothing preloaded
+ * can put a key back: without a key, the documented outcome is an `LLMSwitchError`
  * with code `INVALID_CONFIG` from the unresolvable key, and that exact rejection is the
  * pass condition. Anything else — a ReferenceError, a different code, a run that resolves —
  * means the printed quickstart is wrong.
@@ -22,24 +23,16 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 
+import { buildChildEnvironment } from './lib/child-environment.mjs'
 import { readQuickstart } from './lib/quickstart-section.mjs'
 
 const ROOT = join(import.meta.dirname, '..')
 const README = join(ROOT, 'README.md')
 const USAGE = 'usage: verify-quickstart.mjs [path-to-tarball]\n'
-// The provider keys the quickstart's resolvers read (matched case-insensitively), plus
-// NODE_OPTIONS: a permitted --require/--import preload runs before the README module and
-// could repopulate what the scrub removed.
-const BLOCKED_VARIABLES = new Set([
-  'ANTHROPIC_API_KEY',
-  'OPENAI_API_KEY',
-  'GEMINI_API_KEY',
-  'NODE_OPTIONS',
-])
 
 /**
  * The harness: import the printed file, require the documented rejection — a real
@@ -85,10 +78,6 @@ function main() {
     return 1
   }
 
-  const environment = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !BLOCKED_VARIABLES.has(key.toUpperCase())),
-  )
-
   let tarball = argv[0]
   if (tarball !== undefined) {
     if (!isAbsolute(tarball)) tarball = resolve(tarball)
@@ -105,6 +94,11 @@ function main() {
   }
 
   const directory = mkdtempSync(join(tmpdir(), 'llmswitch-quickstart-'))
+  // A home of its own, so npm's cache and any config a tool writes for itself go away
+  // with the run rather than reaching into the machine's real one.
+  const home = join(directory, 'home')
+  mkdirSync(home)
+  const environment = buildChildEnvironment(home)
   // Names which stage broke, so a registry flake in CI reads as infrastructure noise
   // rather than a defective quickstart.
   let step = 'packing the working tree'
@@ -122,7 +116,10 @@ function main() {
       join(directory, 'package.json'),
       `${JSON.stringify({ name: 'quickstart', private: true, type: 'module' }, null, 2)}\n`,
     )
-    // The documented command, with only the unpublished registry argument replaced.
+    // The documented command, with only the unpublished registry argument replaced. No
+    // `--userconfig` or `--registry` is added the way `verify-examples.mjs` adds them: this
+    // gate exists to run what the README prints, and the temporary HOME above already means
+    // no user npmrc is in reach.
     const install = quickstart.install
       .split(' ')
       .map((word) => (word === 'llmswitch' ? tarball : word))

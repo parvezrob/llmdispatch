@@ -26,6 +26,8 @@ export default tseslint.config(
       'coverage/',
       'api/',
       'test/consumers/**/node_modules/',
+      'examples/*/node_modules/',
+      'examples/next/.next/',
       '**/*.tgz',
       '.changeset/',
       // Copied byte for byte out of the spec's code fences by
@@ -104,6 +106,22 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       // Reaching the package through `require` is the point of the CommonJS fixtures.
       '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  // The Next.js example. Its TypeScript belongs to that project's own tsconfig, not to any
+  // program this config loads, so the type-aware rules the block above claims for `**/*.ts`
+  // are switched off here and the files are linted for syntax. An `any` written into an
+  // example would still be a defect, so that rule stays on.
+  {
+    files: ['examples/next/**/*.ts', 'examples/next/**/*.tsx'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      globals: nodeGlobals,
+      parserOptions: { project: false, projectService: false },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
 

@@ -192,6 +192,53 @@ jobs:
           TGZ: ${{ steps.tarball.outputs.tgz }}
         run: npm run test:consumers -- "$TGZ"
 
+  # Both examples, installed from the audited tarball and run end to end against a local
+  # fixture provider. No provider key is a repository secret, so the job has none to reach:
+  # it holds nothing beyond the automatic read-only token.
+  examples:
+    runs-on: ubuntu-latest
+    # Generous on purpose: the harness holds a shorter budget of its own, so a slow run ends
+    # in a failure naming the stage it was in rather than in a bare job kill.
+    timeout-minutes: 40
+    needs: build
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION_FLOOR }}
+          cache: npm
+      - name: Check the package manager is the one bundled with this Node
+        run: '[ "$(npm --version)" = "$NPM_VERSION_FLOOR" ]'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-tarball
+      - name: Check the tarball is the one that was audited
+        run: sha256sum -c tarball.sha256
+      # The name comes out of the hash file that was checked a moment ago, so the
+      # examples cannot be handed some other archive that happens to be lying around.
+      - name: Name the tarball that was just verified
+        id: tarball
+        run: |
+          set -euo pipefail
+          [ "$(wc -l < tarball.sha256)" -eq 1 ]
+          echo "tgz=$(cut -d' ' -f3- tarball.sha256)" >> "$GITHUB_OUTPUT"
+      # Reads each example's own lockfile; no install, and the local tarball spec is simply
+      # not a registry dependency to audit.
+      - name: Audit what each example installs
+        run: |
+          set -euo pipefail
+          for example in examples/*/; do
+            npm audit --audit-level=high --prefix "$example"
+          done
+      - name: Run both examples against that tarball
+        env:
+          TGZ: ${{ steps.tarball.outputs.tgz }}
+        run: node scripts/verify-examples.mjs "$TGZ"
+
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 15

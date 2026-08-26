@@ -4,6 +4,8 @@ coverage/
 api/
 package-lock.json
 test/fixtures/
+examples/*/node_modules/
+examples/next/.next/
 test/types/spec-surface*.d.ts
 *.tgz
 

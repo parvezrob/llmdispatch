@@ -43,7 +43,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join, sep } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 
 const HERE = import.meta.dirname
 const SELF = join(HERE, 'scan-denylist.mjs')
@@ -245,6 +245,32 @@ function collectResolved(node, found) {
 }
 
 /**
+ * A dependency the repository supplies itself: a `file:` spec that lands inside the tree
+ * being scanned, which the examples use so they always install the packed tarball.
+ *
+ * The answer comes from resolving the path, not from reading it. A test that looks for
+ * `..` misses every other spelling of the same escape — `..%2f`, `%2e%2e`, a backslash
+ * separator, a drive letter, a `~` home reference — so each is decoded or rejected before
+ * the containment check, which is the only thing that actually decides.
+ */
+function isLocalFileSpec(resolved, root, lockfileDirectory) {
+  if (!resolved.startsWith('file:')) return false
+  let spec = resolved.slice('file:'.length)
+  if (spec === '') return false
+  try {
+    spec = decodeURIComponent(spec)
+  } catch {
+    return false
+  }
+  spec = spec.replaceAll('\\', '/')
+  // None of these is a path relative to this lockfile, whatever it resolves to here.
+  if (spec.startsWith('/') || spec.startsWith('~') || /^[a-z]:/i.test(spec)) return false
+  const base = resolve(root)
+  const target = resolve(base, lockfileDirectory, spec)
+  return target === base || target.startsWith(base + sep)
+}
+
+/**
  * The lockfile carries funding and homepage links for every dependency, so the host
  * rule would drown in noise. What matters there is where the bytes come from, so it is
  * parsed instead and only its `resolved` fields are checked.
@@ -252,7 +278,7 @@ function collectResolved(node, found) {
  * Both layouts are read: `packages` as written by current npm, and the older nested
  * `dependencies` tree, whose entries nest arbitrarily deep.
  */
-function scanLockfile(path, text, findings) {
+function scanLockfile(root, path, text, findings) {
   let parsed
   try {
     parsed = JSON.parse(text)
@@ -272,6 +298,7 @@ function scanLockfile(path, text, findings) {
     ...collectResolved(parsed.dependencies ?? {}, []),
   ]
   for (const resolved of resolvedValues) {
+    if (isLocalFileSpec(resolved, root, dirname(path))) continue
     let host
     try {
       host = new URL(resolved).hostname.toLowerCase()
@@ -284,7 +311,7 @@ function scanLockfile(path, text, findings) {
   }
 }
 
-function scanText(path, text, allowedHosts, findings) {
+function scanText(root, path, text, allowedHosts, findings) {
   const lines = text.split('\n')
   const isLockfile = basename(path) === LOCKFILE_NAME
   for (const rule of CONTENT_RULES) {
@@ -297,7 +324,7 @@ function scanText(path, text, allowedHosts, findings) {
       }
     }
   }
-  if (isLockfile) scanLockfile(path, text, findings)
+  if (isLockfile) scanLockfile(root, path, text, findings)
 }
 
 /** Scans one directory and returns every finding, without printing anything. */
@@ -321,7 +348,7 @@ function scanDirectory(dir) {
       findings.push({ id: 'binary', path, line: 0 })
       continue
     }
-    scanText(path, readFileSync(absolutePath, 'utf8'), allowedHosts, findings)
+    scanText(dir, path, readFileSync(absolutePath, 'utf8'), allowedHosts, findings)
   }
   return findings
 }
@@ -422,6 +449,33 @@ function buildCanaries(root) {
     ) + '\n',
     'foreign-registry',
   )
+  // A `file:` spec is only ever the repository's own, so one reaching outside the tree is
+  // as much a finding as a mirror — in every spelling, since a reader who only knows `..`
+  // would wave most of these through.
+  const escapes = {
+    relative: '../../elsewhere/t.tgz',
+    'encoded-slash': '..%2F..%2Felsewhere/t.tgz',
+    'encoded-dots': '%2E%2E/%2E%2E/elsewhere/t.tgz',
+    backslash: '..\\..\\elsewhere\\t.tgz',
+    drive: 'C:/elsewhere/t.tgz',
+    home: '~/elsewhere/t.tgz',
+    absolute: '/outside/abs.tgz',
+    'host-form': '//host/share.tgz',
+  }
+  for (const [label, spec] of Object.entries(escapes)) {
+    write(
+      `escape-${label}-lock/` + LOCKFILE_NAME,
+      JSON.stringify(
+        {
+          lockfileVersion: 3,
+          packages: { 'node_modules/thing': { resolved: 'file:' + spec } },
+        },
+        null,
+        2,
+      ) + '\n',
+      'foreign-registry',
+    )
+  }
   return canaries
 }
 
@@ -456,6 +510,11 @@ function buildNearMisses(root) {
             funding: { url: 'ht' + 'tps://' + 'sponsors.invalid' + '/thing' },
             homepage: 'ht' + 'tps://' + 'thing.invalid',
           },
+          // What the examples record for the tarball they ship next to their lockfile,
+          // and the same thing said with a leading `./` and through a subdirectory.
+          'node_modules/local': { resolved: 'file:local-1.0.0.tgz' },
+          'node_modules/dotted': { resolved: 'file:./local-1.0.0.tgz' },
+          'node_modules/nested': { resolved: 'file:vendor/deep/../local-1.0.0.tgz' },
         },
       },
       null,
