@@ -66,7 +66,8 @@ const ai = createSwitch({
 })
 
 // The inputs your app supplies: the text to process, and whose quota to count.
-const articleText = 'The text your app wants summarized — any string up to the input cap.'
+const articleText =
+  'Rooftop solar keeps climbing: panel efficiency has improved for a decade, perovskite cells promise cheaper manufacturing, and falling battery prices finally make home storage practical. Analysts expect residential installations to double within five years.'
 const user = { id: 'user-123' }
 
 const result = await ai.run('summarize', {
@@ -85,7 +86,7 @@ result.cost          // estimated USD, or null unless every dispatched attempt i
 
 Three parts: **providers** (who you can call), **operations** (what your app does), **stores** (where config and counters live). `run` does the rest, in a fixed, documented order — validate input, resolve config, check readiness, reserve and commit quota, call, parse, validate output, fall back if warranted, settle. The exact state machine is spec §1 in [docs/spec.md](./docs/spec.md).
 
-> **Planning to switch providers later?** Register every provider you might ever want on day one — it costs nothing. API keys resolve lazily, so a registered provider without a key only errors if you actually route to it. Enabling Anthropic next year is then: set `ANTHROPIC_API_KEY` (a restart/redeploy for the new env var, as with any env change), flip the route in your admin config. **No code push.** (And `openaiCompatible` pointed at OpenRouter reaches virtually every model on the market through one registration.)
+> **Planning to switch providers later?** Register every provider you might ever want on day one — it costs nothing. API keys resolve lazily, so a registered provider without a key only errors if you actually route to it. A `fallback` on your route counts as routed — readiness resolves its key up front, fail-closed — so drop the quickstart's `fallback` line if you only have one key today. Enabling Anthropic next year is then: set `ANTHROPIC_API_KEY` (a restart/redeploy for the new env var, as with any env change), flip the route in your admin config. **No code push.** (And `openaiCompatible` pointed at OpenRouter reaches virtually every model on the market through one registration.)
 
 ## Output: from model text to typed data
 
