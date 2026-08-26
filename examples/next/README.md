@@ -11,7 +11,19 @@ TypeScript, Node.js runtime. The route is `openaiCompatible`, so it works agains
 or any OpenAI-compatible endpoint — a gateway, or a local model server — by setting
 `OPENAI_BASE_URL`.
 
-## Run it
+## In your own project
+
+Nothing here is special to this repository except how the dependency is installed (the
+section below). In your own project it is simply:
+
+```bash
+npm install llmswitch zod
+```
+
+Then copy `lib/switch.ts` and the route handler, and replace the `demo-user` subject with
+the user id your auth already gives you.
+
+## Run it from this repository
 
 The dependency here is the tarball this repository packs, so the example always runs
 against the bytes that would be published. Two steps:
@@ -56,15 +68,3 @@ handles. `OPENAI_BASE_URL` points the provider somewhere other than OpenAI.
 `memoryStores()` is for the demo: config and quota counters live in this process, so
 they are not shared between instances and reset on restart. In production use the
 Postgres stores instead.
-
-## In your own project
-
-Nothing here is special to this repository except the tarball. In your own project the
-dependency is simply:
-
-```bash
-npm install llmswitch zod
-```
-
-Then copy `lib/switch.ts` and the route handler, and replace the `demo-user` subject with
-the user id your auth already gives you.

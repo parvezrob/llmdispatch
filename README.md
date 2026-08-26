@@ -315,7 +315,7 @@ export async function POST(req: Request) {
 
 ## Contributing
 
-Issues and PRs welcome — the project is actively developed and maintained. For API changes, open an issue to discuss before building; [docs/spec.md](./docs/spec.md) is the contract under discussion. A security policy (private vulnerability reporting) and release provenance will be in place at first release.
+Issues and PRs welcome — the project is actively developed and maintained. For API changes, open an issue to discuss before building; [docs/spec.md](./docs/spec.md) is the contract under discussion. Security problems go through private vulnerability reporting instead — see [SECURITY.md](./SECURITY.md). Stable releases will carry provenance.
 
 ## License
 
