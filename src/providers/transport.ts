@@ -16,7 +16,8 @@ export interface HttpResult {
 
 /**
  * One request. Always uses `redirect: 'error'`. Rejects with `ProviderError('aborted')`
- * when the signal fired; other fetch failures are `transient`.
+ * when the signal fired; other fetch failures — including a body that never arrives — are
+ * `transient`. JSON parse failures stay a null body, not a network error.
  */
 export async function fetchJson(
   url: string,
@@ -28,6 +29,7 @@ export async function fetchJson(
   },
 ): Promise<HttpResult> {
   let response: Response
+  let text: string
   try {
     response = await fetch(url, {
       method: init.method,
@@ -36,6 +38,10 @@ export async function fetchJson(
       signal: init.signal,
       redirect: 'error',
     })
+    // Body settlement is still network I/O. A reset here must classify like the fetch
+    // rejection above — otherwise a raw TypeError escapes and the core treats it as
+    // `provider_unclassified` (no fallback). JSON.parse stays outside this catch.
+    text = await response.text()
   } catch {
     if (init.signal.aborted) {
       throw new ProviderError('aborted', { message: 'request aborted' })
@@ -44,7 +50,6 @@ export async function fetchJson(
   }
 
   let body: unknown = null
-  const text = await response.text()
   if (text.length > 0) {
     try {
       body = JSON.parse(text) as unknown

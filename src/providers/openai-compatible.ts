@@ -175,8 +175,12 @@ function throwOpenAIError(status: number, body: unknown, host: string): never {
     if (isOpenRouterModeration(body, host)) throwForStatus(status, 'invalid_request')
     throwForStatus(status, 'auth')
   }
-  if (status === 404 || isModelNotFound(body)) throwForStatus(status, 'model_not_found')
+  // Documented status rows beat a body code: a 429/5xx mentioning a model is still
+  // rate_limit/transient. `model_not_found` codes only reclassify other 4xx.
   if (status === 429 || status === 402) throwForStatus(status, 'rate_limit')
+  if (status === 404 || (status >= 400 && status < 500 && isModelNotFound(body))) {
+    throwForStatus(status, 'model_not_found')
+  }
   if (status === 408 || status >= 500 || status === 498) throwForStatus(status, 'transient')
   if (status === 400 || status === 413 || status === 422) {
     throwForStatus(status, 'invalid_request')
@@ -192,13 +196,7 @@ function isModelNotFound(body: unknown): boolean {
   if (!isRecord(body)) return false
   const error = body.error
   if (!isRecord(error)) return false
-  const code = error.code
-  const type = error.type
-  return (
-    code === 'model_not_found' ||
-    type === 'model_not_found' ||
-    (typeof error.message === 'string' && /model.?not.?found/i.test(error.message))
-  )
+  return error.code === 'model_not_found' || error.type === 'model_not_found'
 }
 
 function isOpenRouterModeration(body: unknown, host: string): boolean {

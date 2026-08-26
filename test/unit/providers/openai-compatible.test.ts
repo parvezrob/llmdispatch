@@ -256,6 +256,36 @@ describe('error classification', () => {
     ['413 -> invalid_request', 413, {}, 'invalid_request'],
     ['422 -> invalid_request', 422, {}, 'invalid_request'],
     ['418 unmapped -> invalid_request (family)', 418, {}, 'invalid_request'],
+    [
+      '400 with model_not_found code -> model_not_found',
+      400,
+      { error: { code: 'model_not_found' } },
+      'model_not_found',
+    ],
+    [
+      '400 with model_not_found type -> model_not_found',
+      400,
+      { error: { type: 'model_not_found' } },
+      'model_not_found',
+    ],
+    [
+      '400 whose message mentions model not found without a code -> invalid_request',
+      400,
+      { error: { message: 'model not found' } },
+      'invalid_request',
+    ],
+    [
+      '429 whose message mentions model not found -> rate_limit',
+      429,
+      { error: { message: 'model not found; retry' } },
+      'rate_limit',
+    ],
+    [
+      '500 whose message mentions model not found -> transient',
+      500,
+      { error: { message: 'upstream unavailable: model not found' } },
+      'transient',
+    ],
   ])('%s', async (_label, status, body, expectedKind) => {
     installFetch(() => jsonResponse(status, body))
     const run = await complete({ apiKey: KEY })

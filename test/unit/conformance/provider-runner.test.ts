@@ -144,6 +144,22 @@ describe('runner behavior', () => {
     expect(result.failures).toEqual([])
     expect(result.passed).toBe(true)
   })
+
+  it('invokes observeRequest with each dispatched ProviderRequest, not a wire body', async () => {
+    const { provider } = scriptedProvider()
+    const seen: ProviderRequest[] = []
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest({ model: 'observed' }),
+      scenarios: { success: step(() => undefined) },
+      controls: { observeRequest: (req) => seen.push(req) },
+    })
+    expect(result.passed).toBe(true)
+    // Mandatory success plus the already-aborted signal check — both go through dispatch.
+    expect(seen.length).toBe(2)
+    expect(seen.every((req) => req.model === 'observed')).toBe(true)
+    expect(seen[1]!.signal.aborted).toBe(true)
+  })
 })
 
 describe('nonconforming fakes', () => {
