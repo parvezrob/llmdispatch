@@ -30,6 +30,8 @@ Two packages. That's the whole install — built-in adapters are plain-`fetch`, 
 npm install llmswitch zod
 ```
 
+The snippet uses top-level `await`, so run it in an ESM project — `npm pkg set type=module` in a fresh directory, or save the file as `.mts`.
+
 ```ts
 import { createSwitch, defineOperation, defineOperations, anthropic, openaiCompatible, memoryStores } from 'llmswitch'
 import { z } from 'zod'
@@ -55,6 +57,7 @@ const ai = createSwitch({
       defaultRoute: {
         provider: 'claude',
         model: 'claude-sonnet-4-6',
+        // The fallback's key must resolve too (fail-closed) — one key? drop this line.
         fallback: { provider: 'openai', model: 'gpt-4.1-mini' },
       },
     }),
