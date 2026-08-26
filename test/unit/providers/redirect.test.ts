@@ -31,7 +31,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 function listen(server: Server): Promise<number> {
   return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, 'localhost', () => {
       const address = server.address()
       if (address === null || typeof address === 'string') throw new Error('no port assigned')
       resolve(address.port)
@@ -76,7 +76,9 @@ describe('redirect exfiltration fixture', () => {
     source = createServer((req, res) => {
       void readBody(req).then((body) => {
         sourceLog.push({ method: req.method, url: req.url, headers: req.headers, body })
-        res.writeHead(302, { location: `http://127.0.0.1:${String(targetPort)}/redirected` })
+        res.writeHead(302, {
+          location: 'http://localhost:' + String(targetPort) + '/redirected',
+        })
         res.end()
       })
     })
@@ -84,7 +86,7 @@ describe('redirect exfiltration fixture', () => {
 
     const provider = openaiCompatible({
       apiKey: () => 'sk-should-never-leave-source',
-      baseUrl: `http://127.0.0.1:${String(sourcePort)}`,
+      baseUrl: 'http://localhost:' + String(sourcePort),
     })
     const complete = await withPrepared(provider)
 

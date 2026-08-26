@@ -68,7 +68,7 @@ describe('request shape', () => {
 
   it('sends maxOutputTokens and temperature when the route sets them', async () => {
     const { requests } = captureRequests(() => jsonResponse(200, OK_BODY))
-    const run = await complete({ apiKey: KEY, baseUrl: 'https://api.deepseek.com/v1' })
+    const run = await complete({ apiKey: KEY, baseUrl: 'https://openrouter.ai/api/v1' })
     await run(baseRequest({ maxOutputTokens: 256, temperature: 0.4 }))
     const body = requests[0]!.body as Record<string, unknown>
     expect(body.max_tokens).toBe(256)
@@ -85,14 +85,14 @@ describe('request shape', () => {
     ],
     [
       'other host default -> max_tokens',
-      'https://api.deepseek.com/v1',
+      'https://openrouter.ai/api/v1',
       undefined,
       'max_tokens',
     ],
     ['override on api.openai.com', undefined, 'max_tokens', 'max_tokens'],
     [
       'override on other host',
-      'https://api.deepseek.com/v1',
+      'https://openrouter.ai/api/v1',
       'max_completion_tokens',
       'max_completion_tokens',
     ],

@@ -23,6 +23,9 @@ ollama.com
 # A local model server, used in examples
 localhost
 
+# RFC 2606 documentation placeholder used in unit fixtures
+example.com
+
 # Standards and reference texts
 opensource.org
 spdx.org
