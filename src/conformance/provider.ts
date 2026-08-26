@@ -14,7 +14,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types'
-import { deepEqual } from './result'
 
 /** Optional scenarios the harness can drive when the adopter supplies them. */
 type OptionalScenario =
@@ -107,11 +106,7 @@ export async function runProviderConformance(opts: {
         ...opts.requestFactory(),
         responseFormat: { type: 'json', topLevel: 'object' },
       }
-      opts.controls?.observeRequest?.(req)
-      const prepared = opts.provider.prepare ? await opts.provider.prepare() : null
-      const complete =
-        prepared?.complete.bind(prepared) ?? opts.provider.complete.bind(opts.provider)
-      const response = await complete(req)
+      const response = await dispatch(req)
       if (response.kind === 'complete') {
         try {
           JSON.parse(response.text)
@@ -214,6 +209,3 @@ function thrown(error: unknown): string {
   if (error instanceof Error) return `${error.name}: ${error.message}`
   return `a thrown ${typeof error}`
 }
-
-/** Structural equality re-export for adapter tests that share fixtures. */
-export { deepEqual }
