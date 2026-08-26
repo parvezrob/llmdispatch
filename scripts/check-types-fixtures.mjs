@@ -9,6 +9,11 @@
  * on the line above the offending one and must produce exactly that and nothing else. A
  * suppression or an `any` is refused: either would let a fixture compile proving nothing.
  *
+ * One fixture does not live on disk: the README quickstart's TypeScript fence is extracted
+ * verbatim at check time and compiled in memory against both targets. The printed example
+ * is therefore the compiled example — there is no second copy to drift, and the fence never
+ * carries a `@targets` header the reader shouldn't see.
+ *
  * Usage: node scripts/check-types-fixtures.mjs [--target spec|package]
  * Exit codes: 0 all behaved, 1 one did not, 2 bad arguments.
  */
@@ -20,6 +25,7 @@ import ts from 'typescript'
 const ROOT = join(import.meta.dirname, '..')
 const TYPES_DIR = join(ROOT, 'test', 'types')
 const SCAFFOLD = join(TYPES_DIR, 'scaffold.d.ts')
+const README = join(ROOT, 'README.md')
 const USAGE = 'usage: check-types-fixtures.mjs [--target spec|package]\n'
 
 /** Where `llmswitch` and its subpaths point for each target. */
@@ -158,6 +164,72 @@ function readHeader(fixture, problems) {
   return { targets, expected }
 }
 
+/**
+ * The README quickstart's `ts` fence, extracted verbatim as an in-memory positive fixture.
+ *
+ * Extraction is strict on purpose: the section runs from the `## Quickstart` heading to the
+ * next `##` heading and must contain exactly one `bash` fence followed by one `ts` fence —
+ * any other shape is reported rather than guessed at, so a README restructure can never
+ * silently compile the wrong fence.
+ */
+function readReadmeFixture(problems) {
+  const name = 'README.md (## Quickstart ts fence)'
+  const lines = readFileSync(README, 'utf8').split('\n')
+  const start = lines.indexOf('## Quickstart')
+  if (start === -1) {
+    problems.push(`${name}: README.md has no '## Quickstart' heading`)
+    return null
+  }
+  let end = lines.length
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (lines[index]?.startsWith('## ') === true) {
+      end = index
+      break
+    }
+  }
+
+  // `afterOpener` is the array index of the first body line; the fence opener itself is
+  // the line before it.
+  const fences = []
+  let open = null
+  for (let index = start + 1; index < end; index += 1) {
+    const line = lines[index]
+    if (line === undefined || !line.startsWith('```')) continue
+    if (open === null) {
+      open = { info: line.slice(3).trim(), afterOpener: index + 1 }
+    } else {
+      fences.push({ ...open, closer: index })
+      open = null
+    }
+  }
+  if (open !== null) {
+    problems.push(`${name}: an unclosed code fence opened at line ${String(open.afterOpener)}`)
+    return null
+  }
+  const [installFence, codeFence] = fences
+  if (fences.length !== 2 || installFence?.info !== 'bash' || codeFence?.info !== 'ts') {
+    problems.push(
+      `${name}: expected exactly one \`\`\`bash fence then one \`\`\`ts fence in the section, ` +
+        `found [${fences.map((fence) => fence.info || '(none)').join(', ')}]`,
+    )
+    return null
+  }
+
+  const text = `${lines.slice(codeFence.afterOpener, codeFence.closer).join('\n')}\n`
+  const path = join(TYPES_DIR, 'positive', 'readme-quickstart.generated.ts')
+  return {
+    kind: 'positive',
+    virtual: true,
+    path,
+    name,
+    text,
+    source: ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS),
+    comments: scanComments(text),
+    targets: ['spec', 'package'],
+    expected: [],
+  }
+}
+
 /** Every fixture that declares itself properly; the rest are reported and left out. */
 function readFixtures(problems) {
   const fixtures = []
@@ -178,6 +250,8 @@ function readFixtures(problems) {
       if (header !== null) fixtures.push({ ...fixture, ...header })
     }
   }
+  const readme = readReadmeFixture(problems)
+  if (readme !== null) fixtures.push(readme)
   return fixtures
 }
 
@@ -233,12 +307,33 @@ function asPairs(entries) {
   return entries.map(({ line, code }) => `${String(line)}:TS${String(code)}`).sort()
 }
 
+/**
+ * A compiler host that serves one file from memory — the README fence, which exists at
+ * check time only — and everything else from disk as usual.
+ */
+function virtualHost(options, fixture) {
+  const host = ts.createCompilerHost(options)
+  const served = fixture.path.replaceAll('\\', '/')
+  const isServed = (fileName) => fileName.replaceAll('\\', '/') === served
+  const { fileExists, readFile, getSourceFile } = host
+  host.fileExists = (fileName) => isServed(fileName) || fileExists.call(host, fileName)
+  host.readFile = (fileName) =>
+    isServed(fileName) ? fixture.text : readFile.call(host, fileName)
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreate) =>
+    isServed(fileName)
+      ? ts.createSourceFile(fileName, fixture.text, languageVersion, true, ts.ScriptKind.TS)
+      : getSourceFile.call(host, fileName, languageVersion, onError, shouldCreate)
+  return host
+}
+
 /** Compiles one fixture against one target and reports whatever did not match. */
 function checkFixture(fixture, target, baseOptions, problems) {
   const paths = {}
   for (const [specifier, location] of Object.entries(TARGETS[target]))
     paths[specifier] = [location]
-  const program = ts.createProgram([SCAFFOLD, fixture.path], { ...baseOptions, paths })
+  const options = { ...baseOptions, paths }
+  const host = fixture.virtual === true ? virtualHost(options, fixture) : undefined
+  const program = ts.createProgram([SCAFFOLD, fixture.path], options, host)
   const { own, foreign } = collectDiagnostics(program, fixture.path)
 
   for (const entry of foreign) {

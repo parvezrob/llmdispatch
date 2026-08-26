@@ -65,6 +65,10 @@ const ai = createSwitch({
   stores: memoryStores(),
 })
 
+// The inputs your app supplies: the text to process, and whose quota to count.
+const articleText = 'The text your app wants summarized — any string up to the input cap.'
+const user = { id: 'user-123' }
+
 const result = await ai.run('summarize', {
   input: { text: articleText },
   subjectId: user.id, // required whenever the operation has an effective quota
@@ -117,7 +121,7 @@ Classified llmswitch failures throw `LLMSwitchError` with a stable `code` (excep
 
 The table is ordered: pre-dispatch checks run top-to-bottom (config before quota — a misconfigured operation never consumes quota). One nuance for an operation whose *code* declares no quota and gets one only from its route: llmswitch can't know it is quota'd until config resolves, so for that case `CONFIG_STORE_UNAVAILABLE`/`INVALID_CONFIG` surfaces before `MISSING_SUBJECT`. An operation that declares a quota in code keeps the early check even when a route overrides the number. For post-dispatch failures the code reflects the **final attempt's** classification, with every attempt detailed in `error.attempts` (including token usage of failed runs). A fallback attempt can itself end in `INVALID_CONFIG` or `ABORTED` — the terminal-code mapping is spec §5b.
 
-**Error contents are sanitized by design**: classifications, HTTP status codes, safe metadata — never prompts, model output, or raw provider errors. Exceptions thrown by *your own* code (prompt builder, quality gate, schema transforms) pass through unwrapped; they're your bugs to see in full.
+**`LLMSwitchError`'s package-owned fields are sanitized by design**: classifications, HTTP status codes, safe metadata — never prompts, model output, or raw provider errors from a dispatched attempt. One deliberate pass-through: a pre-dispatch error may chain *your own* thrown store/prepare failure as `cause`, verbatim — do not treat that `cause` as sanitized. Exceptions thrown by *your own* code (prompt builder, quality gate, schema transforms) pass through unwrapped; they're your bugs to see in full.
 
 ## When fallback fires
 
@@ -235,7 +239,7 @@ Whatever store you write it against, the strings llmswitch hands a store — ope
 
 Built-in adapters are **zero-dependency**: plain `fetch` against pinned API versions (with redirects disabled — exactly one HTTP request per attempt), no vendor SDKs to install, ever. They're ordinary implementations of the same public `Provider` interface, including its optional `prepare()` readiness hook — nothing built-in has special powers, so the package stays provider-agnostic by construction.
 
-Why two native adapters instead of routing everything through OpenAI-compatibility layers? Because we verified the compat layers break exactly what llmswitch depends on: Anthropic's compat endpoint ignores `response_format` entirely (no JSON mode) and is documented by Anthropic as a testing tool, and Gemini's is beta with token totals that silently include unitemized "thinking" tokens — which would corrupt cost tracking. The exact wire contracts and error mappings for all three adapters are spec §5c, with sources.
+Why two native adapters instead of routing everything through OpenAI-compatibility layers? Because we verified the compat layers break exactly what llmswitch depends on: Anthropic's compat endpoint ignores `response_format` entirely (no JSON mode) and is documented by Anthropic as a testing tool, and Gemini's is beta with token totals that silently include unitemized "thinking" tokens — which would corrupt cost tracking. The exact wire contracts and error mappings for all three adapters are spec §5c, with sources — also published as a per-adapter reference in [docs/providers.md](./docs/providers.md).
 
 Custom providers implement one required method (plus an optional `prepare()` readiness hook) and classify their failures with `ProviderError` — the classification is what drives the fallback matrix. Full contract and types: spec §5–6.
 

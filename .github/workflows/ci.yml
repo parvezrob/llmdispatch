@@ -68,6 +68,10 @@ jobs:
       - run: npm run attw
       - run: npm run api:check
       - run: npm run size
+      - name: Check the provider reference still matches spec §5c
+        run: node scripts/build-provider-reference.mjs --check
+      - name: Check every markdown link and anchor resolves
+        run: node scripts/check-docs-links.mjs
       - name: Audit what an adopter would install
         run: npm audit --omit=dev --audit-level=high
       - name: Audit what builds this package
@@ -85,6 +89,13 @@ jobs:
         env:
           TGZ: ${{ steps.pack.outputs.tgz }}
         run: npm run audit:tarball -- "$TGZ"
+      # Runs here rather than in the consumer job because executing the README's `ts`
+      # fence needs Node's native type stripping (>= 23.6), and the consumer job pins the
+      # package's Node floor. Same audited tarball either way.
+      - name: Follow the README quickstart against the audited tarball
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: node scripts/verify-quickstart.mjs "$TGZ"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

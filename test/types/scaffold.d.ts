@@ -1,17 +1,12 @@
-// The values the README examples use without introducing them: the article being
-// summarized, the signed-in user, and the backend a custom provider adapter calls.
-// Declaring them here is what lets those examples be compiled exactly as they are printed,
-// rather than as a paraphrase with the missing pieces filled in.
+// The one value a README example uses without introducing it: the backend a custom
+// provider adapter calls. Declaring it here is what lets that example be compiled exactly
+// as it is printed, rather than as a paraphrase with the missing piece filled in. (The
+// quickstart needs no scaffold: its fence is self-contained, and the fixture checker
+// compiles it straight out of README.md.)
 
 import type { ProviderRequest, TokenUsage } from 'llmswitch'
 
 declare global {
-  /** The text passed to the quickstart's `summarize` operation. */
-  const articleText: string
-
-  /** The signed-in user, whose ID is the quota subject. */
-  const user: { id: string }
-
   /** The backend the README's custom provider adapter calls. */
   function callMyBackend(req: ProviderRequest): Promise<{
     status: number
