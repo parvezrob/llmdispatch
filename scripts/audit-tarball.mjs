@@ -20,10 +20,22 @@ import { join, resolve } from 'node:path'
 const ROOT = join(import.meta.dirname, '..')
 
 /** Everything the tarball may contain. `dist/` is a prefix; the rest are exact paths. */
-const ALLOWED_FILES = new Set(['package.json', 'README.md', 'LICENSE', 'docs/spec.md'])
+const ALLOWED_FILES = new Set([
+  'package.json',
+  'README.md',
+  'LICENSE',
+  'docs/providers.md',
+  'docs/spec.md',
+])
 const ALLOWED_PREFIXES = ['dist/']
 /** Files the tarball must contain, or an adopter loses the licence, the docs, or the code. */
-const REQUIRED_FILES = ['package.json', 'README.md', 'LICENSE', 'docs/spec.md']
+const REQUIRED_FILES = [
+  'package.json',
+  'README.md',
+  'LICENSE',
+  'docs/providers.md',
+  'docs/spec.md',
+]
 /** The only shapes `dist/` may take: code, declarations, and the maps that go with them. */
 const ALLOWED_DIST_SUFFIXES = ['.js', '.cjs', '.d.ts', '.d.cts', '.js.map', '.cjs.map']
 

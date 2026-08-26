@@ -116,6 +116,10 @@ section.
 | `node scripts/check-types-fixtures.mjs --target package` | the fixtures the build can satisfy, against it                       |
 | `npm run size`                                           | gzipped size of the root entry against `sizeBudget`                  |
 | `npm run scan`                                           | scan the tree for addresses, unreviewed links and key-shaped strings |
+| `npm run docs:providers`                                 | regenerate `docs/providers.md` from spec §5c                         |
+| `node scripts/build-provider-reference.mjs --check`      | fail if `docs/providers.md` no longer matches spec §5c               |
+| `node scripts/check-docs-links.mjs`                      | every markdown link and anchor resolves                              |
+| `node scripts/verify-quickstart.mjs [tgz]`               | follow the README quickstart in a clean directory (needs network)    |
 | `npm run audit:tarball -- <tgz>`                         | what a packed tarball contains and whether it would run anything     |
 | `npm run test:consumers -- <tgz>`                        | install that tarball into ESM, CommonJS and TypeScript projects      |
 

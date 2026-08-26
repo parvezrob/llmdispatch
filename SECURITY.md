@@ -36,8 +36,11 @@ attempt the provider, model, outcome, status, token counts, cost and duration. N
 prompt, not the input, not the model's output, not a raw provider error.
 
 **Errors are sanitised.** The error type raised by a failed run carries a code, a
-retryable flag, and attempt records. It does not carry prompt text, model output, or the
-provider's raw error body, so logging an error cannot leak the content of a request.
+retryable flag, and attempt records. Its package-owned fields do not carry prompt text,
+model output, or the provider's raw error body from a dispatched attempt. One deliberate
+pass-through: an error raised before any provider was called may chain your own thrown
+store or key-resolver failure as `cause`, verbatim — treat that `cause` as your own data,
+not as sanitised output.
 
 **Requests are not redirected.** Every built-in adapter sends its request with redirects
 disabled, so a credential or a prompt is never replayed to a host you did not configure. A
