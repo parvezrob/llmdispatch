@@ -1,4 +1,4 @@
-// @targets spec
+// @targets spec, package
 // The README quickstart, compiled as it is printed there. If the inference ever stops
 // working — a schema that no longer reaches `prompt`, a `run` that no longer types its
 // input — the README is wrong, and this is where that shows up.

@@ -1,4 +1,4 @@
-import { O as UsageStore, a as ConformanceResult, i as ConfigStore, r as AttemptRecord, x as ReservationEnvelope } from "./types.js";
+import { O as UsageStore, a as ConformanceResult, g as ProviderRequest, i as ConfigStore, m as Provider, r as AttemptRecord, x as ReservationEnvelope } from "./types.js";
 //#region src/conformance/config-store.d.ts
 /**
  * Checks a `ConfigStore` against the behaviour spec §8 requires of one.
@@ -56,5 +56,30 @@ declare function runUsageStoreConformance(opts: {
   }>;
 }): Promise<ConformanceResult>;
 //#endregion
-export { type ConformanceResult, runConfigStoreConformance, runUsageStoreConformance };
+//#region src/conformance/provider.d.ts
+/** Optional scenarios the harness can drive when the adopter supplies them. */
+type OptionalScenario = 'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient' | 'malformed_response' | 'truncated' | 'refused';
+/** Controls that let the suite verify responseFormat and capability without guessing. */
+interface ProviderConformanceControls {
+  /** Declares whether the provider under test supports native JSON mode. */
+  jsonCapability?: 'native' | 'prompt-only';
+  /** Observes each request the harness dispatches. */
+  observeRequest?: (req: ProviderRequest) => void;
+}
+/**
+ * Checks a `Provider` against the behaviour spec §8 requires of one.
+ *
+ * `success` is mandatory. Absent optional scenarios are reported in `skipped` (unverified).
+ * `passed` is true exactly when `failures` is empty.
+ */
+declare function runProviderConformance(opts: {
+  provider: Provider;
+  requestFactory: () => ProviderRequest;
+  scenarios: {
+    success: () => Promise<void>;
+  } & Partial<Record<OptionalScenario, () => Promise<void>>>;
+  controls?: ProviderConformanceControls;
+}): Promise<ConformanceResult>;
+//#endregion
+export { type ConformanceResult, runConfigStoreConformance, runProviderConformance, runUsageStoreConformance };
 //# sourceMappingURL=conformance.d.ts.map

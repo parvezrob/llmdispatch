@@ -11,15 +11,19 @@ describe('entry points', () => {
     expect(Object.keys(index).sort()).toEqual([
       'LLMSwitchError',
       'ProviderError',
+      'anthropic',
       'createSwitch',
       'defineOperation',
       'defineOperations',
+      'gemini',
       'memoryStores',
+      'openaiCompatible',
       'postgresStores',
     ])
     expect(Object.keys(postgres).sort()).toEqual(['MIGRATIONS', 'migrationSql'])
     expect(Object.keys(conformance).sort()).toEqual([
       'runConfigStoreConformance',
+      'runProviderConformance',
       'runUsageStoreConformance',
     ])
   })
