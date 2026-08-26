@@ -41,7 +41,7 @@ function sliceSection(lines, problems) {
     )
     return null
   }
-  let end = lines.length
+  let end = null
   for (let index = start + 1; index < lines.length; index += 1) {
     // Equal or higher rank than the `###` opener: `#`, `##` or `###`. §5c is the last
     // subsection of its parent today, so the boundary is `## 6.` — assuming a later `###`
@@ -50,6 +50,12 @@ function sliceSection(lines, problems) {
       end = index
       break
     }
+  }
+  if (end === null) {
+    // Fail closed: with no following heading the slice would silently swallow the rest of
+    // the spec, which is exactly the drift this generator exists to prevent.
+    problems.push("docs/spec.md: no heading of rank 1-3 follows '### 5c.' to bound the slice")
+    return null
   }
   return lines.slice(start + 1, end)
 }

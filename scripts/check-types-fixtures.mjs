@@ -22,6 +22,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
 
+import { readQuickstart } from './lib/quickstart-section.mjs'
+
 const ROOT = join(import.meta.dirname, '..')
 const TYPES_DIR = join(ROOT, 'test', 'types')
 const SCAFFOLD = join(TYPES_DIR, 'scaffold.d.ts')
@@ -166,67 +168,26 @@ function readHeader(fixture, problems) {
 
 /**
  * The README quickstart's `ts` fence, extracted verbatim as an in-memory positive fixture.
- *
- * Extraction is strict on purpose: the section runs from the `## Quickstart` heading to the
- * next `##` heading and must contain exactly one `bash` fence followed by one `ts` fence —
- * any other shape is reported rather than guessed at, so a README restructure can never
- * silently compile the wrong fence.
+ * The strict shared extractor refuses anything but the expected section shape, so a README
+ * restructure can never silently compile the wrong fence. `lineOffset` maps fence-relative
+ * diagnostic lines back to real README.md line numbers.
  */
 function readReadmeFixture(problems) {
-  const name = 'README.md (## Quickstart ts fence)'
-  const lines = readFileSync(README, 'utf8').split('\n')
-  const start = lines.indexOf('## Quickstart')
-  if (start === -1) {
-    problems.push(`${name}: README.md has no '## Quickstart' heading`)
-    return null
-  }
-  let end = lines.length
-  for (let index = start + 1; index < lines.length; index += 1) {
-    if (lines[index]?.startsWith('## ') === true) {
-      end = index
-      break
-    }
-  }
-
-  // `afterOpener` is the array index of the first body line; the fence opener itself is
-  // the line before it.
-  const fences = []
-  let open = null
-  for (let index = start + 1; index < end; index += 1) {
-    const line = lines[index]
-    if (line === undefined || !line.startsWith('```')) continue
-    if (open === null) {
-      open = { info: line.slice(3).trim(), afterOpener: index + 1 }
-    } else {
-      fences.push({ ...open, closer: index })
-      open = null
-    }
-  }
-  if (open !== null) {
-    problems.push(`${name}: an unclosed code fence opened at line ${String(open.afterOpener)}`)
-    return null
-  }
-  const [installFence, codeFence] = fences
-  if (fences.length !== 2 || installFence?.info !== 'bash' || codeFence?.info !== 'ts') {
-    problems.push(
-      `${name}: expected exactly one \`\`\`bash fence then one \`\`\`ts fence in the section, ` +
-        `found [${fences.map((fence) => fence.info || '(none)').join(', ')}]`,
-    )
-    return null
-  }
-
-  const text = `${lines.slice(codeFence.afterOpener, codeFence.closer).join('\n')}\n`
+  const quickstart = readQuickstart(readFileSync(README, 'utf8'), problems)
+  if (quickstart === null) return null
+  const text = quickstart.code
   const path = join(TYPES_DIR, 'positive', 'readme-quickstart.generated.ts')
   return {
     kind: 'positive',
     virtual: true,
     path,
-    name,
+    name: 'README.md (## Quickstart ts fence)',
     text,
     source: ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS),
     comments: scanComments(text),
     targets: ['spec', 'package'],
     expected: [],
+    lineOffset: quickstart.codeOpenerIndex + 1,
   }
 }
 
@@ -277,8 +238,12 @@ function readableSource(fixture, problems) {
   return problems.length === before
 }
 
-/** `{ line, code }` for every diagnostic, split into the fixture's own and everything else. */
-function collectDiagnostics(program, fixturePath) {
+/**
+ * `{ line, code }` for every diagnostic, split into the fixture's own and everything else.
+ * `lineOffset` shifts the fixture's own lines — for the README fence, whose line 1 is not
+ * the README's line 1 — so every reported number is one the reader can jump to.
+ */
+function collectDiagnostics(program, fixturePath, lineOffset) {
   const own = []
   const foreign = []
   for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
@@ -295,9 +260,9 @@ function collectDiagnostics(program, fixturePath) {
       code: diagnostic.code,
       message,
     }
-    if (file.fileName === fixturePath.replaceAll('\\', '/') || file.fileName === fixturePath)
-      own.push(entry)
-    else foreign.push(entry)
+    if (file.fileName === fixturePath.replaceAll('\\', '/') || file.fileName === fixturePath) {
+      own.push({ ...entry, line: entry.line + lineOffset })
+    } else foreign.push(entry)
   }
   return { own, foreign }
 }
@@ -334,7 +299,7 @@ function checkFixture(fixture, target, baseOptions, problems) {
   const options = { ...baseOptions, paths }
   const host = fixture.virtual === true ? virtualHost(options, fixture) : undefined
   const program = ts.createProgram([SCAFFOLD, fixture.path], options, host)
-  const { own, foreign } = collectDiagnostics(program, fixture.path)
+  const { own, foreign } = collectDiagnostics(program, fixture.path, fixture.lineOffset ?? 0)
 
   for (const entry of foreign) {
     problems.push(
