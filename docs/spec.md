@@ -600,7 +600,8 @@ export declare class LLMSwitchError extends Error {
   readonly attempts?: AttemptRecord[]
   // Sanitized, scoped to the package's own fields: they never carry prompts, model
   // output, or raw provider errors from a dispatched attempt. A pre-dispatch error may
-  // chain the adopter's own thrown store/prepare failure as `cause`, verbatim.
+  // chain the underlying store or `prepare()` failure as `cause`, verbatim — the
+  // adopter's own thrown error, or a provider adapter's readiness failure.
 }
 ```
 

@@ -39,12 +39,17 @@ function slugOf(headingText) {
     .replace(/ /g, '-')
 }
 
-/** Every character class `slugOf` is known — via the fixtures — to handle. */
-const COVERED_HEADING = /^[\p{L}\p{N} `*_\-.():;+,/'"?!&—§→]*$/u
+/**
+ * Exactly the character classes the fixtures below prove `slugOf` handles the way GitHub
+ * does. A heading using anything else fails the gate loudly — the maintainer then adds a
+ * fixture with the known GitHub output and widens this set, never the other way around.
+ */
+const COVERED_HEADING = /^[\p{L}\p{N} `*\-.():;+,/'—]*$/u
 
 /**
  * Known GitHub outputs, not outputs of `slugOf` — the point is that the two agree.
- * Sourced from GitHub's rendering of these exact heading texts.
+ * Sourced from GitHub's rendering of these exact heading texts. Together they cover every
+ * character `COVERED_HEADING` admits.
  */
 const SLUG_FIXTURES = [
   ['Quickstart', 'quickstart'],
@@ -56,6 +61,7 @@ const SLUG_FIXTURES = [
     '5c-built-in-adapter-wire-contracts-research-verified-2026-08-10-primary-sources-linked',
   ],
   ['`openaiCompatible`', 'openaicompatible'],
+  ['`src/core`', 'srccore'],
   [
     'Cost and usage model (scope-limited by design)',
     'cost-and-usage-model-scope-limited-by-design',
@@ -63,7 +69,8 @@ const SLUG_FIXTURES = [
   ['ESM + CommonJS', 'esm--commonjs'],
   ['A — B', 'a--b'],
   ["Don't panic", 'dont-panic'],
-  ['snake_case stays', 'snake_case-stays'],
+  ['One, two', 'one-two'],
+  ['**Bold** move', 'bold-move'],
 ]
 
 function sluggerSelfTest(problems) {
@@ -73,6 +80,14 @@ function sluggerSelfTest(problems) {
       problems.push(
         `slugger self-test: '${heading}' → '${actual}', but GitHub produces '${expected}'`,
       )
+    }
+  }
+  // Document-level behaviour, same fixed-expectation discipline: duplicate headings get
+  // GitHub's -1, -2 suffixes.
+  const duplicates = headingSlugs(['# Foo', '# Foo', '# Bar'], '(self-test)', problems)
+  for (const slug of ['foo', 'foo-1', 'bar']) {
+    if (!duplicates.has(slug)) {
+      problems.push(`slugger self-test: duplicate-heading suffixes lost the anchor '#${slug}'`)
     }
   }
 }
@@ -148,6 +163,10 @@ function linksOf(lines, file, problems) {
     for (const match of line.matchAll(
       /\[[^\]]*\]\(([^()\s]+(?:\([^()]*\))?)(?:\s+"[^"]*")?\)/g,
     )) {
+      links.push({ target: match[1], at })
+    }
+    // Autolinks are always absolute URLs, so they join the recorded-not-fetched externals.
+    for (const match of line.matchAll(/<(https?:\/\/[^>\s]+)>/g)) {
       links.push({ target: match[1], at })
     }
     for (const match of line.matchAll(/\[[^\]]*\]\[[^\]]*\]/g)) {
