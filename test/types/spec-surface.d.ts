@@ -105,6 +105,8 @@ export interface AttemptRecord {
   status?: number
   usage: TokenUsage | null
   costUsd: number | null
+  // Provider I/O only: from dispatch to settlement of the provider call on the
+  // injected clock. Output processing is not counted.
   durationMs: number
 }
 export interface TokenUsage { inputTokens: number; outputTokens: number }  // non-negative SAFE integers

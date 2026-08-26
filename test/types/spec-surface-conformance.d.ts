@@ -37,4 +37,10 @@ export declare function runProviderConformance(opts: {
   scenarios: { success: () => Promise<void> } & Partial<Record<
     'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient'
     | 'malformed_response' | 'truncated' | 'refused', () => Promise<void>>>
+  // Optional controls: declare JSON capability and observe dispatched requests so the
+  // harness can verify responseFormat without guessing the provider's wire behaviour.
+  controls?: {
+    jsonCapability?: 'native' | 'prompt-only'
+    observeRequest?: (req: ProviderRequest) => void
+  }
 }): Promise<ConformanceResult>  // passed === (failures.length === 0); skipped is informational

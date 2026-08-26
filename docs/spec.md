@@ -305,7 +305,8 @@ tables.
   hazard) still classifies correctly.
 - Invalid usage numbers never fail a run: they normalize to `null`.
 - Cancellation: adapters receive one composed signal and must honor it (§8); the core
-  stops waiting and classifies from its own flags regardless.
+  stops waiting and classifies from its own flags regardless. A caller's abort that wins
+  while the provider call is still pending records the attempt outcome as `'aborted'`.
 
 ### 5c. Built-in adapter wire contracts (research-verified 2026-08-10; primary sources linked)
 
@@ -510,6 +511,8 @@ export interface AttemptRecord {
   status?: number
   usage: TokenUsage | null
   costUsd: number | null
+  // Provider I/O only: from dispatch to settlement of the provider call on the
+  // injected clock. Output processing is not counted.
   durationMs: number
 }
 export interface TokenUsage { inputTokens: number; outputTokens: number }  // non-negative SAFE integers
@@ -679,6 +682,12 @@ export declare function runProviderConformance(opts: {
   scenarios: { success: () => Promise<void> } & Partial<Record<
     'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient'
     | 'malformed_response' | 'truncated' | 'refused', () => Promise<void>>>
+  // Optional controls: declare JSON capability and observe dispatched requests so the
+  // harness can verify responseFormat without guessing the provider's wire behaviour.
+  controls?: {
+    jsonCapability?: 'native' | 'prompt-only'
+    observeRequest?: (req: ProviderRequest) => void
+  }
 }): Promise<ConformanceResult>  // passed === (failures.length === 0); skipped is informational
 ```
 

@@ -1,6 +1,6 @@
 {
   "index": {
-    "value": ["anthropic", "gemini", "openaiCompatible"],
+    "value": [],
     "type": []
   },
   "postgres": {
@@ -8,7 +8,7 @@
     "type": []
   },
   "conformance": {
-    "value": ["runProviderConformance"],
+    "value": [],
     "type": []
   }
 }

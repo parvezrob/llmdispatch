@@ -46,6 +46,27 @@ declare class ProviderError extends Error {
   static is(value: unknown): value is ProviderError;
 }
 //#endregion
+//#region src/providers/anthropic.d.ts
+/** Builds an Anthropic Messages provider. Keys resolve in `prepare()`, not at construction. */
+declare function anthropic(opts: {
+  apiKey: ApiKeyResolver;
+}): Provider;
+//#endregion
+//#region src/providers/openai-compatible.d.ts
+/** Builds an OpenAI-compatible chat provider. Keys resolve in `prepare()`. */
+declare function openaiCompatible(opts: {
+  apiKey: ApiKeyResolver;
+  baseUrl?: string;
+  jsonMode?: 'native' | 'prompt-only';
+  tokenParam?: 'max_tokens' | 'max_completion_tokens';
+}): Provider;
+//#endregion
+//#region src/providers/gemini.d.ts
+/** Builds a Gemini generateContent provider. Keys resolve in `prepare()`. */
+declare function gemini(opts: {
+  apiKey: ApiKeyResolver;
+}): Provider;
+//#endregion
 //#region src/stores/memory/index.d.ts
 /**
  * Builds the in-memory config and usage stores (spec §6).
@@ -122,5 +143,5 @@ declare function defineOperations<Ops extends OperationsMap>(operations: Ops): O
  */
 declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
 //#endregion
-export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMSwitchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, createSwitch, defineOperation, defineOperations, memoryStores, postgresStores };
+export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMSwitchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, memoryStores, openaiCompatible, postgresStores };
 //# sourceMappingURL=index.d.ts.map

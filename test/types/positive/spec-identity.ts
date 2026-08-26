@@ -85,6 +85,9 @@ export type SectionSixValues = [
   Holds<Identical<typeof Package.createSwitch, typeof Spec.createSwitch>>,
   Holds<Identical<typeof Package.defineOperation, typeof Spec.defineOperation>>,
   Holds<Identical<typeof Package.defineOperations, typeof Spec.defineOperations>>,
+  Holds<Identical<typeof Package.anthropic, typeof Spec.anthropic>>,
+  Holds<Identical<typeof Package.openaiCompatible, typeof Spec.openaiCompatible>>,
+  Holds<Identical<typeof Package.gemini, typeof Spec.gemini>>,
 ]
 
 export type SectionSixB = [
@@ -99,6 +102,12 @@ export type SectionSixB = [
     Identical<
       typeof Conformance.runConfigStoreConformance,
       typeof SpecConformance.runConfigStoreConformance
+    >
+  >,
+  Holds<
+    Identical<
+      typeof Conformance.runProviderConformance,
+      typeof SpecConformance.runProviderConformance
     >
   >,
 ]
