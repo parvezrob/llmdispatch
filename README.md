@@ -30,7 +30,7 @@ Two packages. That's the whole install — built-in adapters are plain-`fetch`, 
 npm install llmswitch zod
 ```
 
-The snippet uses top-level `await`, so run it in an ESM project — `npm pkg set type=module` in a fresh directory, or save the file as `.mts`.
+The snippet uses top-level `await`, so it needs an ESM project. In a fresh directory, run `npm pkg set type=module` first, or save the file as `.mts`.
 
 ```ts
 import { createSwitch, defineOperation, defineOperations, anthropic, openaiCompatible, memoryStores } from 'llmswitch'
@@ -57,7 +57,7 @@ const ai = createSwitch({
       defaultRoute: {
         provider: 'claude',
         model: 'claude-sonnet-4-6',
-        // The fallback's key must resolve too (fail-closed) — one key? drop this line.
+        // The fallback needs its own API key. Only have one provider? Delete this line.
         fallback: { provider: 'openai', model: 'gpt-4.1-mini' },
       },
     }),
@@ -89,7 +89,7 @@ result.cost          // estimated USD, or null unless every dispatched attempt i
 
 Three parts: **providers** (who you can call), **operations** (what your app does), **stores** (where config and counters live). `run` does the rest, in a fixed, documented order — validate input, resolve config, check readiness, reserve and commit quota, call, parse, validate output, fall back if warranted, settle. The exact state machine is spec §1 in [docs/spec.md](./docs/spec.md).
 
-> **Planning to switch providers later?** Register every provider you might ever want on day one — it costs nothing. API keys resolve lazily, so a registered provider without a key only errors if you actually route to it. A `fallback` on your route counts as routed — readiness resolves its key up front, fail-closed — so drop the quickstart's `fallback` line if you only have one key today. Enabling Anthropic next year is then: set `ANTHROPIC_API_KEY` (a restart/redeploy for the new env var, as with any env change), flip the route in your admin config. **No code push.** (And `openaiCompatible` pointed at OpenRouter reaches virtually every model on the market through one registration.)
+> **Planning to switch providers later?** Register every provider you might ever want on day one — it costs nothing. API keys resolve lazily, so a registered provider without a key only errors if you actually route to it. A `fallback` on your route counts as routed: its key is checked before anything runs. If you only have one key today, drop the quickstart's `fallback` line. Enabling Anthropic next year is then: set `ANTHROPIC_API_KEY` (a restart/redeploy for the new env var, as with any env change), flip the route in your admin config. **No code push.** (And `openaiCompatible` pointed at OpenRouter reaches virtually every model on the market through one registration.)
 
 ## Output: from model text to typed data
 
