@@ -12,19 +12,16 @@
  * Exit codes: 0 all three fixtures pass, 1 a fixture failed, 2 wrong usage.
  */
 
-import { createHash } from 'node:crypto'
-import { execFileSync, spawnSync } from 'node:child_process'
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-} from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+
+import {
+  checkInstalledIsTheTarball,
+  hashFile,
+  unpackReference,
+} from './lib/installed-package.mjs'
 
 const ROOT = join(import.meta.dirname, '..')
 const FIXTURES = join(ROOT, 'test', 'consumers')
@@ -45,76 +42,10 @@ const DECLARATIONS = {
 /** Enough for any plausible run; more than this is a runaway, and a runaway is a failure. */
 const OUTPUT_LIMIT = 64 * 1024 * 1024
 
-function hash(file) {
-  return createHash('sha256').update(readFileSync(file)).digest('hex')
-}
-
-/** Every path under `dir`, relative and sorted, so two trees hash the same way. */
-function listFiles(dir, prefix, found) {
-  for (const entry of readdirSync(join(dir, prefix), { withFileTypes: true })) {
-    const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`
-    if (entry.isDirectory()) listFiles(dir, path, found)
-    else found.push(path)
-  }
-  return found
-}
-
-/**
- * One hash over a whole directory: every path and every byte, in a fixed order. Hashing
- * a single file would miss a swapped declaration or an extra chunk.
- */
-function hashTree(dir) {
-  const digest = createHash('sha256')
-  for (const path of listFiles(dir, '', []).sort()) {
-    digest
-      .update(path)
-      .update('\0')
-      .update(readFileSync(join(dir, path)))
-      .update('\0')
-  }
-  return digest.digest('hex')
-}
-
-/**
- * Unpacks the tarball once, so each fixture can be compared against the bytes that were
- * supposed to be installed rather than against whatever the registry happens to hold.
- */
-function unpackReference(tarballPath, workspace) {
-  const reference = join(workspace, 'reference')
-  mkdirSync(reference, { recursive: true })
-  execFileSync('tar', ['-xzf', tarballPath, '-C', reference], { stdio: 'inherit' })
-  const packageRoot = join(reference, 'package')
-  const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
-  return {
-    name: manifest.name,
-    version: manifest.version,
-    distHash: hashTree(join(packageRoot, 'dist')),
-  }
-}
-
-/**
- * Confirms the installed package is this tarball. Without it a fixture could pass on a
- * same-named package fetched from the registry, which is the one thing it must not do.
- */
-function checkInstalledIsTheTarball(project, reference, name, problems) {
-  const installed = join(project, 'node_modules', 'llmswitch')
-  if (!existsSync(installed)) {
-    problems.push(`${name}: the package was not installed`)
-    return
-  }
-  const manifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'))
-  if (manifest.name !== reference.name || manifest.version !== reference.version) {
-    problems.push(
-      `${name}: installed ${String(manifest.name)}@${String(manifest.version)}, ` +
-        `expected ${reference.name}@${reference.version}`,
-    )
-  }
-  const dist = join(installed, 'dist')
-  if (!existsSync(dist) || hashTree(dist) !== reference.distHash) {
-    problems.push(`${name}: the installed dist/ is not the one in the tarball`)
-  }
-}
-
+// The child keeps this process's environment, unlike the other two harnesses, which build
+// one from an allowlist. Nothing here calls a provider: the fixtures import the package,
+// compile against it and exercise the in-memory stores, so there is no key to scrub and no
+// dispatch a stray variable could redirect.
 function run(command, args, cwd) {
   const result = spawnSync(command, args, {
     cwd,
@@ -227,7 +158,7 @@ function main() {
     return 2
   }
 
-  const before = hash(tarballPath)
+  const before = hashFile(tarballPath)
   const workspace = mkdtempSync(join(tmpdir(), 'consumer-fixtures-'))
   const problems = []
   const hashes = {}
@@ -247,7 +178,7 @@ function main() {
     rmSync(workspace, { recursive: true, force: true })
   }
 
-  if (hash(tarballPath) !== before)
+  if (hashFile(tarballPath) !== before)
     problems.push('the tarball changed while it was being tested')
 
   for (const problem of problems) process.stdout.write(`${problem}\n`)

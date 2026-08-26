@@ -23,6 +23,9 @@ ollama.com
 # A local model server, used in examples
 localhost
 
+# The loopback address the examples harness binds its fixture provider to
+127.0.0.1
+
 # RFC 2606 documentation placeholder used in unit fixtures
 example.com
 

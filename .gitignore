@@ -4,6 +4,8 @@ coverage/
 *.tsbuildinfo
 *.tgz
 test/consumers/**/node_modules
+examples/*/node_modules/
+examples/next/.next/
 .env
 .env.*
 *.log

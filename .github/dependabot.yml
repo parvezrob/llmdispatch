@@ -32,3 +32,29 @@ updates:
       dev-dependencies:
         patterns:
           - '*'
+
+  # The examples pin every dependency exactly and commit a lockfile, so they go stale like
+  # any other project and are updated the same way. Their `llmswitch` dependency is the
+  # locally packed tarball rather than a registry one, and is not something to update here.
+  # `@types/node` tracks the package's Node 20 floor in the Next.js example for the same
+  # reason it does at the root.
+  - package-ecosystem: npm
+    directory: /examples/express
+    schedule:
+      interval: weekly
+    groups:
+      example-express:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /examples/next
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+    groups:
+      example-next:
+        patterns:
+          - '*'

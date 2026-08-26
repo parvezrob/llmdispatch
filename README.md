@@ -30,6 +30,8 @@ Two packages. That's the whole install — built-in adapters are plain-`fetch`, 
 npm install llmswitch zod
 ```
 
+Any package manager works — `pnpm add llmswitch zod` or `yarn add llmswitch zod`.
+
 The snippet uses top-level `await`, so it needs an ESM project. In a fresh directory, run `npm pkg set type=module` first, or save the file as `.mts`.
 
 ```ts
@@ -289,7 +291,7 @@ Inference-first: operation names are typed (`ai.run('summarize', …)` compiles,
 
 ## Using it in your framework
 
-One instance, called from wherever your server handles requests. Full runnable examples (Next.js and Express) will be added before v0.1 ships.
+One instance, called from wherever your server handles requests. Runnable examples: [./examples/next](./examples/next) (TypeScript, App Router) and [./examples/express](./examples/express) (plain JavaScript).
 
 ```ts
 // Next.js route handler
