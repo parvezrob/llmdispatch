@@ -127,6 +127,25 @@ section.
 The last two take a tarball you produced with `npm pack`; they never pack one themselves,
 so what you audit is what you test.
 
+## How changes land
+
+**Commit messages follow Conventional Commits** — `feat:`, `fix:`, `docs:`, and the rest.
+That is the convention the history is written in; the changelog itself is generated from
+changesets, not from commit messages, so the prefix is for the reader of `git log`.
+
+**A pull request lands rebased**, as a small set of coherent commits with the fixups squashed
+away before the final review. The history is linear and there are no merge commits, so
+`git log` reads as the order things actually happened.
+
+**Never a live API key** — not in a pull request, not in a fixture, not in continuous
+integration. Fixtures are synthetic, or recorded from a real response and then redacted; CI
+runs without provider keys by construction rather than by anyone remembering. `npm run scan`
+is part of reviewing a change, and secret hygiene is checked before anything is pushed, not
+after.
+
+Getting a version out is a separate procedure with its own preconditions:
+[`RELEASING.md`](RELEASING.md).
+
 ## Pull requests
 
 One coherent change per pull request, with the checks green. Explain what the change does
