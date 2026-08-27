@@ -7,12 +7,13 @@
 import { ProviderError } from '../errors'
 import type {
   ApiKeyResolver,
+  ContentPart,
   PreparedProvider,
   Provider,
   ProviderRequest,
   ProviderResponse,
 } from '../types'
-import { readSoleTextPart } from './parts'
+import { soleTextPart } from './parts'
 import {
   buildUsage,
   classifyByStatusFamily,
@@ -22,6 +23,10 @@ import {
 } from './transport'
 
 const DEFAULT_BASE = 'https://api.openai.com/v1'
+
+// `file.filename` is required by the file content part; a part that carries none still has
+// to send something.
+const DEFAULT_PDF_FILENAME = 'document.pdf'
 
 const NATIVE_JSON_HOSTS = new Set([
   'api.openai.com',
@@ -89,6 +94,27 @@ function tokenParamFor(
   return host === 'api.openai.com' ? 'max_completion_tokens' : 'max_tokens'
 }
 
+/**
+ * The user message's `content`: a plain string for a lone text part, content parts
+ * otherwise (§5c). The media forms are pinned to OpenAI's published shapes; a compatible
+ * server that lacks either answers with its own error.
+ */
+function openAIContent(parts: readonly ContentPart[]): string | unknown[] {
+  const sole = soleTextPart(parts)
+  if (sole !== null) return sole
+  return parts.map((part) => {
+    if (part.type === 'text') return { type: 'text', text: part.text }
+    const url = `data:${part.mediaType};base64,${part.data}`
+    if (part.mediaType === 'application/pdf') {
+      return {
+        type: 'file',
+        file: { filename: part.filename ?? DEFAULT_PDF_FILENAME, file_data: url },
+      }
+    }
+    return { type: 'image_url', image_url: { url } }
+  })
+}
+
 async function completeOpenAI(
   apiKey: string,
   baseUrl: string,
@@ -96,11 +122,10 @@ async function completeOpenAI(
   tokenParam: 'max_tokens' | 'max_completion_tokens' | undefined,
   req: ProviderRequest,
 ): Promise<ProviderResponse> {
-  const promptText = readSoleTextPart(req.parts)
   const host = hostOf(baseUrl)
   const body: Record<string, unknown> = {
     model: req.model,
-    messages: [{ role: 'user', content: promptText }],
+    messages: [{ role: 'user', content: openAIContent(req.parts) }],
   }
 
   if (req.maxOutputTokens !== undefined) {

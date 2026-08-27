@@ -5,25 +5,18 @@
  * @module
  */
 
-import { ProviderError } from '../errors'
 import type { ContentPart } from '../types'
 
 /**
- * The text of a request carrying exactly one text part, which every adapter serializes the
- * plain way (§5c).
+ * The text of a request carrying exactly one text part, which Anthropic and the
+ * OpenAI-compatible transport send as a plain string `content` (§5c).
  *
  * @param parts The request's normalized parts.
- * @returns That part's text, `''` included.
- * @throws `ProviderError` with kind `invalid_request` for any other parts list. The wire
- *   mappings for documents and images are not in place yet, so such a request is rejected
- *   before dispatch rather than serialized as something the model was never sent.
+ * @returns That part's text, `''` included, or `null` for every other parts list, which
+ *   both adapters send as an array instead.
  */
-export function readSoleTextPart(parts: readonly ContentPart[]): string {
+export function soleTextPart(parts: readonly ContentPart[]): string | null {
   const first = parts[0]
-  if (parts.length !== 1 || first?.type !== 'text') {
-    throw new ProviderError('invalid_request', {
-      message: 'only a single text part is supported',
-    })
-  }
+  if (parts.length !== 1 || first?.type !== 'text') return null
   return first.text
 }
