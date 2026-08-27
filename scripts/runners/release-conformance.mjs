@@ -234,7 +234,7 @@ async function runProviderSuite(state, port) {
   return installed.conformance.runProviderConformance({
     provider,
     requestFactory: () => ({
-      prompt: 'reply with {"ok":true}',
+      parts: [{ type: 'text', text: 'reply with {"ok":true}' }],
       // The model the fixture's recorded response names; anything else and the backend would
       // answer with a body claiming to be a different model.
       model: state.model,

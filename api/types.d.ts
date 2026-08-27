@@ -49,11 +49,25 @@ interface Logger {
   warn(message: string, data?: unknown): void | Promise<void>;
   error(message: string, data?: unknown): void | Promise<void>;
 }
+/** One run of text in a request. Any string is legal, `''` included. */
+interface TextPart {
+  readonly type: 'text';
+  readonly text: string;
+}
+/** One document or image in a request, carried inline as base64 (§6 normalization and caps). */
+interface FilePart {
+  readonly type: 'file';
+  readonly mediaType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+  readonly data: string;
+  readonly filename?: string;
+}
+/** What a request is made of, in the order the model should see it. */
+type ContentPart = TextPart | FilePart;
 /** One operation: its schemas, its prompt, and the optional gates around them. */
 interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In;
   output: Out;
-  prompt: (input: z.output<In>) => string | Promise<string>;
+  prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>;
   format?: 'json' | 'json-any' | 'text';
   quality?: (ctx: {
     input: z.output<In>;
@@ -146,9 +160,9 @@ interface Provider {
 interface PreparedProvider {
   complete(req: ProviderRequest): Promise<ProviderResponse>;
 }
-/** One attempt, as the adapter receives it. */
+/** One attempt, as the adapter receives it. `parts` is normalized, non-empty and frozen. */
 interface ProviderRequest {
-  prompt: string;
+  parts: readonly ContentPart[];
   model: string;
   responseFormat: {
     type: 'text';
@@ -226,5 +240,5 @@ interface ConformanceResult {
   skipped: string[];
 }
 //#endregion
-export { RunResult as C, TokenUsage as D, Switch as E, UsageStore as O, RouteTarget as S, StorePair as T, ProviderResponse as _, ConformanceResult as a, QuotaView as b, ModelPrice as c, OperationRoute as d, OperationsMap as f, ProviderRequest as g, ProviderErrorKind as h, ConfigStore as i, OperationConfigView as l, Provider as m, AttemptOutcome as n, CreateSwitchConfig as o, PreparedProvider as p, AttemptRecord as r, Logger as s, ApiKeyResolver as t, OperationDefinition as u, QualityVerdict as v, SettlementFailure as w, ReservationEnvelope as x, QuotaKey as y };
+export { TokenUsage as A, ReservationEnvelope as C, StorePair as D, SettlementFailure as E, Switch as O, QuotaView as S, RunResult as T, ProviderErrorKind as _, ConformanceResult as a, QualityVerdict as b, FilePart as c, OperationConfigView as d, OperationDefinition as f, Provider as g, PreparedProvider as h, ConfigStore as i, UsageStore as j, TextPart as k, Logger as l, OperationsMap as m, AttemptOutcome as n, ContentPart as o, OperationRoute as p, AttemptRecord as r, CreateSwitchConfig as s, ApiKeyResolver as t, ModelPrice as u, ProviderRequest as v, RouteTarget as w, QuotaKey as x, ProviderResponse as y };
 //# sourceMappingURL=types.d.ts.map

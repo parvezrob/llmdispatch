@@ -42,6 +42,9 @@ export type SectionSix = [
   Holds<Identical<Package.SettlementFailure, Spec.SettlementFailure>>,
   Holds<Identical<Package.StorePair, Spec.StorePair>>,
   Holds<Identical<Package.Logger, Spec.Logger>>,
+  Holds<Identical<Package.TextPart, Spec.TextPart>>,
+  Holds<Identical<Package.FilePart, Spec.FilePart>>,
+  Holds<Identical<Package.ContentPart, Spec.ContentPart>>,
   Holds<
     Identical<
       Package.OperationDefinition<z.ZodString, z.ZodNumber>,

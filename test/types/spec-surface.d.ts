@@ -55,10 +55,24 @@ export interface Logger {                                // invoked through caug
 }
 
 // --- operations ---
+// What a request is made of. A prompt callback returning a string normalizes to one
+// TextPart; the parts a callback returns are copied, frozen, and validated before stage 7.
+export interface TextPart {
+  readonly type: 'text'
+  readonly text: string                                  // any string, '' included
+}
+export interface FilePart {
+  readonly type: 'file'
+  readonly mediaType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
+  readonly data: string                                  // base64, standard alphabet, no data-URL prefix
+  readonly filename?: string                             // <= 128 chars, no control characters, no path separator
+}
+export type ContentPart = TextPart | FilePart
+
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
-  prompt: (input: z.output<In>) => string | Promise<string>
+  prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
   format?: 'json' | 'json-any' | 'text'                  // default 'json' (§3)
   quality?: (ctx: { input: z.output<In>; data: z.output<Out> }) => QualityVerdict | Promise<QualityVerdict>
   quota?: { perDay: number }                             // safe integer, 0–1_000_000 (0 = halted)
@@ -121,7 +135,7 @@ export interface PreparedProvider {
   complete(req: ProviderRequest): Promise<ProviderResponse>
 }
 export interface ProviderRequest {
-  prompt: string
+  parts: readonly ContentPart[]                          // normalized, non-empty, frozen
   model: string
   responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
   maxOutputTokens?: number

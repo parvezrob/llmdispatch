@@ -28,7 +28,7 @@ export declare function runConfigStoreConformance(opts: {
 }): Promise<ConformanceResult>
 export declare function runProviderConformance(opts: {
   provider: Provider
-  // Produces a dispatchable request for the provider's backend (model, prompt).
+  // Produces a dispatchable request for the provider's backend (model, parts).
   requestFactory: () => ProviderRequest
   // 'success' is MANDATORY; each other scenario puts the adopter's backend into the named
   // condition and resolves when ready; the harness dispatches and asserts the resulting

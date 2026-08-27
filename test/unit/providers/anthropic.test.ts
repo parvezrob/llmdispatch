@@ -8,6 +8,7 @@ import {
   installFetch,
   jsonResponse,
   SENTINEL,
+  textParts,
   withPrepared,
 } from './helpers'
 
@@ -48,7 +49,7 @@ describe('request shape', () => {
   it('sends model and the user message', async () => {
     const { requests } = captureRequests(() => jsonResponse(200, OK_BODY))
     const run = await complete()
-    await run(baseRequest({ model: 'claude-x', prompt: 'say hi' }))
+    await run(baseRequest({ model: 'claude-x', parts: textParts('say hi') }))
     const body = requests[0]!.body as Record<string, unknown>
     expect(body.model).toBe('claude-x')
     expect(body.messages).toEqual([{ role: 'user', content: 'say hi' }])
@@ -236,7 +237,7 @@ describe('error classification', () => {
     installFetch(() => jsonResponse(400, { error: { message: `bad: ${SENTINEL}` } }))
     const run = await complete()
     try {
-      await run(baseRequest({ prompt: SENTINEL }))
+      await run(baseRequest({ parts: textParts(SENTINEL) }))
       expect.unreachable('expected a rejection')
     } catch (error) {
       expect((error as Error).message).not.toContain(SENTINEL)

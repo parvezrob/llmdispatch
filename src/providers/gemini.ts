@@ -12,6 +12,7 @@ import type {
   ProviderRequest,
   ProviderResponse,
 } from '../types'
+import { readSoleTextPart } from './parts'
 import {
   buildUsage,
   classifyByStatusFamily,
@@ -54,6 +55,7 @@ export function gemini(opts: { apiKey: ApiKeyResolver }): Provider {
 }
 
 async function completeGemini(apiKey: string, req: ProviderRequest): Promise<ProviderResponse> {
+  const promptText = readSoleTextPart(req.parts)
   const url = `${HOST}/models/${encodeURIComponent(req.model)}:generateContent`
   const generationConfig: Record<string, unknown> = {}
   if (req.maxOutputTokens !== undefined) generationConfig.maxOutputTokens = req.maxOutputTokens
@@ -63,7 +65,7 @@ async function completeGemini(apiKey: string, req: ProviderRequest): Promise<Pro
   }
 
   const body: Record<string, unknown> = {
-    contents: [{ role: 'user', parts: [{ text: req.prompt }] }],
+    contents: [{ role: 'user', parts: [{ text: promptText }] }],
   }
   if (Object.keys(generationConfig).length > 0) {
     body.generationConfig = generationConfig

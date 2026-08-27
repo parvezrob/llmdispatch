@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { ProviderError } from '../../../src/errors'
 import { openaiCompatible } from '../../../src/providers/openai-compatible'
-import { baseRequest, SENTINEL, withPrepared } from './helpers'
+import { baseRequest, SENTINEL, textParts, withPrepared } from './helpers'
 
 interface Logged {
   method: string | undefined
@@ -90,7 +90,7 @@ describe('redirect exfiltration fixture', () => {
     })
     const complete = await withPrepared(provider)
 
-    await expect(complete(baseRequest({ prompt: SENTINEL }))).rejects.toSatisfy(
+    await expect(complete(baseRequest({ parts: textParts(SENTINEL) }))).rejects.toSatisfy(
       (error: unknown) => ProviderError.is(error) && error.kind === 'transient',
     )
 

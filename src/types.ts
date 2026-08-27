@@ -71,11 +71,31 @@ export interface Logger {
 
 // --- operations ---
 
+/** One run of text in a request. Any string is legal, `''` included. */
+export interface TextPart {
+  readonly type: 'text'
+  readonly text: string
+}
+
+/** One document or image in a request, carried inline as base64 (§6 normalization and caps). */
+export interface FilePart {
+  readonly type: 'file'
+  readonly mediaType:
+    'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
+  readonly data: string // base64, standard alphabet, no data-URL prefix
+  readonly filename?: string // ≤ 128 characters, no control characters, no path separator
+}
+
+/** What a request is made of, in the order the model should see it. */
+export type ContentPart = TextPart | FilePart
+
 /** One operation: its schemas, its prompt, and the optional gates around them. */
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
-  prompt: (input: z.output<In>) => string | Promise<string>
+  prompt: (
+    input: z.output<In>,
+  ) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
   format?: 'json' | 'json-any' | 'text' // default 'json' (§3)
   quality?: (ctx: {
     input: z.output<In>
@@ -184,9 +204,9 @@ export interface PreparedProvider {
   complete(req: ProviderRequest): Promise<ProviderResponse>
 }
 
-/** One attempt, as the adapter receives it. */
+/** One attempt, as the adapter receives it. `parts` is normalized, non-empty and frozen. */
 export interface ProviderRequest {
-  prompt: string
+  parts: readonly ContentPart[]
   model: string
   responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
   maxOutputTokens?: number // omitted from the wire body when unset, never defaulted (§5c)

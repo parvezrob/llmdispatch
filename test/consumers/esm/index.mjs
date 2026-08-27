@@ -113,7 +113,7 @@ const ai = root.createSwitch({
       complete: (request) =>
         Promise.resolve({
           kind: 'complete',
-          text: JSON.stringify({ echoed: request.prompt }),
+          text: JSON.stringify({ echoed: request.parts[0].text }),
           usage: { inputTokens: 1, outputTokens: 2 },
         }),
     },
