@@ -20,6 +20,8 @@ export interface CapturedRequest {
   method: string
   headers: Record<string, string>
   body: unknown
+  /** The serialized body, for assertions parsed JSON cannot make: field order, spacing. */
+  rawBody: string | undefined
   redirect: RequestInit['redirect']
   signal: AbortSignal | undefined
 }
@@ -86,6 +88,7 @@ export function captureRequests(handler: FetchHandler = () => jsonResponse(200, 
       method: init.method ?? 'GET',
       headers: toHeaders(init),
       body: parseBody(init),
+      rawBody: typeof init.body === 'string' ? init.body : undefined,
       redirect: init.redirect,
       signal: init.signal ?? undefined,
     })

@@ -7,12 +7,13 @@
 import { ProviderError } from '../errors'
 import type {
   ApiKeyResolver,
+  ContentPart,
   PreparedProvider,
   Provider,
   ProviderRequest,
   ProviderResponse,
 } from '../types'
-import { readSoleTextPart } from './parts'
+import { soleTextPart } from './parts'
 import {
   buildUsage,
   fetchJson,
@@ -46,15 +47,28 @@ export function anthropic(opts: { apiKey: ApiKeyResolver }): Provider {
   }
 }
 
+/** The user message's `content`: a plain string for a lone text part, blocks otherwise (§5c). */
+function anthropicContent(parts: readonly ContentPart[]): string | unknown[] {
+  const sole = soleTextPart(parts)
+  if (sole !== null) return sole
+  return parts.map((part) => {
+    if (part.type === 'text') return { type: 'text', text: part.text }
+    const source = { type: 'base64', media_type: part.mediaType, data: part.data }
+    // PDFs are documents, every other media type is an image; neither block carries a
+    // filename field, so `part.filename` has nowhere to go.
+    if (part.mediaType === 'application/pdf') return { type: 'document', source }
+    return { type: 'image', source }
+  })
+}
+
 async function completeAnthropic(
   apiKey: string,
   req: ProviderRequest,
 ): Promise<ProviderResponse> {
-  const promptText = readSoleTextPart(req.parts)
   const body: Record<string, unknown> = {
     model: req.model,
     max_tokens: req.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
-    messages: [{ role: 'user', content: promptText }],
+    messages: [{ role: 'user', content: anthropicContent(req.parts) }],
   }
   if (req.temperature !== undefined) {
     body.temperature = Math.min(1, Math.max(0, req.temperature))

@@ -7,12 +7,12 @@
 import { ProviderError } from '../errors'
 import type {
   ApiKeyResolver,
+  ContentPart,
   PreparedProvider,
   Provider,
   ProviderRequest,
   ProviderResponse,
 } from '../types'
-import { readSoleTextPart } from './parts'
 import {
   buildUsage,
   classifyByStatusFamily,
@@ -54,8 +54,18 @@ export function gemini(opts: { apiKey: ApiKeyResolver }): Provider {
   }
 }
 
+/**
+ * One `parts` entry per content part, in order (§5c). ProtoJSON accepts `inlineData` and
+ * `mimeType` too; the snake_case spelling the REST examples print is the pinned one.
+ */
+function geminiParts(parts: readonly ContentPart[]): unknown[] {
+  return parts.map((part) => {
+    if (part.type === 'text') return { text: part.text }
+    return { inline_data: { mime_type: part.mediaType, data: part.data } }
+  })
+}
+
 async function completeGemini(apiKey: string, req: ProviderRequest): Promise<ProviderResponse> {
-  const promptText = readSoleTextPart(req.parts)
   const url = `${HOST}/models/${encodeURIComponent(req.model)}:generateContent`
   const generationConfig: Record<string, unknown> = {}
   if (req.maxOutputTokens !== undefined) generationConfig.maxOutputTokens = req.maxOutputTokens
@@ -65,7 +75,7 @@ async function completeGemini(apiKey: string, req: ProviderRequest): Promise<Pro
   }
 
   const body: Record<string, unknown> = {
-    contents: [{ role: 'user', parts: [{ text: promptText }] }],
+    contents: [{ role: 'user', parts: geminiParts(req.parts) }],
   }
   if (Object.keys(generationConfig).length > 0) {
     body.generationConfig = generationConfig

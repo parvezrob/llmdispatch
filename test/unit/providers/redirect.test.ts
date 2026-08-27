@@ -1,5 +1,5 @@
 /**
- * The redirect-exfiltration fixture (spec §5c/§8, plan §2 box 1): a real `fetch` against a
+ * The redirect-exfiltration fixture (spec §5c/§8): a real `fetch` against a
  * local two-endpoint `node:http` pair, source answering 302 to target. Proves what
  * `redirect: 'error'` does under the real runtime, no scripted fetch can show this.
  */
@@ -10,7 +10,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { ProviderError } from '../../../src/errors'
 import { openaiCompatible } from '../../../src/providers/openai-compatible'
+import type { ContentPart } from '../../../src/types'
 import { baseRequest, SENTINEL, textParts, withPrepared } from './helpers'
+
+const DATA_SENTINEL = 'U0VOVElORUxfREFUQV84YjJm'
+const FILENAME_SENTINEL = 'SENTINEL_FILENAME_4d7e.pdf'
 
 interface Logged {
   method: string | undefined
@@ -60,7 +64,8 @@ describe('redirect exfiltration fixture', () => {
     await close(target)
   })
 
-  it('rejects transient, hits the source once, never reaches the target with credentials or prompt', async () => {
+  /** Starts the redirecting pair and returns the transport aimed at the source. */
+  async function startPair(): Promise<Awaited<ReturnType<typeof withPrepared>>> {
     targetLog = []
     sourceLog = []
 
@@ -84,11 +89,16 @@ describe('redirect exfiltration fixture', () => {
     })
     sourcePort = await listen(source)
 
-    const provider = openaiCompatible({
-      apiKey: () => 'sk-should-never-leave-source',
-      baseUrl: 'http://localhost:' + String(sourcePort),
-    })
-    const complete = await withPrepared(provider)
+    return withPrepared(
+      openaiCompatible({
+        apiKey: () => 'sk-should-never-leave-source',
+        baseUrl: 'http://localhost:' + String(sourcePort),
+      }),
+    )
+  }
+
+  it('rejects transient, hits the source once, never reaches the target with credentials or prompt', async () => {
+    const complete = await startPair()
 
     await expect(complete(baseRequest({ parts: textParts(SENTINEL) }))).rejects.toSatisfy(
       (error: unknown) => ProviderError.is(error) && error.kind === 'transient',
@@ -102,5 +112,35 @@ describe('redirect exfiltration fixture', () => {
     // in its own terms rather than only via the count.
     expect(targetLog.every((entry) => entry.headers.authorization === undefined)).toBe(true)
     expect(targetLog.every((entry) => !entry.body.includes(SENTINEL))).toBe(true)
+  })
+
+  it('carries file bytes and a filename no further than the source, and names neither', async () => {
+    const complete = await startPair()
+    const pdf: ContentPart = {
+      type: 'file',
+      mediaType: 'application/pdf',
+      data: DATA_SENTINEL,
+      filename: FILENAME_SENTINEL,
+    }
+
+    const error = await complete(
+      baseRequest({ parts: [{ type: 'text', text: SENTINEL }, pdf] }),
+    ).then(
+      () => null,
+      (thrown: unknown) => thrown,
+    )
+
+    expect(ProviderError.is(error)).toBe(true)
+    const thrown = error as ProviderError
+    expect(thrown.kind).toBe('transient')
+    expect(thrown.message).not.toContain(DATA_SENTINEL)
+    expect(thrown.message).not.toContain(FILENAME_SENTINEL)
+
+    expect(sourceLog.length).toBe(1)
+    expect(targetLog.length).toBe(0)
+    expect(sourceLog[0]!.body).toContain(DATA_SENTINEL)
+    expect(sourceLog[0]!.body).toContain(FILENAME_SENTINEL)
+    expect(targetLog.every((entry) => !entry.body.includes(DATA_SENTINEL))).toBe(true)
+    expect(targetLog.every((entry) => !entry.body.includes(FILENAME_SENTINEL))).toBe(true)
   })
 })

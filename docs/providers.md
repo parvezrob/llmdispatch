@@ -30,9 +30,20 @@ any other 4xx (incl. 409/413/422) → `invalid_request`; any 5xx (incl. 504/529)
 **`openaiCompatible({ apiKey, baseUrl?, jsonMode?, tokenParam? })`, the universal transport.**
 Default `baseUrl` `https://api.openai.com/v1`; `POST {baseUrl}/chat/completions`;
 `Authorization: Bearer`. ([OpenAI API reference](https://platform.openai.com/docs/api-reference/chat))
-Request: `model`, `messages: [{role:'user', content: prompt}]`, `max_tokens`,
+Request: `model`, `messages: [{role:'user', content}]`, `max_tokens`,
 `temperature`, and `response_format: { type: 'json_object' }` only when JSON-object format
-AND the JSON capability applies. **JSON capability rule:** direct known-good hosts
+AND the JSON capability applies. **Content mapping:** a request whose parts are exactly one
+text part sends `content` as that plain string; every other parts list sends a content-part
+array, one entry per part in order — text → `{type:'text', text}`; image → `{type:
+'image_url', image_url:{ url: 'data:<mediaType>;base64,<data>' }}`; PDF → `{type:'file',
+file:{ filename, file_data: 'data:application/pdf;base64,<data>' }}`, `filename` falling
+back to `document.pdf` when the part carries none
+([images](https://platform.openai.com/docs/guides/images-vision),
+[PDF files](https://platform.openai.com/docs/guides/pdf-files)). **Both media forms are
+best-effort across compatible servers:** they are pinned to OpenAI's published Chat
+Completions shapes, no named compatible host is claimed to accept either, and a server
+lacking one answers with its own error, classified by the rows below. **JSON capability
+rule:** direct known-good hosts
 (api.openai.com, api.deepseek.com, api.groq.com, api.mistral.ai) get native `json_object`;
 **model-multiplexing gateways (openrouter.ai, api.together.xyz, api.fireworks.ai) and
 unknown hosts are prompt-only by default**: JSON-mode support there is per-MODEL, not
@@ -70,8 +81,15 @@ https://api.anthropic.com/v1/messages`; **`x-api-key`** + required
 the OpenAI-compat layer is not used: it ignores `response_format` and is documented as a
 testing tool: [Anthropic OpenAI SDK compat](https://docs.anthropic.com/en/api/openai-sdk))
 Request: `model`, `max_tokens` (**always sent**, required by Anthropic; default 4096 when
-the route sets none), `messages: [{role:'user', content: prompt}]`, `temperature` (0–1;
-core-range values are clamped, documented). JSON is prompt-driven in v0.1.
+the route sets none), `messages: [{role:'user', content}]`, `temperature` (0–1;
+core-range values are clamped, documented). JSON is prompt-driven.
+**Content mapping:** a request whose parts are exactly one text part sends `content` as that
+plain string; every other parts list sends a block array, one block per part in order —
+text → `{type:'text', text}`; PDF → `{type:'document', source:{ type:'base64',
+media_type:'application/pdf', data }}`; image → `{type:'image', source:{ type:'base64',
+media_type, data }}`. Neither block has a filename field, so a part's `filename` is never
+sent ([PDF support](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support),
+[vision](https://docs.anthropic.com/en/docs/build-with-claude/vision)).
 Response: first `text` block of `content[]`; `stop_reason` normalized to
 `ProviderResponse.kind`: `max_tokens` **and `model_context_window_exceeded`** →
 `'truncated'`; `refusal` → `'refused'`; `end_turn`/`stop_sequence` → `'complete'`; other →
@@ -98,9 +116,17 @@ which this design depends on ([Gemini OpenAI compat](https://ai.google.dev/gemin
 [native usage fields](https://ai.google.dev/api/generate-content); the compat-usage
 discrepancy observed in the research is recorded as an empirical fixture-verification item,
 not the primary rationale).
-Request: `contents: [{role:'user', parts:[{text: prompt}]}]`, `generationConfig:
+Request: `contents: [{role:'user', parts}]`, `generationConfig:
 { maxOutputTokens?, temperature?, responseMimeType: 'application/json' }` (MIME only for
 JSON-object format; prompt still carries the shape).
+**Content mapping:** one `parts` entry per content part, in order — text → `{text}`; file →
+`{inline_data:{ mime_type, data }}`, the same form for PDFs and images
+([document understanding](https://ai.google.dev/gemini-api/docs/document-processing),
+[image understanding](https://ai.google.dev/gemini-api/docs/image-understanding)). ProtoJSON
+accepts the `inlineData`/`mimeType` spelling as well; the snake_case spelling the REST
+examples print is the pinned one. The image guide lists png, jpeg, webp, heic and heif, so
+an `image/gif` part is unverified rather than unsupported: it goes on the wire unchanged and
+surfaces whatever Gemini answers.
 Response: `candidates[0].content.parts[]` text concatenated; termination normalized to
 `ProviderResponse.kind`: `promptFeedback.blockReason` present → `'refused'`; no candidates
 WITHOUT block metadata → throw `ProviderError('malformed_response')`; `finishReason`
