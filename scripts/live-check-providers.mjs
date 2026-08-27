@@ -50,7 +50,7 @@ const USAGE = 'usage: live-check-providers.mjs [--release <path-to-tgz>]\n'
 const PROVIDERS = [
   { name: 'anthropic', key: 'ANTHROPIC_API_KEY', model: 'claude-haiku-4-5' },
   { name: 'openai-compatible', key: 'OPENAI_API_KEY', model: 'gpt-4.1-nano' },
-  { name: 'gemini', key: 'GEMINI_API_KEY', model: 'gemini-2.5-flash-lite' },
+  { name: 'gemini', key: 'GEMINI_API_KEY', model: 'gemini-3.5-flash-lite' },
 ]
 
 /** Two calls to a live provider; anything beyond this is a hang, not a slow model. */
