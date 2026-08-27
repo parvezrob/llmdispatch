@@ -101,31 +101,46 @@ section.
 
 ## Commands
 
-| Command                                                  | What it does                                                         |
-| -------------------------------------------------------- | -------------------------------------------------------------------- |
-| `npm run check`                                          | everything below that does not need a database or the network        |
-| `npm run build`                                          | the dual ESM + CommonJS build into `dist/`                           |
-| `npm test`                                               | unit tests                                                           |
-| `npm run test:coverage`                                  | unit tests with the coverage thresholds applied                      |
-| `npm run test:integration`                               | tests that need `DATABASE_URL`                                       |
-| `npm run depcruise`                                      | module boundaries                                                    |
-| `npm run api:check` / `api:update`                       | compare or record the public type surface                            |
-| `npm run surface:update`                                 | regenerate the spec surfaces after editing `docs/spec.md`            |
-| `node scripts/check-spec-surface.mjs`                    | compare what `dist/` exports with what the spec declares             |
-| `node scripts/check-types-fixtures.mjs --target spec`    | compile the type fixtures against the spec surfaces                  |
-| `node scripts/check-types-fixtures.mjs --target package` | the fixtures the build can satisfy, against it                       |
-| `npm run size`                                           | gzipped size of the root entry against `sizeBudget`                  |
-| `npm run scan`                                           | scan the tree for addresses, unreviewed links and key-shaped strings |
-| `npm run docs:providers`                                 | regenerate `docs/providers.md` from spec §5c                         |
-| `node scripts/build-provider-reference.mjs --check`      | fail if `docs/providers.md` no longer matches spec §5c               |
-| `node scripts/check-docs-links.mjs`                      | every markdown link and anchor resolves                              |
-| `node scripts/verify-quickstart.mjs [tgz]`               | follow the README quickstart in a clean directory (needs network)    |
-| `node scripts/verify-examples.mjs [tgz]`                 | run both `examples/` end to end against that tarball (needs network) |
-| `npm run audit:tarball -- <tgz>`                         | what a packed tarball contains and whether it would run anything     |
-| `npm run test:consumers -- <tgz>`                        | install that tarball into ESM, CommonJS and TypeScript projects      |
+| Command                                                  | What it does                                                                 |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `npm run check`                                          | everything below that does not need a database or the network                |
+| `npm run build`                                          | the dual ESM + CommonJS build into `dist/`                                   |
+| `npm test`                                               | unit tests                                                                   |
+| `npm run test:coverage`                                  | unit tests with the coverage thresholds applied                              |
+| `npm run test:integration`                               | tests that need `DATABASE_URL`                                               |
+| `npm run depcruise`                                      | module boundaries                                                            |
+| `npm run api:check` / `api:update`                       | compare or record the public type surface                                    |
+| `npm run surface:update`                                 | regenerate the spec surfaces after editing `docs/spec.md`                    |
+| `node scripts/check-spec-surface.mjs`                    | compare what `dist/` exports with what the spec declares                     |
+| `node scripts/check-types-fixtures.mjs --target spec`    | compile the type fixtures against the spec surfaces                          |
+| `node scripts/check-types-fixtures.mjs --target package` | the fixtures the build can satisfy, against it                               |
+| `npm run size`                                           | gzipped size of the root entry against `sizeBudget`                          |
+| `npm run scan`                                           | scan the tree for addresses, unreviewed links and key-shaped strings         |
+| `npm run docs:providers`                                 | regenerate `docs/providers.md` from spec §5c                                 |
+| `node scripts/build-provider-reference.mjs --check`      | fail if `docs/providers.md` no longer matches spec §5c                       |
+| `node scripts/check-docs-links.mjs`                      | every markdown link and anchor resolves                                      |
+| `node scripts/verify-quickstart.mjs [tgz]`               | follow the README quickstart in a clean directory (needs network)            |
+| `node scripts/verify-examples.mjs [tgz]`                 | run both `examples/` end to end against that tarball (needs network)         |
+| `npm run audit:tarball -- <tgz>`                         | what a packed tarball contains and whether it would run anything             |
+| `npm run test:consumers -- <tgz>`                        | install that tarball into ESM, CommonJS and TypeScript projects              |
+| `npm run verify:release -- <tgz>`                        | install that tarball and run all three suites against a throwaway PostgreSQL |
+| `npm run live:providers`                                 | call every built-in adapter's real provider (needs your own keys)            |
 
-The last two take a tarball you produced with `npm pack`; they never pack one themselves,
-so what you audit is what you test.
+Everything that takes a tarball takes one you produced with `npm pack`; they never pack one
+themselves, so what you audit is what you test.
+
+`verify:release` needs `DATABASE_URL` pointing at a throwaway database on this machine — it
+creates a schema, writes to it and drops it, so it takes exactly one shape,
+`postgres://user:password@127.0.0.1:port/database`: an address in 127.0.0.0/8, a port written
+out, and no query string or fragment. The header of `scripts/verify-release.mjs` has a
+container to run it against.
+
+`live:providers` spends money and depends on three services being up, so it is never part of
+`npm run check` and never runs in continuous integration. Each provider is called in a process
+of its own holding only that provider's key; use throwaway keys and revoke them afterwards. Run
+`npm run live:providers -- --release <tgz>` to check a packed tarball rather than your working
+tree — that form requires every adapter to run, so a missing key is a failure instead of a
+skip. (The `--` is what stops npm from eating the arguments.)
 
 ## How changes land
 
