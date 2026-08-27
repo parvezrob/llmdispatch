@@ -17,16 +17,15 @@ export function hashFile(file) {
 /**
  * Every path under `dir`, relative and sorted, so two trees hash the same way.
  *
- * `node_modules` is never descended into: a published tree does not contain one, and an
- * installed tree may have been given one by the package manager. Whatever is in there belongs
- * to some other package and says nothing about these bytes.
+ * Nothing is skipped. Skipping a directory on both sides would hide whatever is inside it from
+ * the comparison, and this proof is the only thing standing between "the tarball was audited"
+ * and "the audited bytes are what ran".
  */
 function listFiles(dir, prefix, found) {
   for (const entry of readdirSync(join(dir, prefix), { withFileTypes: true })) {
     const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`
-    if (entry.isDirectory()) {
-      if (entry.name !== 'node_modules') listFiles(dir, path, found)
-    } else found.push(path)
+    if (entry.isDirectory()) listFiles(dir, path, found)
+    else found.push(path)
   }
   return found
 }
@@ -68,6 +67,12 @@ const UNPACK_DEADLINE = 60_000
 /**
  * Unpacks the tarball once, so each project can be compared against the bytes that were
  * supposed to be installed rather than against whatever the registry happens to hold.
+ *
+ * @throws `Error` when the tarball ships a `node_modules`. Nothing is skipped when the trees
+ * are hashed, so a published `node_modules` would be compared against whatever the package
+ * manager put in the installed one and every project would fail with a message about swapped
+ * bytes. A tarball like that is a packaging fault worth naming as itself — and one nobody
+ * should be shipping either way.
  */
 export function unpackReference(tarballPath, workspace) {
   const reference = join(workspace, 'reference')
@@ -80,6 +85,12 @@ export function unpackReference(tarballPath, workspace) {
     timeout: UNPACK_DEADLINE,
   })
   const packageRoot = join(reference, 'package')
+  const bundled = listFiles(packageRoot, '', []).find(
+    (path) => path === 'node_modules' || path.startsWith('node_modules/'),
+  )
+  if (bundled !== undefined) {
+    throw new Error(`the tarball ships a node_modules directory (${bundled})`)
+  }
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
   return {
     name: manifest.name,

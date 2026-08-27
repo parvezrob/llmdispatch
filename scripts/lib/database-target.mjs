@@ -3,16 +3,25 @@
  *
  * A release check creates a schema, truncates tables and drops the schema again. None of that
  * is safe anywhere but a throwaway database on the machine running it, so the rule is a
- * whitelist of literal loopback addresses rather than a blacklist of anything else.
+ * whitelist of one shape — `postgres://user:password@127.0.0.1:port/database` — rather than a
+ * blacklist of anything else.
  *
  * The subtlety is that a connection string's authority is not necessarily where the driver
  * connects. libpq-style parameters — `?host=`, `?hostaddr=`, `?port=` — override it, so
  * `postgres://user@127.0.0.1/db?host=elsewhere.example` reads as loopback and connects to
  * `elsewhere.example`. Reading `new URL(...).hostname` therefore answers the wrong question.
  * What is checked here is the target the driver would actually resolve, taken from the same
- * parser the driver itself uses, and any query string at all is refused on top of that: a
- * verification run has no need of one, and refusing the whole class is worth more than
- * keeping up with which parameters can redirect a connection.
+ * parser the driver itself uses.
+ *
+ * Three further rules follow from the same thought — that nothing outside the string should
+ * get to choose where the connection goes:
+ *
+ * - `?` and `#` are refused wherever they appear in the raw string, not merely where a parser
+ *   found a query. A verification run has no need of a parameter, and refusing the whole class
+ *   is worth more than keeping up with which of them can redirect a connection.
+ * - The port must be written down. Left out, it comes from the operator's `PGPORT`, and a
+ *   check that says which machine it will write to but not which server is only half a rule.
+ * - Only IPv4 loopback. `::1` is not offered at all; `isLoopbackAddress` says why.
  *
  * @module
  */
@@ -31,45 +40,32 @@ function ipv4Octets(host) {
   return octets.every((octet) => octet <= 255) ? octets : null
 }
 
-/** The eight groups of an IPv6 address, `::` expanded, or `null` when it is not one. */
-function ipv6Groups(host) {
-  const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host
-  if (!/^[0-9A-Fa-f:]+$/.test(bare)) return null
-  const halves = bare.split('::')
-  if (halves.length > 2) return null
-  const read = (text) => (text === '' ? [] : text.split(':'))
-  const head = read(halves[0] ?? '')
-  const tail = halves.length === 2 ? read(halves[1] ?? '') : []
-  const filled = 8 - head.length - tail.length
-  if (halves.length === 2 && filled < 0) return null
-  const groups =
-    halves.length === 2
-      ? [...head, ...Array.from({ length: filled }, () => '0'), ...tail]
-      : head
-  if (groups.length !== 8 || groups.some((group) => !/^[0-9A-Fa-f]{1,4}$/.test(group))) {
-    return null
-  }
-  return groups.map((group) => Number.parseInt(group, 16))
-}
-
 /**
  * Whether a host is written as a loopback address.
  *
- * The whole of `127.0.0.0/8` and `::1` in any of its spellings. A name is never accepted, not
- * even `localhost`: what a name resolves to is decided by files and servers this check does
- * not control, and a run that writes to somebody else's database has already done the damage
- * by the time the mistake is visible.
+ * The whole of `127.0.0.0/8`, and nothing else. A name is never accepted, not even
+ * `localhost`: what a name resolves to is decided by files and servers this check does not
+ * control, and a run that writes to somebody else's database has already done the damage by
+ * the time the mistake is visible.
+ *
+ * `::1` is not accepted either, which is a narrower rule than it looks. The connection string
+ * parser hands back an IPv6 host with its brackets still on — `[::1]` — and the driver passes
+ * that string to `net.connect` as a host, where it is not an address literal at all but a name
+ * to be resolved (it fails with ENOTFOUND). So the IPv6 spelling never reached a loopback
+ * socket in the first place, and accepting it would have meant accepting a name lookup, which
+ * is the one thing this guard exists to refuse. IPv4 loopback is what works, so IPv4 loopback
+ * is what is offered.
  *
  * @param {string} host The host as the connection string gives it.
- * @returns {boolean} Whether it is a literal loopback address.
+ * @returns {boolean} Whether it is a literal IPv4 loopback address.
  */
 export function isLoopbackAddress(host) {
   const octets = ipv4Octets(host)
-  if (octets !== null) return octets[0] === 127
-  const groups = ipv6Groups(host)
-  if (groups === null) return false
-  return groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1
+  return octets !== null && octets[0] === 127
 }
+
+/** The one shape this check accepts, quoted back to the operator by every rejection. */
+const WANTED = 'a bare postgres://user:password@127.0.0.1:port/database'
 
 /**
  * Why this database may not be used, or `null` when it may.
@@ -104,16 +100,28 @@ export function describeUnusableDatabase(url) {
     return (
       `DATABASE_URL connects to '${host}'. This check creates and drops schemas and truncates ` +
       'tables, so it only runs against a throwaway database on this machine: an address in ' +
-      '127.0.0.0/8, or ::1. A host name is refused even when it is spelt localhost, because ' +
-      'what a name resolves to is not this check to decide'
+      '127.0.0.0/8. A host name is refused even when it is spelt localhost, because what a ' +
+      `name resolves to is not this check to decide. Give it ${WANTED}`
     )
   }
 
-  if (parsed.search !== '') {
+  // Read off the raw string rather than off anything parsed. A `#` makes everything after it a
+  // fragment, so `…/db#?host=evil` leaves the parsed query empty while still being a string
+  // nobody meant to hand a destructive check; a bare `?` does the same with nothing after it.
+  // Neither belongs in a connection string for this, so the character is refused wherever it
+  // appears rather than only where a parser happened to look.
+  if (url.includes('?') || url.includes('#')) {
     return (
-      'DATABASE_URL carries query parameters. Several of them move the connection somewhere ' +
-      'else, so a destructive check refuses all of them: give it a bare ' +
-      'postgres://user:password@127.0.0.1:port/database'
+      "DATABASE_URL contains '?' or '#'. Several query parameters move the connection " +
+      'somewhere else and a fragment hides them from a parser, so a destructive check refuses ' +
+      `both outright: give it ${WANTED}`
+    )
+  }
+
+  if (parsed.port === '') {
+    return (
+      'DATABASE_URL names no port. Without one the port is whatever PGPORT happens to say, ' +
+      `which is not this check to decide either: give it ${WANTED}`
     )
   }
   return null

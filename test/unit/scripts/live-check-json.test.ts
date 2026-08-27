@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { checkJsonShape } from '../../../scripts/runners/live-check.mjs'
+import { checkJsonShape } from '../../../scripts/runners/json-tolerance.mjs'
 
 /** What the live check accepts as "the model returned a JSON object", and what it does not. */
 function problemsFor(text: string): string[] {

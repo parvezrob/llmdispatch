@@ -12,12 +12,8 @@
  * redactor, so a value that reached a message by some path nobody thought of still does not
  * reach the terminal.
  *
- * The JSON call is asked for in a prompt on the adapters that have no other way of asking, so
- * what comes back is a model's idea of "only this object": it may arrive in a code fence or
- * with a sentence around it. That is tolerated — the object is taken out of the fence, or the
- * first balanced `{…}` is read out of the text — because the claim under check is that the
- * adapter delivers usable JSON-shaped output, not that a model can follow an instruction about
- * whitespace. An empty object is not tolerated: it parses, and it proves nothing.
+ * How much untidiness is tolerated in a prompted JSON answer is decided by
+ * `./json-tolerance.mjs`, which is copied into the scratch project alongside this file.
  *
  * Usage: node live-check.mjs <provider> <model> [--release]
  * With `--release` the package is required to come from the project this runner sits in.
@@ -25,6 +21,8 @@
  *
  * @module
  */
+
+import { checkJsonShape } from './json-tolerance.mjs'
 
 /** Which environment name each adapter's credential arrives under. */
 const KEYS = {
@@ -76,81 +74,6 @@ function checkResponse(label, response, problems) {
       problems.push(`${label}: ${field} was not a non-negative whole number`)
     }
   }
-}
-
-/**
- * The first balanced `{…}` in a string, or `null` when there is none.
- *
- * Braces inside string literals are skipped, so a value like `"}"` does not close the object
- * early. This reads one object out of surrounding prose; it is not a JSON parser, and what it
- * finds is handed to `JSON.parse` to be judged.
- */
-function firstBracedSpan(text) {
-  let depth = 0
-  let start = -1
-  let inString = false
-  let escaped = false
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (character === '\\') escaped = true
-      else if (character === '"') inString = false
-      continue
-    }
-    if (character === '"') inString = true
-    else if (character === '{') {
-      if (depth === 0) start = index
-      depth += 1
-    } else if (character === '}') {
-      depth -= 1
-      if (depth === 0) return text.slice(start, index + 1)
-      if (depth < 0) return null
-    }
-  }
-  return null
-}
-
-/** The output as it might have been meant, most literal reading first. */
-function jsonCandidates(text) {
-  const trimmed = text.trim()
-  const candidates = [trimmed]
-  const fenced = /```[A-Za-z]*\n([\s\S]*?)```/.exec(trimmed)?.[1]
-  if (fenced !== undefined) candidates.push(fenced.trim())
-  const braced = firstBracedSpan(trimmed)
-  if (braced !== null) candidates.push(braced)
-  return candidates
-}
-
-/**
- * The JSON call additionally has to produce a non-empty JSON object at the top level.
- *
- * Exported so the tolerance above can be held to examples in a test. Nothing else in this file
- * is: the rest needs a provider, which is the point of the file.
- */
-export function checkJsonShape(text, problems) {
-  let firstParsed
-  for (const candidate of jsonCandidates(text)) {
-    let value
-    try {
-      value = JSON.parse(candidate)
-    } catch {
-      continue
-    }
-    if (firstParsed === undefined) firstParsed = { value }
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
-    // An object that parses and says nothing is what comes back when a provider has given up
-    // on the request; accepting it would leave this check unable to fail.
-    if (Object.keys(value).length === 0) {
-      problems.push('the JSON call: the output was an empty object, which proves nothing')
-    }
-    return
-  }
-  problems.push(
-    firstParsed === undefined
-      ? 'the JSON call: the output did not parse as JSON, in a code fence or otherwise'
-      : 'the JSON call: the output parsed, but not to a JSON object',
-  )
 }
 
 /**
@@ -256,16 +179,16 @@ async function main() {
   return problems.length === 0 ? 0 : 1
 }
 
-// Only when this file is what was run. A test that imports it to check one pure function must
-// not thereby start calling a provider.
-if (process.argv[1] === import.meta.filename) {
-  try {
-    process.exitCode = await main()
-  } catch (error) {
-    // The catch-all path has no adapter to ask, so it says only what kind of failure it was.
-    process.stderr.write(
-      `the live check could not run: ${error instanceof Error ? error.name : 'unknown failure'}\n`,
-    )
-    process.exitCode = 1
-  }
+// Unconditionally: this file exists to be run. Deciding for itself whether it was the entry
+// point means comparing paths, and `import.meta.filename` has its symlinks resolved while
+// `process.argv[1]` does not — under a symlinked TMPDIR the two never match and the check
+// would quietly do nothing at all. What has to be importable lives in `./json-tolerance.mjs`.
+try {
+  process.exitCode = await main()
+} catch (error) {
+  // The catch-all path has no adapter to ask, so it says only what kind of failure it was.
+  process.stderr.write(
+    `the live check could not run: ${error instanceof Error ? error.name : 'unknown failure'}\n`,
+  )
+  process.exitCode = 1
 }

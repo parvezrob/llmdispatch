@@ -130,14 +130,17 @@ Everything that takes a tarball takes one you produced with `npm pack`; they nev
 themselves, so what you audit is what you test.
 
 `verify:release` needs `DATABASE_URL` pointing at a throwaway database on this machine — it
-creates a schema, writes to it and drops it, so it refuses anything but a literal loopback
-address. The header of `scripts/verify-release.mjs` has a container to run it against.
+creates a schema, writes to it and drops it, so it takes exactly one shape,
+`postgres://user:password@127.0.0.1:port/database`: an address in 127.0.0.0/8, a port written
+out, and no query string or fragment. The header of `scripts/verify-release.mjs` has a
+container to run it against.
 
 `live:providers` spends money and depends on three services being up, so it is never part of
 `npm run check` and never runs in continuous integration. Each provider is called in a process
-of its own holding only that provider's key; use throwaway keys and revoke them afterwards. Add
-`--release <tgz>` to check a packed tarball rather than your working tree — that form requires
-every adapter to run, so a missing key is a failure instead of a skip.
+of its own holding only that provider's key; use throwaway keys and revoke them afterwards. Run
+`npm run live:providers -- --release <tgz>` to check a packed tarball rather than your working
+tree — that form requires every adapter to run, so a missing key is a failure instead of a
+skip. (The `--` is what stops npm from eating the arguments.)
 
 ## How changes land
 

@@ -15,16 +15,18 @@
  *
  * The database must be a throwaway on this machine. The migration creates and drops a schema,
  * and the store suites write and truncate; nothing about the run is safe to point at a
- * database anyone else is using, so the connection string is held to a literal loopback
- * address and refused if it carries query parameters, several of which decide where a
- * connection actually goes (see `lib/database-target.mjs`).
+ * database anyone else is using, so the connection string is held to a literal IPv4 loopback
+ * address with an explicit port, and refused if it carries a query or a fragment — several
+ * parameters decide where a connection actually goes, and a fragment hides them from a parser
+ * (see `lib/database-target.mjs`).
  *
  * The schema belongs to this process, not to the runner it starts. A runner that is killed
  * cannot tidy up after itself, so the schema is dropped from here on every path there is —
  * a pass, a failure, an exception, a deadline, or an interrupt.
  *
  * Usage: node scripts/verify-release.mjs <path-to-tgz>
- * Needs `DATABASE_URL`, pointing at an address in 127.0.0.0/8 or at ::1, with no query string.
+ * Needs `DATABASE_URL` in exactly one shape: postgres://user:password@127.0.0.1:port/database —
+ * an address in 127.0.0.0/8, an explicit port, and no query string or fragment.
  *
  * A database for the run, thrown away with the container:
  *
@@ -117,7 +119,16 @@ async function release() {
       await pool.end().catch(() => undefined)
     }
   }
-  if (owned.workspace !== null) rmSync(owned.workspace, { recursive: true, force: true })
+  if (owned.workspace !== null) {
+    // Caught for the same reason the drop above is: this runs from a signal handler and from
+    // the top-level catch, and it is the memoised promise everything else waits on. A throw
+    // here would reach nobody as a rejection and would take the messages above with it.
+    try {
+      rmSync(owned.workspace, { recursive: true, force: true })
+    } catch {
+      process.stderr.write(`the directory ${owned.workspace} could not be removed\n`)
+    }
+  }
 }
 
 /** Cleans up and stops when this process is interrupted, rather than leaving a schema behind. */
@@ -180,7 +191,14 @@ async function main() {
       tarballPath: tarball,
       // The peer the package declares, and the driver it deliberately does not ship: a
       // project that installs llmswitch has to bring both, so this one does too.
-      packages: [pinnedDevelopmentVersion('zod'), pinnedDevelopmentVersion('pg')],
+      // `pg-connection-string` is pinned by name as well, though `pg` would bring it along
+      // anyway: it is what the guard above read the connection target out of, and the version
+      // that decided a string was safe should be the version that then connects with it.
+      packages: [
+        pinnedDevelopmentVersion('zod'),
+        pinnedDevelopmentVersion('pg'),
+        pinnedDevelopmentVersion('pg-connection-string'),
+      ],
       files: [RUNNER, TEMPLATE],
     })
 

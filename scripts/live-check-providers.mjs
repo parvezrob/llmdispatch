@@ -37,6 +37,8 @@ import {
 
 const ROOT = join(import.meta.dirname, '..')
 const RUNNER = join(import.meta.dirname, 'runners', 'live-check.mjs')
+/** The runner imports this, so it is copied into the scratch project beside it. */
+const TOLERANCE = join(import.meta.dirname, 'runners', 'json-tolerance.mjs')
 const USAGE = 'usage: live-check-providers.mjs [--release <path-to-tgz>]\n'
 
 /**
@@ -135,7 +137,7 @@ function main() {
           name: 'consumer',
           tarballPath: tarball,
           packages: [pinnedDevelopmentVersion('zod')],
-          files: [RUNNER],
+          files: [RUNNER, TOLERANCE],
         })
       : null
 
