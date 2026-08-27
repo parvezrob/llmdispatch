@@ -27,7 +27,12 @@ const OPTIONAL_ORDER = [
   'malformed_response',
   'truncated',
   'refused',
+  'document',
+  'image',
 ]
+
+/** Base64 short enough to read; no adapter here decodes it. */
+const FILE_DATA = 'AAAA'
 
 type Handler = (req: ProviderRequest) => ProviderResponse | Promise<ProviderResponse>
 
@@ -162,6 +167,150 @@ describe('runner behavior', () => {
   })
 })
 
+describe('media scenarios', () => {
+  const pdfRequest = () =>
+    baseRequest({
+      parts: [
+        { type: 'text', text: 'read it' },
+        { type: 'file', mediaType: 'application/pdf', data: FILE_DATA },
+      ],
+    })
+  const imageRequest = () =>
+    baseRequest({
+      parts: [
+        { type: 'text', text: 'look at it' },
+        { type: 'file', mediaType: 'image/png', data: FILE_DATA },
+      ],
+    })
+
+  it('passes both when each has a scenario and a request carrying its media class', async () => {
+    const { provider } = scriptedProvider()
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: {
+        success: step(() => undefined),
+        document: step(() => undefined),
+        image: step(() => undefined),
+      },
+      requests: { document: pdfRequest, image: imageRequest },
+    })
+    expect(result.failures).toEqual([])
+    expect(result.skipped).not.toContain('document')
+    expect(result.skipped).not.toContain('image')
+  })
+
+  it('dispatches each media scenario its own request, not the shared requestFactory', async () => {
+    const { provider } = scriptedProvider()
+    const seen: ProviderRequest[] = []
+    await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: { success: step(() => undefined), image: step(() => undefined) },
+      requests: { image: imageRequest },
+      controls: { observeRequest: (req) => seen.push(req) },
+    })
+    expect(seen.at(-1)!.parts).toContainEqual({
+      type: 'file',
+      mediaType: 'image/png',
+      data: FILE_DATA,
+    })
+  })
+
+  it('skips a media scenario whose request is missing, and the other way round', async () => {
+    const { provider } = scriptedProvider()
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: { success: step(() => undefined), document: step(() => undefined) },
+      requests: { image: imageRequest },
+    })
+    expect(result.skipped).toContain('document')
+    expect(result.skipped).toContain('image')
+    expect(result.failures).toEqual([])
+  })
+
+  it('fails a media scenario whose request carries no file part at all', async () => {
+    const { provider } = scriptedProvider()
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: { success: step(() => undefined), document: step(() => undefined) },
+      requests: { document: () => baseRequest() },
+    })
+    expect(result.failures).toContainEqual(
+      expect.stringContaining("document: expected a request carrying an 'application/pdf'"),
+    )
+  })
+
+  it('fails the document scenario whose file part is an image instead', async () => {
+    const { provider } = scriptedProvider()
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: { success: step(() => undefined), document: step(() => undefined) },
+      requests: { document: imageRequest },
+    })
+    expect(result.failures).toContainEqual(
+      expect.stringContaining("document: expected a request carrying an 'application/pdf'"),
+    )
+  })
+
+  it('fails the image scenario whose file part is a document instead', async () => {
+    const { provider } = scriptedProvider()
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: { success: step(() => undefined), image: step(() => undefined) },
+      requests: { image: pdfRequest },
+    })
+    expect(result.failures).toContainEqual(
+      expect.stringContaining('image: expected a request carrying an image file part'),
+    )
+  })
+
+  it('fails a media scenario answered with a response that is not complete', async () => {
+    const { provider, set } = scriptedProvider()
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: {
+        success: step(() => undefined),
+        // Set inside the scenario, so only the media dispatch answers this way.
+        document: step(() => {
+          set(() => ({
+            kind: 'truncated',
+            text: 'partial',
+            usage: { inputTokens: 1, outputTokens: 1 },
+          }))
+        }),
+      },
+      requests: { document: pdfRequest },
+    })
+    expect(result.failures).toContainEqual(
+      "document: expected kind 'complete' but was 'truncated'",
+    )
+  })
+
+  it('fails a media scenario the provider rejects with a ProviderError', async () => {
+    const { provider, set } = scriptedProvider()
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () => baseRequest(),
+      scenarios: {
+        success: step(() => undefined),
+        image: step(() => {
+          set(throwing('invalid_request'))
+        }),
+      },
+      requests: { image: imageRequest },
+    })
+    expect(result.failures).toContainEqual(
+      expect.stringContaining('image: ProviderError(invalid_request)'),
+    )
+  })
+})
+
 describe('nonconforming fakes', () => {
   it('fails when the success scenario answers with the wrong ProviderResponse shape', async () => {
     const { provider, set } = scriptedProvider()
@@ -264,6 +413,26 @@ describe('responseFormat duty', () => {
 describe('the built-in adapters, driven end to end through the runner', () => {
   const KEY = () => 'sk-test'
 
+  /** The media requests for one adapter's model, each carrying the part its scenario checks. */
+  const mediaRequests = (model: string) => ({
+    document: () =>
+      baseRequest({
+        model,
+        parts: [
+          { type: 'text', text: 'read it' },
+          { type: 'file', mediaType: 'application/pdf', data: FILE_DATA },
+        ],
+      }),
+    image: () =>
+      baseRequest({
+        model,
+        parts: [
+          { type: 'text', text: 'look at it' },
+          { type: 'file', mediaType: 'image/png', data: FILE_DATA },
+        ],
+      }),
+  })
+
   it('passes openaiCompatible over scripted fetch, native json capability', async () => {
     const provider = openaiCompatible({ apiKey: KEY })
     const chatBody = (finishReason: string, content: string, refusal?: string) => ({
@@ -294,7 +463,14 @@ describe('the built-in adapters, driven end to end through the runner', () => {
           installFetch(() => jsonResponse(200, chatBody('length', 'partial'))),
         ),
         refused: step(() => installFetch(() => jsonResponse(200, chatBody('stop', '', 'no')))),
+        document: step(() =>
+          installFetch(() => jsonResponse(200, chatBody('stop', '{"ok":true}'))),
+        ),
+        image: step(() =>
+          installFetch(() => jsonResponse(200, chatBody('stop', '{"ok":true}'))),
+        ),
       },
+      requests: mediaRequests('gpt-x'),
       controls: { jsonCapability: 'native' },
     })
     expect(result).toEqual({ passed: true, failures: [], skipped: [] })
@@ -326,7 +502,14 @@ describe('the built-in adapters, driven end to end through the runner', () => {
           installFetch(() => jsonResponse(200, messageBody('max_tokens', 'partial'))),
         ),
         refused: step(() => installFetch(() => jsonResponse(200, messageBody('refusal', '')))),
+        document: step(() =>
+          installFetch(() => jsonResponse(200, messageBody('end_turn', '{"ok":true}'))),
+        ),
+        image: step(() =>
+          installFetch(() => jsonResponse(200, messageBody('end_turn', '{"ok":true}'))),
+        ),
       },
+      requests: mediaRequests('claude-x'),
       controls: { jsonCapability: 'prompt-only' },
     })
     expect(result).toEqual({ passed: true, failures: [], skipped: ['responseFormat:native'] })
@@ -357,7 +540,14 @@ describe('the built-in adapters, driven end to end through the runner', () => {
           installFetch(() => jsonResponse(200, generateBody('MAX_TOKENS', 'partial'))),
         ),
         refused: step(() => installFetch(() => jsonResponse(200, generateBody('SAFETY', '')))),
+        document: step(() =>
+          installFetch(() => jsonResponse(200, generateBody('STOP', '{"ok":true}'))),
+        ),
+        image: step(() =>
+          installFetch(() => jsonResponse(200, generateBody('STOP', '{"ok":true}'))),
+        ),
       },
+      requests: mediaRequests('gemini-x'),
       controls: { jsonCapability: 'prompt-only' },
     })
     expect(result).toEqual({ passed: true, failures: [], skipped: ['responseFormat:native'] })

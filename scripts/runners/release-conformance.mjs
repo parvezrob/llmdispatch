@@ -30,6 +30,12 @@ import { assertInstalledPackageResolves } from './subpath-resolution.mjs'
 const TEMPLATE = join(import.meta.dirname, 'openai-chat-completion.json')
 /** Not a key and not shaped like one: the fixture only checks that it arrives verbatim. */
 const FIXTURE_KEY = 'fixture-credential-for-the-release-check'
+/** A 64x64 solid red PNG, base64. The media scenarios need a real file part to dispatch. */
+const IMAGE_FIXTURE =
+  'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC'
+/** A one-page PDF, base64. */
+const DOCUMENT_FIXTURE =
+  'JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA0NCA+PgpzdHJlYW0KQlQgL0YxIDI0IFRmIDcyIDcwMCBUZCAoQ0lOTkFCQVJIRVJPTikgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMzUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MDUKJSVFT0YK'
 
 /* ------------------------------------------------------------------ the guard ---- */
 
@@ -56,7 +62,9 @@ async function importInstalledPackage() {
  *
  * The provider suite puts the backend into a named condition and then dispatches; this server
  * is that backend. Every classification row the built-in adapter documents is covered here, so
- * the suite reports nothing as unverified: a release must not ship on a partial answer.
+ * the suite reports nothing as unverified: a release must not ship on a partial answer. The
+ * media scenarios need no condition of their own, being success-class; what they verify is the
+ * request the suite dispatches for them.
  */
 function renderScenario(template, scenario) {
   const body = structuredClone(template)
@@ -231,17 +239,18 @@ async function runProviderSuite(state, port) {
     state.scenario = scenario
     return Promise.resolve()
   }
+  const request = (parts) => ({
+    parts,
+    // The model the fixture's recorded response names; anything else and the backend would
+    // answer with a body claiming to be a different model.
+    model: state.model,
+    responseFormat: { type: 'text' },
+    maxOutputTokens: 16,
+    signal: new AbortController().signal,
+  })
   return installed.conformance.runProviderConformance({
     provider,
-    requestFactory: () => ({
-      parts: [{ type: 'text', text: 'reply with {"ok":true}' }],
-      // The model the fixture's recorded response names; anything else and the backend would
-      // answer with a body claiming to be a different model.
-      model: state.model,
-      responseFormat: { type: 'text' },
-      maxOutputTokens: 16,
-      signal: new AbortController().signal,
-    }),
+    requestFactory: () => request([{ type: 'text', text: 'reply with {"ok":true}' }]),
     scenarios: {
       success: enter('success'),
       auth: enter('auth'),
@@ -252,6 +261,27 @@ async function runProviderSuite(state, port) {
       malformed_response: enter('malformed_response'),
       truncated: enter('truncated'),
       refused: enter('refused'),
+      // The media scenarios are success-class, and they are driven after the error ones, so
+      // each re-enters the success condition rather than inheriting the last one set.
+      document: enter('success'),
+      image: enter('success'),
+    },
+    requests: {
+      document: () =>
+        request([
+          { type: 'text', text: 'reply with {"ok":true}' },
+          {
+            type: 'file',
+            mediaType: 'application/pdf',
+            data: DOCUMENT_FIXTURE,
+            filename: 'release-check.pdf',
+          },
+        ]),
+      image: () =>
+        request([
+          { type: 'text', text: 'reply with {"ok":true}' },
+          { type: 'file', mediaType: 'image/png', data: IMAGE_FIXTURE },
+        ]),
     },
     controls: { jsonCapability: 'native' },
   })

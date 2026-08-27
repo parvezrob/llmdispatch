@@ -32,11 +32,18 @@ export declare function runProviderConformance(opts: {
   requestFactory: () => ProviderRequest
   // 'success' is MANDATORY; each other scenario puts the adopter's backend into the named
   // condition and resolves when ready; the harness dispatches and asserts the resulting
-  // ProviderResponse.kind or ProviderError classification. Absent optional scenarios are
-  // reported in `skipped`: a skipped scenario means that classification is UNVERIFIED.
+  // ProviderResponse.kind or ProviderError classification. 'document' and 'image' are
+  // success-class instead: the backend answers normally and the harness dispatches that
+  // scenario's request from `requests` below. Absent optional scenarios are reported in
+  // `skipped`: a skipped scenario means that classification is UNVERIFIED.
   scenarios: { success: () => Promise<void> } & Partial<Record<
     'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient'
-    | 'malformed_response' | 'truncated' | 'refused', () => Promise<void>>>
+    | 'malformed_response' | 'truncated' | 'refused' | 'document' | 'image', () => Promise<void>>>
+  // The request each media scenario dispatches, which MUST carry a file part of that
+  // scenario's media class: 'application/pdf' for document, an image/* type for image. A
+  // media scenario runs only when both its scenario callback and its request are supplied;
+  // with either absent it is reported in `skipped` like any other unsupplied scenario.
+  requests?: Partial<Record<'document' | 'image', () => ProviderRequest>>
   // Optional controls: declare JSON capability and observe dispatched requests so the
   // harness can verify responseFormat without guessing the provider's wire behaviour.
   controls?: {

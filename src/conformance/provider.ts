@@ -15,7 +15,7 @@ import type {
   TokenUsage,
 } from '../types'
 
-/** Optional scenarios the harness can drive when the adopter supplies them. */
+/** Optional classification scenarios the harness can drive when the adopter supplies them. */
 type OptionalScenario =
   | 'auth'
   | 'rate_limit'
@@ -37,6 +37,17 @@ const OPTIONAL: readonly OptionalScenario[] = [
   'refused',
 ]
 
+/** Optional media scenarios: success-class conditions dispatching a request that carries a file. */
+type MediaScenario = 'document' | 'image'
+
+const MEDIA: readonly MediaScenario[] = ['document', 'image']
+
+/** What each media scenario's request has to carry, in the words its failure message uses. */
+const MEDIA_EXPECTATION: Readonly<Record<MediaScenario, string>> = {
+  document: "an 'application/pdf' file part",
+  image: 'an image file part',
+}
+
 /** Controls that let the suite verify responseFormat and capability without guessing. */
 export interface ProviderConformanceControls {
   /** Declares whether the provider under test supports native JSON mode. */
@@ -49,14 +60,16 @@ export interface ProviderConformanceControls {
  * Checks a `Provider` against the behaviour spec §8 requires of one.
  *
  * `success` is mandatory. Absent optional scenarios are reported in `skipped` (unverified).
+ * A media scenario also needs its request in `requests`; either half absent and it is skipped.
  * `passed` is true exactly when `failures` is empty.
  */
 export async function runProviderConformance(opts: {
   provider: Provider
   requestFactory: () => ProviderRequest
   scenarios: { success: () => Promise<void> } & Partial<
-    Record<OptionalScenario, () => Promise<void>>
+    Record<OptionalScenario | MediaScenario, () => Promise<void>>
   >
+  requests?: Partial<Record<MediaScenario, () => ProviderRequest>>
   controls?: ProviderConformanceControls
 }): Promise<ConformanceResult> {
   const failures: string[] = []
@@ -145,7 +158,42 @@ export async function runProviderConformance(opts: {
     }
   }
 
+  for (const name of MEDIA) {
+    const setup = opts.scenarios[name]
+    const requestFactory = opts.requests?.[name]
+    if (setup === undefined || requestFactory === undefined) {
+      skipped.push(name)
+      continue
+    }
+    try {
+      await setup()
+      const req = requestFactory()
+      // Guarded before dispatch: a text-only request would pass the success assertion below
+      // while proving nothing about the media the scenario names.
+      if (!carriesMedia(name, req)) {
+        failures.push(
+          `${name}: expected a request carrying ${MEDIA_EXPECTATION[name]} but it carried none`,
+        )
+        continue
+      }
+      assertSuccess(await dispatch(req), failures, name)
+    } catch (error) {
+      failures.push(`${name}: ${thrown(error)}`)
+    }
+  }
+
   return { passed: failures.length === 0, failures, skipped }
+}
+
+/** Whether a request carries a file part of the scenario's media class (spec §6b). */
+function carriesMedia(name: MediaScenario, req: ProviderRequest): boolean {
+  return req.parts.some(
+    (part) =>
+      part.type === 'file' &&
+      (name === 'document'
+        ? part.mediaType === 'application/pdf'
+        : part.mediaType.startsWith('image/')),
+  )
 }
 
 function assertSuccess(response: ProviderResponse, failures: string[], label: string): void {

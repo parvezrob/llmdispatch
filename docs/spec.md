@@ -93,8 +93,8 @@ Per-operation resolution matrix:
   caller deadline (ConfigStore has no cancellation contract), so a timed-out write may
   still land late and overwrite a subsequent write, in-process as well as cross-process.
   This is the documented last-write-wins/unknown-ack limitation; the deferred CAS/revision
-  mechanism (v0.2, settled) is the full fix. Custom ConfigStores must give the writing client
-  read-your-writes.
+  mechanism (settled, not in this contract) is the full fix. Custom ConfigStores must give
+  the writing client read-your-writes.
 - Admin method matrix (operation name validated first; unknown → `INVALID_INPUT`):
 
   | Method | Store call | Deadline | Failure → | Cache effect |
@@ -124,8 +124,8 @@ Per-operation resolution matrix:
    **`'text'`**. No schema introspection: text-shaped output schemas MUST set `'text'`.
 2. The adapter receives `responseFormat: { type: 'text' } | { type: 'json'; topLevel:
    'object' | 'any' }` and enables native generic JSON mode only per its §5c capability
-   rule AND `topLevel: 'object'`. Schema-constrained structured output is NOT v0.1;
-   the prompt carries the shape.
+   rule AND `topLevel: 'object'`. Schema-constrained structured output is NOT in this
+   contract; the prompt carries the shape.
 3. **Termination is checked before content**: adapters normalize termination metadata
    into `ProviderResponse.kind` (§5c). `'truncated'` classifies `truncated`; `'refused'`
    classifies `refused`; unknown terminal states are the ADAPTER'S job to map (unmappable →
@@ -186,7 +186,7 @@ active envelope.
   duplicate → no-op; conflicting payload after settlement → ignored (first write wins);
   pending/expired/**unknown** reservation → record attempts against the envelope's
   key/day without changing slot accounting. Attempt order = dispatch order.
-- **Settlement execution (v0.1, non-durable):** initial `settle` awaited (10s deadline)
+- **Settlement execution (non-durable):** initial `settle` awaited (10s deadline)
   in finalization, and settlement failure never changes an otherwise successful outcome,
   though delivery may be delayed by up to that deadline; then up to 3 detached retries
   (1s/5s/25s, same per-attempt deadline); remaining failure →
@@ -710,7 +710,7 @@ store that had to narrow the domain itself would not be substitutable.
 `ConfigStore.getAll` 5s; `set`/`delete` 10s (unknown-ack semantics per §2);
 `reserve`/`commit`/`snapshot` 10s; `settle` 10s per attempt including each detached retry.
 `getQuota` may spend both in sequence: a `getAll` that is not served from cache, then
-`snapshot`, so its worst case is 15s. Constants in v0.1.
+`snapshot`, so its worst case is 15s. Constants, not settings.
 
 ## 6b. Packaged operational surfaces (exact declarations)
 
@@ -758,11 +758,18 @@ export declare function runProviderConformance(opts: {
   requestFactory: () => ProviderRequest
   // 'success' is MANDATORY; each other scenario puts the adopter's backend into the named
   // condition and resolves when ready; the harness dispatches and asserts the resulting
-  // ProviderResponse.kind or ProviderError classification. Absent optional scenarios are
-  // reported in `skipped`: a skipped scenario means that classification is UNVERIFIED.
+  // ProviderResponse.kind or ProviderError classification. 'document' and 'image' are
+  // success-class instead: the backend answers normally and the harness dispatches that
+  // scenario's request from `requests` below. Absent optional scenarios are reported in
+  // `skipped`: a skipped scenario means that classification is UNVERIFIED.
   scenarios: { success: () => Promise<void> } & Partial<Record<
     'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient'
-    | 'malformed_response' | 'truncated' | 'refused', () => Promise<void>>>
+    | 'malformed_response' | 'truncated' | 'refused' | 'document' | 'image', () => Promise<void>>>
+  // The request each media scenario dispatches, which MUST carry a file part of that
+  // scenario's media class: 'application/pdf' for document, an image/* type for image. A
+  // media scenario runs only when both its scenario callback and its request are supplied;
+  // with either absent it is reported in `skipped` like any other unsupplied scenario.
+  requests?: Partial<Record<'document' | 'image', () => ProviderRequest>>
   // Optional controls: declare JSON capability and observe dispatched requests so the
   // harness can verify responseFormat without guessing the provider's wire behaviour.
   controls?: {
@@ -790,7 +797,7 @@ aggregate field overflowed (field-wise clamp to `Number.MAX_SAFE_INTEGER` on ove
 `cost` = `inputTokens × inputPerM/1e6 + outputTokens × outputPerM/1e6` per attempt, priced
 by registered provider ID + model. Every dispatched attempt is potentially billable: if
 any dispatched attempt lacks usage or a price, aggregate `cost` is `null`. Cached-token
-discounts, tiered pricing, and request fees are out of scope in v0.1.
+discounts, tiered pricing, and request fees are out of scope.
 
 ## 8. Conformance suite (adopter-facing)
 
@@ -818,7 +825,17 @@ persists only a whitelist of route fields, needs updating. Coverage:
 - **Provider:** mandatory success dispatch (correct `kind`/text/usage shape); honors
   `signal`; classifies each supplied scenario via `ProviderResponse.kind` or
   `ProviderError`; respects `responseFormat` per its capability; normalizes usage or
-  returns `null`. Skipped optional scenarios are reported as unverified. Core-behavior
+  returns `null`; and carries two optional media scenarios, `document` and `image`. Those
+  two are success-class: the backend answers normally, and each is verified by dispatching
+  its own request from `requests` rather than the shared `requestFactory`, because what is
+  under test is a request carrying a file part. Each runs only when BOTH its scenario
+  callback and its matching request are supplied; with either absent it is reported as
+  unverified like any other unsupplied scenario. The dispatched request must carry a file
+  part of the scenario's media class — `application/pdf` for `document`, an `image/*` type
+  for `image` — so a text-only request fails the scenario rather than passing it, and the
+  dispatch must answer `kind: 'complete'` with the same text and usage shape the mandatory
+  success case requires. Skipped optional scenarios are reported as unverified.
+  Core-behavior
   checks are internal package tests, not part of this suite: state machine, matrices,
   sanitization, validation-on-read, default-restoration, effective-quota precedence
   (including a stored row without `quota`), a stored `quota` enabling subject enforcement and

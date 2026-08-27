@@ -73,6 +73,21 @@ console.log(result.data)
 
 The fallback needs its own API key. Delete the `fallback` line and the second provider if you only have one.
 
+## Documents and images
+
+A prompt can return an array of content parts instead of a string, so an operation can send a PDF or an image alongside its text:
+
+```ts
+prompt: ({ note, invoice }) => [
+  { type: 'text', text: `Answer using the attached invoice.\n\n${note}` },
+  { type: 'file', mediaType: 'application/pdf', data: invoice, filename: 'invoice.pdf' },
+]
+```
+
+`data` is base64. The media types are `application/pdf`, `image/jpeg`, `image/png`, `image/webp` and `image/gif`, and one request may carry up to 15,000,000 base64 characters of file data, roughly 11 MB decoded. Over that the call fails before it reaches a provider or spends quota.
+
+Returning a string still works exactly as before. There is no capability model: route an operation that sends a file to a model that cannot read one and the call fails with that provider's own error, rather than being quietly sent somewhere else.
+
 ## Production
 
 `memoryStores()` holds routes and quota counters in one process. It is for development and it resets on restart.
@@ -83,7 +98,7 @@ Admin code on your server calls `ai.setConfig()` to change a route or a daily li
 
 ## Limits
 
-Server-side only, Node.js 20 or newer, ESM and CJS. Input is text, output is text or validated JSON. No streaming, no PDF or image input yet. Those are the v0.2 candidates.
+Server-side only, Node.js 20 or newer, ESM and CJS. Input is text, PDFs and images, output is text or validated JSON. Files go up as base64 in the request; URLs, file references and audio or video are not supported. No streaming yet.
 
 ## Documentation
 

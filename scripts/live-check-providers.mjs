@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Calls every built-in adapter against its real provider, once with a plain prompt and once
- * asking for a JSON object, and checks that what comes back is what the package documents.
+ * Calls every built-in adapter against its real provider four times — a plain prompt, a request
+ * for a JSON object, an image and a PDF — and checks that what comes back is what the package
+ * documents.
  *
  * Recorded fixtures prove the adapters read the shapes that were recorded; only this proves
  * the providers still send them. Manual by design: it spends money and needs keys, so it is
@@ -53,8 +54,8 @@ const PROVIDERS = [
   { name: 'gemini', key: 'GEMINI_API_KEY', model: 'gemini-3.5-flash-lite' },
 ]
 
-/** Two calls to a live provider; anything beyond this is a hang, not a slow model. */
-const CHECK_DEADLINE = 2 * 60_000
+/** Four calls to a live provider, two of them carrying a file; beyond this it is a hang. */
+const CHECK_DEADLINE = 4 * 60_000
 
 /** The one adapter whose endpoint may be pointed elsewhere, and the name that does it. */
 const ENDPOINT_OVERRIDE = { provider: 'openai-compatible', name: 'OPENAI_BASE_URL' }

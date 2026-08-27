@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for looking. This package is pre-release: the design in [`docs/spec.md`](docs/spec.md)
-is settled and the implementation is being written against it. If you are thinking of a
-change, open an issue first. It is a short conversation, and it saves you from writing
+Thanks for looking. The design in [`docs/spec.md`](docs/spec.md) is settled and the published
+package implements it, so changing what the package does means changing that document first.
+If you are thinking of a change, open an issue first. It is a short conversation, and it saves you from writing
 code against a contract that says something different.
 
 ## Getting set up
