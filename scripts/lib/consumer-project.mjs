@@ -47,35 +47,57 @@ function resolveFromLock(lock, fromPath, name) {
 }
 
 /**
- * Exact install specifiers for the named packages and their full transitive closure.
+ * The exact version this repository has installed, as an install specifier.
  *
- * Versions come from the lockfile, never from a manifest range, and the closure is pinned
- * rather than the roots alone: pinning `pg` while its own dependencies resolve from the live
- * registry would leave the check unreproducible. A name reached at two versions keeps the one
- * found first, breadth-first from the roots.
+ * From the lockfile rather than the manifest's range, so the scratch project installs the
+ * version this repository is developed against instead of whatever the registry serves today.
  *
- * @param names The packages to pin, each of which the repository must declare.
- * @returns `name@version` for every package in the closure, sorted, roots included.
- * @throws `Error` when the repository does not declare one, when the lockfile does not record
- * it, or when a required dependency cannot be resolved from it.
+ * @param name The package to look up.
+ * @returns `name@version`.
+ * @throws `Error` when the repository does not declare it or the lockfile does not record it.
  */
-export function pinnedDevelopmentClosure(names) {
+export function pinnedDevelopmentVersion(name) {
   const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
-  const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'))
+  if (typeof manifest.devDependencies?.[name] !== 'string') {
+    throw new Error(`the repository does not declare a development version of ${name}`)
+  }
+  const found = resolveFromLock(readLockfile(), '', name)
+  if (found === null || typeof found.entry.version !== 'string') {
+    throw new Error(
+      `package-lock.json records no installed version of ${name} — run \`npm install\``,
+    )
+  }
+  return `${name}@${found.entry.version}`
+}
 
+/** The repository's lockfile, parsed. */
+function readLockfile() {
+  return JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'))
+}
+
+/**
+ * Exact versions for the transitive closure of the named packages, as npm `overrides`.
+ *
+ * Pinning the roots alone leaves their own dependencies — `pg-pool`, `pg-protocol` and the
+ * rest — resolving from the registry at install time, so the check would be unreproducible in
+ * the part of it nobody looks at. Overrides pin every nested resolution without adding
+ * anything to the dependency list: an optional dependency stays optional, so a platform that
+ * cannot install `pg-cloudflare` is not made to.
+ *
+ * @param names The packages whose closure to pin, each of which the repository must declare.
+ * @returns A map of package name to exact version, for the project's `overrides` field.
+ * @throws `Error` when a package is not declared or recorded, when a required dependency
+ * cannot be resolved, or when two nodes reach the same name at different versions — that has
+ * no single answer, so it is refused rather than decided quietly.
+ */
+export function pinnedDevelopmentOverrides(names) {
+  const lock = readLockfile()
   const pinned = new Map()
   const queue = []
   for (const name of names) {
-    if (typeof manifest.devDependencies?.[name] !== 'string') {
-      throw new Error(`the repository does not declare a development version of ${name}`)
-    }
+    pinnedDevelopmentVersion(name)
     const found = resolveFromLock(lock, '', name)
-    if (found === null || typeof found.entry.version !== 'string') {
-      throw new Error(
-        `package-lock.json records no installed version of ${name} — run \`npm install\``,
-      )
-    }
-    queue.push(found)
+    if (found !== null) queue.push(found)
   }
 
   while (queue.length > 0) {
@@ -83,17 +105,25 @@ export function pinnedDevelopmentClosure(names) {
     if (next === undefined) break
     const { path, entry } = next
     const name = path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length)
-    if (pinned.has(name)) continue
+    const already = pinned.get(name)
+    if (already !== undefined) {
+      if (already !== entry.version) {
+        throw new Error(
+          `package-lock.json has ${name} at both ${already} and ${String(entry.version)}; ` +
+            'a single override cannot express that',
+        )
+      }
+      continue
+    }
     pinned.set(name, entry.version)
 
-    // Optional dependencies are followed only when the lockfile has them, as the install will
-    // do. Peer dependencies are left to npm.
+    // Optional dependencies are followed only when the lockfile has them. Peer dependencies
+    // are left to npm.
     for (const [dependency, optional] of [
       [entry.dependencies, false],
       [entry.optionalDependencies, true],
     ]) {
       for (const wanted of Object.keys(dependency ?? {})) {
-        if (pinned.has(wanted)) continue
         const found = resolveFromLock(lock, path, wanted)
         if (found === null || typeof found.entry.version !== 'string') {
           if (optional) continue
@@ -107,7 +137,7 @@ export function pinnedDevelopmentClosure(names) {
     }
   }
 
-  return [...pinned].map(([name, version]) => `${name}@${version}`).sort()
+  return Object.fromEntries([...pinned].sort(([a], [b]) => (a < b ? -1 : 1)))
 }
 
 /**
@@ -116,8 +146,8 @@ export function pinnedDevelopmentClosure(names) {
  *
  * @param opts `workspace` is the throwaway directory everything is created under; `name` names
  *   the project directory; `tarballPath` is the packed tarball; `packages` are further install
- *   specifiers, such as the peer dependency and a driver; `files` are copied into the project
- *   root, the runner among them.
+ *   specifiers, such as the peer dependency and a driver; `overrides` pin nested resolutions;
+ *   `files` are copied into the project root, the runner among them.
  * @returns The project directory, the `HOME` its children are given, and the tarball's
  *   reference digest.
  * @throws `Error` when the install fails or the installed package is not the tarball.
@@ -133,7 +163,13 @@ export function createConsumerProject(opts) {
   writeFileSync(
     join(directory, 'package.json'),
     `${JSON.stringify(
-      { name: `llmswitch-${opts.name}`, version: '0.0.0', private: true, type: 'module' },
+      {
+        name: `llmswitch-${opts.name}`,
+        version: '0.0.0',
+        private: true,
+        type: 'module',
+        overrides: opts.overrides ?? {},
+      },
       null,
       2,
     )}\n`,
@@ -206,6 +242,9 @@ export function runInConsumerProject(project, opts) {
  * @returns A promise for whether it exited zero, and a note about how it ended when it did not.
  */
 export function runChild(opts) {
+  // Once a signal has been handled, nothing new starts: a caller looping over children would
+  // otherwise spawn the next one while the handler was tidying up for exit.
+  if (stopping) return Promise.resolve({ ok: false, note: 'not started; the run was stopped' })
   return new Promise((resolve) => {
     const child = spawn(opts.command, opts.args, {
       cwd: opts.cwd,
@@ -213,15 +252,11 @@ export function runChild(opts) {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
-    const filters = [
-      { stream: child.stdout, filter: createSecretFilter(opts.redact, process.stdout) },
-      { stream: child.stderr, filter: createSecretFilter(opts.redact, process.stderr) },
-    ]
-    for (const { stream, filter } of filters) {
-      stream.on('data', (chunk) => {
-        filter.write(chunk)
-      })
-    }
+    // Piped rather than pumped by hand: `.pipe` propagates backpressure, so a child that
+    // outruns the terminal is paused instead of buffering without limit. `end: false` keeps
+    // this process's own streams open for the next child.
+    child.stdout.pipe(createSecretFilter(opts.redact)).pipe(process.stdout, { end: false })
+    child.stderr.pipe(createSecretFilter(opts.redact)).pipe(process.stderr, { end: false })
 
     // A child past its deadline has already failed, and may still hold a credential.
     let expired = false
@@ -234,16 +269,63 @@ export function runChild(opts) {
     child.on('error', (error) => {
       failure = error
     })
-    child.on('close', (status, signal) => {
-      clearTimeout(deadline)
-      for (const { filter } of filters) filter.end()
-      if (expired) {
-        resolve({ ok: false, note: `stopped after ${String(opts.timeout)}ms` })
-        return
-      }
-      resolve(describeRun({ error: failure, status, signal }))
+
+    const closed = new Promise((done) => {
+      child.on('close', (status, signal) => {
+        clearTimeout(deadline)
+        running.delete(child)
+        done(undefined)
+        if (expired) {
+          resolve({ ok: false, note: `stopped after ${String(opts.timeout)}ms` })
+          return
+        }
+        resolve(describeRun({ error: failure, status, signal }))
+      })
     })
+    running.set(child, closed)
   })
+}
+
+/**
+ * The children this process has running, so a signal handler can reach them.
+ *
+ * @type {Map<import('node:child_process').ChildProcess, Promise<undefined>>}
+ */
+const running = new Map()
+
+/** How long a child gets to stop on its own before it is killed outright. */
+const STOP_GRACE = 5_000
+
+/** Set once the run is being stopped, so no further child is spawned. */
+let stopping = false
+
+/**
+ * Kills every running child and waits for it to go.
+ *
+ * A signal sent to this process is not delivered to a child it spawned, so without this a
+ * handler would tidy up and exit while a keyed runner carried on orphaned — still holding a
+ * credential, still writing to a schema that had just been dropped. Every signal handler must
+ * await this before cleaning up anything else.
+ *
+ * @returns A promise that settles once no child is left running.
+ */
+export async function stopRunningChildren() {
+  stopping = true
+  const active = [...running.entries()]
+  if (active.length === 0) return
+  for (const [child] of active) child.kill('SIGTERM')
+
+  const allClosed = Promise.all(active.map(([, closed]) => closed))
+  let grace
+  const expiry = new Promise((wake) => {
+    grace = setTimeout(wake, STOP_GRACE)
+  })
+  await Promise.race([allClosed, expiry])
+  clearTimeout(grace)
+
+  // Whatever ignored SIGTERM does not get to outlive this process.
+  for (const [child] of active) if (running.has(child)) child.kill('SIGKILL')
+  await allClosed
 }
 
 /**

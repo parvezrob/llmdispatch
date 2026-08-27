@@ -2,13 +2,15 @@
  * Removes values a parent injected into a child from that child's output as it streams through.
  *
  * Defence in depth: runners redact what they print themselves, and this catches what they
- * never see, such as a message from a dependency. A tail of one byte less than the longest
- * secret is held back between chunks so a secret split across two of them still matches.
+ * never see, such as a message from a dependency. A tail of one character less than the
+ * longest secret is held back between chunks so a secret split across two of them still
+ * matches. It is a Transform, so piping it carries backpressure end to end.
  *
  * @module
  */
 
 import { StringDecoder } from 'node:string_decoder'
+import { Transform } from 'node:stream'
 
 /** Fixed-length replacement, so it says nothing about what it replaced. */
 const REPLACEMENT = '[redacted]'
@@ -21,42 +23,45 @@ function redactAll(text, secrets) {
 }
 
 /**
- * A writer that redacts secrets out of whatever is pushed through it.
+ * Where to cut `text` so `index` onwards is held back, never between a surrogate pair.
+ *
+ * A pair split across two writes is decoded as two lone surrogates and reaches the terminal as
+ * replacement characters, so an emoji next to the boundary would be corrupted.
+ */
+function cutBefore(text, index) {
+  if (index <= 0) return 0
+  const last = text.charCodeAt(index - 1)
+  return last >= 0xd800 && last <= 0xdbff ? index - 1 : index
+}
+
+/**
+ * A Transform that redacts secrets out of the text flowing through it.
  *
  * @param {string[]} secrets The values to remove. Empty strings are ignored.
- * @param {{ write: (text: string) => unknown }} out Where cleaned text is written.
- * @returns {{ write: (chunk: Buffer) => void, end: () => void }} `write` takes a chunk as it
- *   arrives; `end` flushes whatever is being held back and must be called once.
+ * @returns {Transform} A stream to pipe a child's output through.
  */
-export function createSecretFilter(secrets, out) {
+export function createSecretFilter(secrets) {
   const wanted = secrets.filter((secret) => secret.length > 0)
   // A decoder, so a character split across two chunks survives intact.
   const decoder = new StringDecoder('utf8')
-  if (wanted.length === 0) {
-    return {
-      write: (chunk) => {
-        out.write(decoder.write(chunk))
-      },
-      end: () => {
-        out.write(decoder.end())
-      },
-    }
-  }
-
   // Any shorter and the tail of a split secret could be emitted before the rest arrived.
-  const held = Math.max(...wanted.map((secret) => secret.length)) - 1
+  const held = wanted.length === 0 ? 0 : Math.max(...wanted.map((s) => s.length)) - 1
   let pending = ''
-  return {
-    write(chunk) {
+
+  return new Transform({
+    transform(chunk, _encoding, callback) {
       const cleaned = redactAll(pending + decoder.write(chunk), wanted)
-      const emit = cleaned.length > held ? cleaned.slice(0, cleaned.length - held) : ''
-      pending = cleaned.slice(emit.length)
-      if (emit !== '') out.write(emit)
+      const cut = cutBefore(cleaned, Math.max(cleaned.length - held, 0))
+      const emit = cleaned.slice(0, cut)
+      pending = cleaned.slice(cut)
+      if (emit === '') callback()
+      else callback(null, emit)
     },
-    end() {
+    flush(callback) {
       const rest = redactAll(pending + decoder.end(), wanted)
       pending = ''
-      if (rest !== '') out.write(rest)
+      if (rest === '') callback()
+      else callback(null, rest)
     },
-  }
+  })
 }

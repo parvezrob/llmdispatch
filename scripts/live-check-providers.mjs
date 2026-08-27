@@ -27,9 +27,11 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { buildChildEnvironment } from './lib/child-environment.mjs'
 import {
   createConsumerProject,
-  pinnedDevelopmentClosure,
+  pinnedDevelopmentOverrides,
+  pinnedDevelopmentVersion,
   runChild,
   runInConsumerProject,
+  stopRunningChildren,
 } from './lib/consumer-project.mjs'
 
 const ROOT = join(import.meta.dirname, '..')
@@ -132,7 +134,8 @@ async function main() {
           workspace,
           name: 'consumer',
           tarballPath: tarball,
-          packages: pinnedDevelopmentClosure(['zod']),
+          packages: [pinnedDevelopmentVersion('zod')],
+          overrides: pinnedDevelopmentOverrides(['zod']),
           files: [RUNNER, TOLERANCE],
         })
       : null
@@ -187,14 +190,18 @@ async function main() {
   return 0
 }
 
-/** Removes the workspace and stops when this process is interrupted. */
+/** Kills the child, removes the workspace and stops when this process is interrupted. */
 function removeOnSignal(workspace) {
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.on(signal, () => {
       process.stderr.write(`\nstopped by ${signal}; cleaning up\n`)
-      rmSync(workspace, { recursive: true, force: true })
-      // A handler replaces the default disposition, so the exit must be explicit.
-      process.exit(1)
+      // The child first: a signal to this process is not delivered to it, so a runner holding
+      // a credential would otherwise carry on orphaned.
+      void stopRunningChildren().finally(() => {
+        rmSync(workspace, { recursive: true, force: true })
+        // A handler replaces the default disposition, so the exit must be explicit.
+        process.exit(1)
+      })
     })
   }
 }

@@ -39,8 +39,10 @@ import pg from 'pg'
 
 import {
   createConsumerProject,
-  pinnedDevelopmentClosure,
+  pinnedDevelopmentOverrides,
+  pinnedDevelopmentVersion,
   runInConsumerProject,
+  stopRunningChildren,
 } from './lib/consumer-project.mjs'
 import { describeUnusableDatabase } from './lib/database-target.mjs'
 import { hashFile } from './lib/installed-package.mjs'
@@ -48,6 +50,9 @@ import { hashFile } from './lib/installed-package.mjs'
 const USAGE = 'usage: verify-release.mjs <path-to-tgz>\n'
 const RUNNER = join(import.meta.dirname, 'runners', 'release-conformance.mjs')
 const TEMPLATE = join(import.meta.dirname, 'fixtures', 'openai-chat-completion.json')
+
+/** What a project installing llmswitch has to bring: the declared peer and the driver. */
+const PEERS = ['zod', 'pg', 'pg-connection-string']
 
 /** Long enough for the suites on a cold database, short enough that a hang is a failure. */
 const CHECK_DEADLINE = 10 * 60_000
@@ -120,10 +125,14 @@ function cleanUpOnSignal() {
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.on(signal, () => {
       process.stderr.write(`\nstopped by ${signal}; cleaning up\n`)
-      void releaseWhatThisRunOwns().finally(() => {
-        // A handler replaces the default disposition, so the exit must be explicit.
-        process.exit(1)
-      })
+      // The child first: a signal to this process is not delivered to it, so dropping the
+      // schema while it is still writing to it would leave an orphan behind.
+      void stopRunningChildren()
+        .then(() => releaseWhatThisRunOwns())
+        .finally(() => {
+          // A handler replaces the default disposition, so the exit must be explicit.
+          process.exit(1)
+        })
     })
   }
 }
@@ -186,8 +195,10 @@ async function main() {
       name: 'consumer',
       tarballPath: tarball,
       // The declared peer, the driver the package does not ship, and the parser the guard
-      // above judged the connection string with — plus everything they require.
-      packages: pinnedDevelopmentClosure(['zod', 'pg', 'pg-connection-string']),
+      // above judged the connection string with. What they in turn require is pinned as
+      // overrides rather than installed, so an optional dependency stays optional.
+      packages: PEERS.map((name) => pinnedDevelopmentVersion(name)),
+      overrides: pinnedDevelopmentOverrides(PEERS),
       files: [RUNNER, TEMPLATE],
     })
 
