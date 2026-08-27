@@ -1,9 +1,11 @@
 {
   "name": "llmdispatch",
   "version": "0.1.0",
-  "description": "Route each AI operation to the right LLM — swap providers at runtime, fall back on failure, enforce per-user quotas in your own Postgres.",
+  "description": "Model-agnostic LLM routing. Pick the provider and model per operation, swap them at runtime, fall back on failure, and enforce per-user quotas in your own Postgres.",
   "keywords": [
     "llm",
+    "model-agnostic",
+    "provider-agnostic",
     "anthropic",
     "openai",
     "gemini",
