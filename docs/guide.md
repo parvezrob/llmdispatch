@@ -2,6 +2,28 @@
 
 Everything llmdispatch does past the [README](../README.md) quickstart, in roughly the order you will need it. This is the working reference. The exact contract (state machine, store protocol, wire formats) is [spec.md](./spec.md).
 
+## Input: documents and images
+
+An operation's `prompt` returns a string, or an array of **content parts** when the call needs to carry a file. A `text` part is a string; a `file` part is base64 data plus the media type it is:
+
+```ts
+review: {
+  input: z.object({ question: z.string(), invoice: z.string() }),  // invoice is base64
+  prompt: ({ question, invoice }) => [
+    { type: 'text', text: question },
+    { type: 'file', mediaType: 'application/pdf', data: invoice, filename: 'invoice.pdf' },
+  ],
+}
+```
+
+The media types are `application/pdf`, `image/jpeg`, `image/png`, `image/webp` and `image/gif`. `filename` is optional and only some providers send it on. Parts arrive at the provider in the order you return them, one wire entry each, and each adapter maps them to its own shape (spec §5c). A prompt that returns a plain string is unchanged: it becomes a single text part and the adapters send the same body they always sent.
+
+Parts are checked and frozen **before a quota slot is reserved**, so a bad part costs nothing. A malformed part — an unknown media type, base64 with whitespace or a data-URL prefix, an oversized filename — raises a `TypeError`, and more than **15,000,000 base64 characters of file data in one request** (about 11 MB decoded) raises a `RangeError`. Both are your bugs rather than llmdispatch failures, so they pass through unwrapped with no error code and no attempt record, and neither message ever quotes your file's bytes or its filename (spec §6).
+
+That cap bounds file payload only, and it is llmdispatch's own ceiling rather than a promise that the request fits a given model. Tighter provider limits — per-image byte caps, page counts, total request size — surface as that provider's own error and classify like any other (spec §5b).
+
+**There is no capability model.** llmdispatch does not know which models read PDFs or images, and will not reroute around one that doesn't: a route aimed at a model that cannot take a file part fails with that provider's own error, which typically classifies as `invalid_request` and so does not fall back, though the classification follows whatever the provider actually answers (spec §5b). Point the route at a model that can read the file.
+
 ## Output: from model text to typed data
 
 Each operation declares its `format`: `'json'` (the default, a top-level JSON object), `'json-any'` (arrays and scalars), or `'text'`. Built-in adapters enable the provider's native JSON mode when the format is a top-level object and the provider genuinely supports it (verified per provider, spec §5c). Responses are unwrapped from a whole-response code fence if present, parsed, then validated with your Zod schema (async transforms supported). A parse or validation failure is an **output rejection**: fallback-eligible, never silently returned. An optional `quality` gate runs after validation:
@@ -92,7 +114,7 @@ Routing and daily limits live in the config store, with code-declared defaults u
 
 ```ts
 await ai.getConfig()                    // authoritative: { stored, effective } per operation
-await ai.setConfig('summarize', {       // replace-only, validated, last-write-wins (late/racing writes possible cross-process; CAS is v0.2), privileged
+await ai.setConfig('summarize', {       // replace-only, validated, last-write-wins (late/racing writes possible cross-process; CAS is deferred), privileged
   provider: 'openai',                   // must be a provider ID registered in code
   model: 'gpt-4.1-mini',
   quota: { perDay: 50 },                // optional: overrides the limit declared in code
@@ -187,7 +209,7 @@ createSwitch({
 })
 ```
 
-`result.cost` is a **simple input/output-token estimate** (cached-token discounts and request fees are out of scope in v0.1, spec §7), and it's `null` whenever any dispatched attempt is unpriced or has unknown usage. Explicitly unknown, never a misleading zero.
+`result.cost` is a **simple input/output-token estimate** (cached-token discounts and request fees are out of scope, spec §7), and it's `null` whenever any dispatched attempt is unpriced or has unknown usage. Explicitly unknown, never a misleading zero.
 
 ## TypeScript
 
@@ -195,7 +217,7 @@ Inference-first: operation names are typed (`ai.run('summarize', …)` compiles,
 
 ## Compatibility
 
-- **Node.js ≥ 20**, server-side only. Browsers and edge runtimes are not supported in v0.1.
+- **Node.js ≥ 20**, server-side only. Browsers and edge runtimes are not supported.
 - **No bundled runtime dependencies.** **Zod 4** is the one required peer you install alongside it.
 - **ESM and CJS** both supported, with explicit `exports` and bundled type declarations.
 - Postgres adapter: PostgreSQL ≥ 14, bring your own pool (any object with a `query` method, so `pg` works but isn't required by llmdispatch).

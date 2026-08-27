@@ -57,8 +57,10 @@ declare function runUsageStoreConformance(opts: {
 }): Promise<ConformanceResult>;
 //#endregion
 //#region src/conformance/provider.d.ts
-/** Optional scenarios the harness can drive when the adopter supplies them. */
+/** Optional classification scenarios the harness can drive when the adopter supplies them. */
 type OptionalScenario = 'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient' | 'malformed_response' | 'truncated' | 'refused';
+/** Optional media scenarios: success-class conditions dispatching a request that carries a file. */
+type MediaScenario = 'document' | 'image';
 /** Controls that let the suite verify responseFormat and capability without guessing. */
 interface ProviderConformanceControls {
   /** Declares whether the provider under test supports native JSON mode. */
@@ -70,6 +72,7 @@ interface ProviderConformanceControls {
  * Checks a `Provider` against the behaviour spec §8 requires of one.
  *
  * `success` is mandatory. Absent optional scenarios are reported in `skipped` (unverified).
+ * A media scenario also needs its request in `requests`; either half absent and it is skipped.
  * `passed` is true exactly when `failures` is empty.
  */
 declare function runProviderConformance(opts: {
@@ -77,7 +80,8 @@ declare function runProviderConformance(opts: {
   requestFactory: () => ProviderRequest;
   scenarios: {
     success: () => Promise<void>;
-  } & Partial<Record<OptionalScenario, () => Promise<void>>>;
+  } & Partial<Record<OptionalScenario | MediaScenario, () => Promise<void>>>;
+  requests?: Partial<Record<MediaScenario, () => ProviderRequest>>;
   controls?: ProviderConformanceControls;
 }): Promise<ConformanceResult>;
 //#endregion
