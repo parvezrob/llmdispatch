@@ -1,7 +1,7 @@
 {
   "name": "llmdispatch",
   "version": "0.1.0",
-  "description": "Per-operation routing across LLM providers with fallback and daily quotas",
+  "description": "Route each AI operation to the right LLM — swap providers at runtime, fall back on failure, enforce per-user quotas in your own Postgres.",
   "keywords": [
     "llm",
     "anthropic",
@@ -55,6 +55,7 @@
   },
   "files": [
     "dist",
+    "docs/guide.md",
     "docs/providers.md",
     "docs/spec.md"
   ],
