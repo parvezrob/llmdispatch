@@ -15,12 +15,9 @@
  * @module
  */
 
-import { existsSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-/** Every subpath the manifest publishes. All three have to come from the installed copy. */
-export const SUBPATHS = ['llmswitch', 'llmswitch/postgres', 'llmswitch/conformance']
 
 /** The directory this file was copied into, which is the project that did the installing. */
 function projectDirectory() {
@@ -28,22 +25,61 @@ function projectDirectory() {
 }
 
 /**
+ * Every specifier the installed package publishes, read off its own `exports` map.
+ *
+ * Taken from the installed manifest rather than written down here: a list in this file would
+ * go on passing after an entry point had been added or renamed, and a subpath nobody checked
+ * is a subpath that could resolve anywhere. What the package says it publishes is what has to
+ * come from the installed copy.
+ *
+ * @param manifest The installed package's `package.json`, already parsed.
+ * @returns The specifiers to resolve, in manifest order.
+ * @throws `Error` when the manifest publishes nothing, or publishes a pattern that cannot be
+ * resolved as a specifier on its own.
+ */
+export function publishedSubpaths(manifest) {
+  const name = manifest.name
+  const map = manifest.exports
+  if (typeof name !== 'string' || typeof map !== 'object' || map === null) {
+    throw new Error('the installed package declares no name or no exports map')
+  }
+  const subpaths = []
+  for (const key of Object.keys(map)) {
+    if (key === '.') {
+      subpaths.push(name)
+      continue
+    }
+    if (!key.startsWith('./') || key.includes('*')) {
+      throw new Error(`the installed package exports '${key}', which this check cannot resolve`)
+    }
+    subpaths.push(`${name}${key.slice(1)}`)
+  }
+  if (subpaths.length === 0) throw new Error('the installed package publishes no entry points')
+  return subpaths
+}
+
+/**
  * Confirms every subpath resolves inside this project's own copy of the package.
  *
+ * Which subpaths those are comes from the installed manifest, so an entry point added to the
+ * package is checked here without anyone remembering to add it.
+ *
  * @returns Each subpath with the file it resolved to, in the order they were asked for.
- * @throws `Error` when the package is not installed here, when a subpath does not resolve at
- * all, or when one resolves to a file anywhere outside `node_modules/llmswitch`.
+ * @throws `Error` when the package is not installed here, when its manifest publishes nothing
+ * this check can resolve, when a subpath does not resolve at all, or when one resolves to a
+ * file anywhere outside `node_modules/llmswitch`.
  */
 export function assertInstalledPackageResolves() {
   const installed = join(projectDirectory(), 'node_modules', 'llmswitch')
   if (!existsSync(installed)) {
     throw new Error(`the package is not installed at ${installed}`)
   }
+  const manifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'))
   // Resolved paths come back with symlinks followed — a package manager that links its store
   // would otherwise compare a link against its target and reject an honest install.
   const root = realpathSync(installed)
   const resolved = []
-  for (const subpath of SUBPATHS) {
+  for (const subpath of publishedSubpaths(manifest)) {
     let url
     try {
       url = import.meta.resolve(subpath)

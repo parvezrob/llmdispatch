@@ -12,6 +12,13 @@
  * redactor, so a value that reached a message by some path nobody thought of still does not
  * reach the terminal.
  *
+ * The JSON call is asked for in a prompt on the adapters that have no other way of asking, so
+ * what comes back is a model's idea of "only this object": it may arrive in a code fence or
+ * with a sentence around it. That is tolerated — the object is taken out of the fence, or the
+ * first balanced `{…}` is read out of the text — because the claim under check is that the
+ * adapter delivers usable JSON-shaped output, not that a model can follow an instruction about
+ * whitespace. An empty object is not tolerated: it parses, and it proves nothing.
+ *
  * Usage: node live-check.mjs <provider> <model> [--release]
  * With `--release` the package is required to come from the project this runner sits in.
  * Exit codes: 0 both calls were as documented, 1 one was not, 2 wrong usage.
@@ -71,17 +78,96 @@ function checkResponse(label, response, problems) {
   }
 }
 
-/** The JSON call additionally has to produce a JSON object at the top level. */
-function checkJsonShape(text, problems) {
-  let parsed
-  try {
-    parsed = JSON.parse(text.trim())
-  } catch {
-    problems.push('the JSON call: the output did not parse as JSON')
+/**
+ * The first balanced `{…}` in a string, or `null` when there is none.
+ *
+ * Braces inside string literals are skipped, so a value like `"}"` does not close the object
+ * early. This reads one object out of surrounding prose; it is not a JSON parser, and what it
+ * finds is handed to `JSON.parse` to be judged.
+ */
+function firstBracedSpan(text) {
+  let depth = 0
+  let start = -1
+  let inString = false
+  let escaped = false
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if (character === '"') inString = true
+    else if (character === '{') {
+      if (depth === 0) start = index
+      depth += 1
+    } else if (character === '}') {
+      depth -= 1
+      if (depth === 0) return text.slice(start, index + 1)
+      if (depth < 0) return null
+    }
+  }
+  return null
+}
+
+/** The output as it might have been meant, most literal reading first. */
+function jsonCandidates(text) {
+  const trimmed = text.trim()
+  const candidates = [trimmed]
+  const fenced = /```[A-Za-z]*\n([\s\S]*?)```/.exec(trimmed)?.[1]
+  if (fenced !== undefined) candidates.push(fenced.trim())
+  const braced = firstBracedSpan(trimmed)
+  if (braced !== null) candidates.push(braced)
+  return candidates
+}
+
+/**
+ * The JSON call additionally has to produce a non-empty JSON object at the top level.
+ *
+ * Exported so the tolerance above can be held to examples in a test. Nothing else in this file
+ * is: the rest needs a provider, which is the point of the file.
+ */
+export function checkJsonShape(text, problems) {
+  let firstParsed
+  for (const candidate of jsonCandidates(text)) {
+    let value
+    try {
+      value = JSON.parse(candidate)
+    } catch {
+      continue
+    }
+    if (firstParsed === undefined) firstParsed = { value }
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
+    // An object that parses and says nothing is what comes back when a provider has given up
+    // on the request; accepting it would leave this check unable to fail.
+    if (Object.keys(value).length === 0) {
+      problems.push('the JSON call: the output was an empty object, which proves nothing')
+    }
     return
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    problems.push('the JSON call: the output parsed, but not to a JSON object')
+  problems.push(
+    firstParsed === undefined
+      ? 'the JSON call: the output did not parse as JSON, in a code fence or otherwise'
+      : 'the JSON call: the output parsed, but not to a JSON object',
+  )
+}
+
+/**
+ * Cancels the call in flight and stops when this process is asked to stop.
+ *
+ * The message names the signal and nothing else — the same rule as everywhere else in this
+ * file, since a shutdown path is no place to start printing what a request contained.
+ */
+function abortOnSignal(controller) {
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      process.stderr.write(`the live check was stopped by ${signal}\n`)
+      controller.abort()
+      // A handler replaces the default disposition, so the exit has to be explicit; a stopped
+      // check verified nothing, which is a failure.
+      process.exit(1)
+    })
   }
 }
 
@@ -133,13 +219,17 @@ async function main() {
   const prepared = await build[provider]().prepare()
 
   const problems = []
+  // One controller for the whole run, so an interrupt reaches the call in flight rather than
+  // leaving a provider answering a request nobody is waiting for any more.
+  const inFlight = new AbortController()
+  abortOnSignal(inFlight)
   const request = (prompt, responseFormat) => ({
     prompt,
     model,
     responseFormat,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     temperature: 0,
-    signal: new AbortController().signal,
+    signal: inFlight.signal,
   })
 
   try {
@@ -166,12 +256,16 @@ async function main() {
   return problems.length === 0 ? 0 : 1
 }
 
-try {
-  process.exitCode = await main()
-} catch (error) {
-  // The catch-all path has no adapter to ask, so it says only what kind of failure it was.
-  process.stderr.write(
-    `the live check could not run: ${error instanceof Error ? error.name : 'unknown failure'}\n`,
-  )
-  process.exitCode = 1
+// Only when this file is what was run. A test that imports it to check one pure function must
+// not thereby start calling a provider.
+if (process.argv[1] === import.meta.filename) {
+  try {
+    process.exitCode = await main()
+  } catch (error) {
+    // The catch-all path has no adapter to ask, so it says only what kind of failure it was.
+    process.stderr.write(
+      `the live check could not run: ${error instanceof Error ? error.name : 'unknown failure'}\n`,
+    )
+    process.exitCode = 1
+  }
 }

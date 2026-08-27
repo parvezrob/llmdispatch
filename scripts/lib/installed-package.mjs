@@ -14,12 +14,19 @@ export function hashFile(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex')
 }
 
-/** Every path under `dir`, relative and sorted, so two trees hash the same way. */
+/**
+ * Every path under `dir`, relative and sorted, so two trees hash the same way.
+ *
+ * `node_modules` is never descended into: a published tree does not contain one, and an
+ * installed tree may have been given one by the package manager. Whatever is in there belongs
+ * to some other package and says nothing about these bytes.
+ */
 function listFiles(dir, prefix, found) {
   for (const entry of readdirSync(join(dir, prefix), { withFileTypes: true })) {
     const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`
-    if (entry.isDirectory()) listFiles(dir, path, found)
-    else found.push(path)
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules') listFiles(dir, path, found)
+    } else found.push(path)
   }
   return found
 }
@@ -55,6 +62,9 @@ function entryPoints(manifest) {
   return JSON.stringify(found)
 }
 
+/** A tarball is a few hundred kilobytes; anything slower than this is not unpacking. */
+const UNPACK_DEADLINE = 60_000
+
 /**
  * Unpacks the tarball once, so each project can be compared against the bytes that were
  * supposed to be installed rather than against whatever the registry happens to hold.
@@ -62,14 +72,22 @@ function entryPoints(manifest) {
 export function unpackReference(tarballPath, workspace) {
   const reference = join(workspace, 'reference')
   mkdirSync(reference, { recursive: true })
-  execFileSync('tar', ['-xzf', tarballPath, '-C', reference], { stdio: 'inherit' })
+  // Bounded and captured rather than inherited: the tarball is an input, and an input that
+  // makes `tar` sit there or write pages of its own to the terminal is a failure to report,
+  // not something to wait through.
+  execFileSync('tar', ['-xzf', tarballPath, '-C', reference], {
+    stdio: 'pipe',
+    timeout: UNPACK_DEADLINE,
+  })
   const packageRoot = join(reference, 'package')
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
   return {
     name: manifest.name,
     version: manifest.version,
     entryPoints: entryPoints(manifest),
-    distHash: hashTree(join(packageRoot, 'dist')),
+    // Everything the tarball ships, not `dist/` alone: the licence, the readme and the
+    // packaged documents are published bytes too, and a swap in any of them is a swap.
+    treeHash: hashTree(packageRoot),
   }
 }
 
@@ -93,8 +111,7 @@ export function checkInstalledIsTheTarball(project, reference, name, problems) {
   if (entryPoints(manifest) !== reference.entryPoints) {
     problems.push(`${name}: the installed package points at different entry points`)
   }
-  const dist = join(installed, 'dist')
-  if (!existsSync(dist) || hashTree(dist) !== reference.distHash) {
-    problems.push(`${name}: the installed dist/ is not the one in the tarball`)
+  if (hashTree(installed) !== reference.treeHash) {
+    problems.push(`${name}: the installed files are not the ones in the tarball`)
   }
 }

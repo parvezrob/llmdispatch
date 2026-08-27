@@ -30,6 +30,7 @@ import { spawnSync } from 'node:child_process'
 import { buildChildEnvironment } from './lib/child-environment.mjs'
 import {
   createConsumerProject,
+  describeRun,
   pinnedDevelopmentVersion,
   runInConsumerProject,
 } from './lib/consumer-project.mjs'
@@ -53,8 +54,9 @@ const PROVIDERS = [
 
 /** Two calls to a live provider; anything beyond this is a hang, not a slow model. */
 const CHECK_DEADLINE = 2 * 60_000
-/** Enough for any plausible run; the runner prints a handful of lines. */
-const OUTPUT_LIMIT = 4 * 1024 * 1024
+
+/** The one adapter whose endpoint may be pointed elsewhere, and the name that does it. */
+const ENDPOINT_OVERRIDE = { provider: 'openai-compatible', name: 'OPENAI_BASE_URL' }
 
 /** The tarball to check against, `null` for the working tree, or a usage failure. */
 function readArguments(argv) {
@@ -74,24 +76,33 @@ function readArguments(argv) {
   return { tarball, problem: null }
 }
 
+/**
+ * The environment names one adapter's child is given, beyond the allowlist's own.
+ *
+ * Exactly one credential, and the endpoint override only where it means anything. An adapter
+ * that has no use for a name does not receive it: this is the reason each provider gets a
+ * process of its own, applied to everything in the environment rather than to keys alone.
+ */
+function childValues(descriptor) {
+  const values = { [descriptor.key]: process.env[descriptor.key] }
+  if (descriptor.name === ENDPOINT_OVERRIDE.provider) {
+    values[ENDPOINT_OVERRIDE.name] = process.env[ENDPOINT_OVERRIDE.name]
+  }
+  return values
+}
+
 /** Runs one adapter's check against the working tree's build, from the repository. */
 function checkFromWorkingTree(descriptor, home) {
+  // Streamed rather than collected: the child redacts every line it writes, so there is
+  // nothing for this process to hold back, and a call that hangs to its deadline still leaves
+  // behind whatever it managed to say.
   const result = spawnSync(process.execPath, [RUNNER, descriptor.name, descriptor.model], {
     cwd: ROOT,
-    env: buildChildEnvironment(home, {
-      [descriptor.key]: process.env[descriptor.key],
-      OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
-    }),
-    encoding: 'utf8',
-    maxBuffer: OUTPUT_LIMIT,
+    env: buildChildEnvironment(home, childValues(descriptor)),
     timeout: CHECK_DEADLINE,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'inherit', 'inherit'],
   })
-  const failure = result.error
-  return {
-    ok: failure === undefined && result.status === 0,
-    output: `${result.stdout ?? ''}${result.stderr ?? ''}${failure === undefined ? '' : `\n${failure.message}`}`,
-  }
+  return describeRun(result)
 }
 
 function main() {
@@ -114,7 +125,9 @@ function main() {
   }
 
   const workspace = mkdtempSync(join(tmpdir(), 'llmswitch-live-check-'))
+  removeOnSignal(workspace)
   const problems = []
+  let ran = 0
   try {
     const project = release
       ? createConsumerProject({
@@ -133,15 +146,13 @@ function main() {
           problems.push(`${descriptor.name}: ${descriptor.key} is not set`)
           continue
         }
-        process.stdout.write(
-          `${descriptor.name}: skipped, ${descriptor.key} is not set — this run is not ` +
-            'evidence about a release\n',
-        )
+        process.stdout.write(`${descriptor.name}: skipped, ${descriptor.key} is not set\n`)
         continue
       }
 
       // One credential per child, and only the one this adapter needs. The allowlist rejects
       // any name that is not a provider key, so this cannot quietly grow.
+      ran += 1
       const check =
         project === null
           ? checkFromWorkingTree(descriptor, workspace)
@@ -151,7 +162,7 @@ function main() {
               values: { [descriptor.key]: process.env[descriptor.key] },
               timeout: CHECK_DEADLINE,
             })
-      process.stdout.write(check.output)
+      if (check.note !== '') process.stderr.write(`${descriptor.name}: ${check.note}\n`)
       if (!check.ok) problems.push(`${descriptor.name}: the check failed`)
     }
   } catch (error) {
@@ -161,12 +172,42 @@ function main() {
   }
 
   for (const problem of problems) process.stdout.write(`${problem}\n`)
+  const total = String(PROVIDERS.length)
+  if (problems.length > 0) {
+    process.stdout.write(
+      `${String(ran)} of ${total} adapter(s) ran, ${String(problems.length)} problem(s)\n`,
+    )
+    return 1
+  }
+  // Outside release mode the count is the verdict: "none failed" is just as true of a run
+  // where every key was missing and nothing was called at all.
   process.stdout.write(
-    problems.length === 0
-      ? `${String(PROVIDERS.length)} adapter(s) considered, none failed\n`
-      : `${String(problems.length)} problem(s)\n`,
+    release
+      ? `all ${total} adapter(s) ran against their providers and passed\n`
+      : `${String(ran)} of ${total} adapter(s) ran and passed; ${String(PROVIDERS.length - ran)} ` +
+          'had no key and were skipped, so this run is not evidence about a release\n',
   )
-  return problems.length === 0 ? 0 : 1
+  return 0
 }
 
-process.exitCode = main()
+/** Removes the workspace and stops when this process is interrupted. */
+function removeOnSignal(workspace) {
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      process.stderr.write(`\nstopped by ${signal}; cleaning up\n`)
+      rmSync(workspace, { recursive: true, force: true })
+      // A handler replaces the default disposition, so the exit has to be explicit; a stopped
+      // check verified nothing, which is a failure.
+      process.exit(1)
+    })
+  }
+}
+
+try {
+  process.exitCode = main()
+} catch (error) {
+  process.stderr.write(
+    `the live check could not run: ${error instanceof Error ? error.message : 'unknown'}\n`,
+  )
+  process.exitCode = 1
+}

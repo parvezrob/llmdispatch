@@ -17,9 +17,9 @@
   // `scripts/check-types-fixtures.mjs`; compiling them here would simply report their
   // intended errors as build errors.
   //
-  // `scripts/runners` holds the checks that are copied into a throwaway project and run from
-  // there. Like the consumer fixtures they import the package by its published name and the
-  // guard by a path that only exists once they have been copied, so neither resolves from
-  // here. They are linted like every other script; only resolution is out of reach.
-  "exclude": ["scripts/runners", "test/consumers", "test/types"]
+  // `scripts/runners` is checked with everything else. Those files are copied into a throwaway
+  // project before they run, so the guard they import sits at a path that exists only there;
+  // `scripts/runners/subpath-resolution.d.mts` declares it, and the package they import by its
+  // published name resolves through this repository's own manifest.
+  "exclude": ["test/consumers", "test/types"]
 }

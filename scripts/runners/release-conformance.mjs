@@ -4,11 +4,18 @@
  * tarball. It is copied there rather than run from the repository: see `subpath-resolution`
  * for why a runner left in the working tree would prove nothing.
  *
- * What it does, in order: confirm all three subpaths resolve to the installed package, render
- * the packaged migration for a schema of this run's own and apply it, run the two store
+ * What it does, in order: confirm every published subpath resolves to the installed package,
+ * render the packaged migration for a schema of this run's own and apply it, run the two store
  * conformance suites against the installed PostgreSQL stores, and run the provider suite
- * against a fixture backend served from this process. The schema goes away afterwards whether
- * the run passed or not.
+ * against a fixture backend served from this process.
+ *
+ * The schema is named by whoever started this runner, and dropping it is that caller's job: a
+ * process that is killed cannot clean up after itself, and this one can be killed. So this
+ * runner never drops it, and the caller drops it on every path it has.
+ *
+ * The package is reached through `import`, so what runs here is its ESM build. The CommonJS
+ * build is covered elsewhere: the workflow installs the same audited tarball into consumer
+ * fixtures and reaches every entry point through `require` from there.
  *
  * Usage: node release-conformance.mjs <schema>
  * Needs `DATABASE_URL`. Exit codes: 0 everything passed, 1 something did not.
@@ -26,19 +33,8 @@ import { assertInstalledPackageResolves } from './subpath-resolution.mjs'
 
 /** The template the fixture backend answers from, copied in beside this runner. */
 const TEMPLATE = join(import.meta.dirname, 'openai-chat-completion.json')
-/** What the fixture claims to be, and what the harness's requests therefore ask for. */
-const MODEL = 'gpt-4.1-mini'
 /** Not a key and not shaped like one: the fixture only checks that it arrives verbatim. */
 const FIXTURE_KEY = 'fixture-credential-for-the-release-check'
-
-/**
- * The comment every usage-protocol statement begins with (spec §6b).
- *
- * The suite has to drive the store's clock, and the public factory takes no clock. So the pool
- * it is given recognises marked statements and substitutes their trailing parameter, which is
- * the documented convention for reaching the packaged store through an adopter-shaped pool.
- */
-const USAGE_STORE_MARKER = '/* llmswitch:usage-store */'
 
 /* ------------------------------------------------------------------ the guard ---- */
 
@@ -99,7 +95,7 @@ function renderScenario(template, scenario) {
 }
 
 /** Why a call is not one this check expects, or `null` when it is. */
-function describeUnexpected(request, rawBody) {
+function describeUnexpected(request, rawBody, model) {
   if (request.method !== 'POST') return `method ${String(request.method)}`
   if (request.url !== '/v1/chat/completions') return `path ${String(request.url)}`
   if (request.headers.authorization !== `Bearer ${FIXTURE_KEY}`) return 'credential'
@@ -109,7 +105,7 @@ function describeUnexpected(request, rawBody) {
   } catch {
     return 'body is not JSON'
   }
-  if (body?.model !== MODEL) return `model ${String(body?.model)}`
+  if (body?.model !== model) return `model ${String(body?.model)}`
   return null
 }
 
@@ -119,7 +115,11 @@ function startFixture(state) {
       const chunks = []
       request.on('data', (chunk) => chunks.push(chunk))
       request.on('end', () => {
-        const problem = describeUnexpected(request, Buffer.concat(chunks).toString('utf8'))
+        const problem = describeUnexpected(
+          request,
+          Buffer.concat(chunks).toString('utf8'),
+          state.model,
+        )
         if (problem !== null) state.unexpected.push(problem)
         const answer = renderScenario(state.template, state.scenario)
         response.writeHead(answer.status, { 'content-type': 'application/json' })
@@ -159,11 +159,15 @@ async function runStoreSuites(pool, schema) {
   const controls = controlStatements(schema)
   let pinned = null
   const drifted = []
+  // The marker comes from the installed package rather than from a copy of the string kept
+  // here: the convention is only usable by an adopter if the package publishes what to look
+  // for, and a copy would go on matching after the package had changed it.
+  const marker = installed.postgres.USAGE_STORE_MARKER
   // Strict on purpose: if the marker convention ever changed, this reports that rather than
   // quietly running the whole usage suite against the database's own clock.
   const wrapper = {
     query(sql, params) {
-      if (!sql.startsWith(USAGE_STORE_MARKER)) return pool.query(sql, params)
+      if (!sql.startsWith(marker)) return pool.query(sql, params)
       const supplied = [...(params ?? [])]
       if (supplied.length === 0) drifted.push('a usage statement carried no parameters')
       if (supplied.at(-1) !== null) drifted.push('a usage statement did not end with null')
@@ -222,7 +226,10 @@ async function runStoreSuites(pool, schema) {
 async function runProviderSuite(state, port) {
   const provider = installed.package.openaiCompatible({
     apiKey: () => Promise.resolve(FIXTURE_KEY),
-    baseUrl: `http://127.0.0.1:${String(port)}/v1`,
+    // Concatenated rather than interpolated: the scanner reads a link token out of the line
+    // and an interpolation in the middle of one leaves it something it cannot parse, which it
+    // then has to treat as an unreviewed host.
+    baseUrl: 'http://127.0.0.1:' + String(port) + '/v1',
     // The fixture answers JSON on the success path, so the suite is told to hold the adapter
     // to the native duty rather than skip it as unverified.
     jsonMode: 'native',
@@ -235,7 +242,10 @@ async function runProviderSuite(state, port) {
     provider,
     requestFactory: () => ({
       prompt: 'reply with {"ok":true}',
-      model: MODEL,
+      // The model the fixture's own recorded response names: asking for anything else would
+      // have the backend answer with a body claiming to be a different model, and the check
+      // would be proving something nobody meant.
+      model: state.model,
       responseFormat: { type: 'text' },
       maxOutputTokens: 16,
       signal: new AbortController().signal,
@@ -268,6 +278,29 @@ function report(name, result, problems) {
   }
 }
 
+/**
+ * Lets go of the database and the port when this process is asked to stop.
+ *
+ * An interrupted run must not sit on a connection to the schema its caller is about to drop,
+ * and must not keep the listening socket. The schema itself is not touched here: the caller
+ * owns it and drops it whichever way this process ended.
+ */
+function closeOnSignal(fixture, pool) {
+  let stopping = false
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      if (stopping) return
+      stopping = true
+      process.stderr.write(`the release check was stopped by ${signal}\n`)
+      fixture.server.close()
+      void pool.end().catch(() => undefined)
+      // A handler replaces the default disposition, so the exit has to be explicit; the code
+      // says the run proved nothing, which is what a stopped check did.
+      process.exit(1)
+    })
+  }
+}
+
 async function main() {
   const [schema] = process.argv.slice(2)
   if (schema === undefined) {
@@ -291,15 +324,29 @@ async function main() {
     return 1
   }
   installed = await importInstalledPackage()
+  if (typeof installed.postgres.USAGE_STORE_MARKER !== 'string') {
+    process.stderr.write('the installed package publishes no USAGE_STORE_MARKER\n')
+    return 1
+  }
 
   const problems = []
+  const template = JSON.parse(readFileSync(TEMPLATE, 'utf8'))
   const state = {
-    template: JSON.parse(readFileSync(TEMPLATE, 'utf8')),
+    template,
+    // The fixture answers with a recorded body, and that body names a model. Asking for any
+    // other one would have the backend contradict the request, so the model is read off the
+    // fixture rather than written down a second time.
+    model: template.model,
     scenario: 'success',
     unexpected: [],
   }
+  if (typeof state.model !== 'string' || state.model === '') {
+    process.stderr.write('the fixture response names no model\n')
+    return 1
+  }
   const fixture = await startFixture(state)
   const pool = new pg.Pool({ connectionString: url })
+  closeOnSignal(fixture, pool)
   try {
     const migration = installed.postgres.migrationSql({ schema })
     process.stdout.write(`migration sha256 ${migration.sha256}, schema ${schema}\n`)
@@ -316,8 +363,8 @@ async function main() {
       problems.push(`the fixture refused a provider call: ${unexpected}`)
     }
   } finally {
-    // Whatever happened above, the schema is this run's own and must not outlive it.
-    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => undefined)
+    // The schema is left standing on purpose: the caller named it and drops it, on this path
+    // and on the ones where this process never reaches here at all.
     await pool.end().catch(() => undefined)
     await new Promise((done) => fixture.server.close(() => done(undefined)))
   }

@@ -43,5 +43,23 @@ declare function migrationSql(opts?: {
   sha256: string;
 };
 //#endregion
-export { MIGRATIONS, migrationSql };
+//#region src/stores/postgres/sql.d.ts
+/**
+ * Every statement the PostgreSQL stores send, built once per schema.
+ *
+ * Each one is a single command, so the pool runs it in a transaction of its own — which is
+ * what makes a reserve atomic without the store ever pinning a connection (spec §4). Values
+ * are always bound; the only thing spliced into the text is the validated schema identifier.
+ *
+ * @module
+ */
+/**
+ * What marks a statement whose last parameter is the store's clock override.
+ *
+ * Test harnesses that can only reach the store through an adopter-shaped pool recognise the
+ * four usage statements by this prefix and substitute that trailing `null`.
+ */
+declare const USAGE_STORE_MARKER = "/* llmswitch:usage-store */";
+//#endregion
+export { MIGRATIONS, USAGE_STORE_MARKER, migrationSql };
 //# sourceMappingURL=postgres.d.ts.map

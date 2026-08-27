@@ -31,7 +31,7 @@ const OUTPUT_LIMIT = 16 * 1024 * 1024
 const INSTALL_DEADLINE = 10 * 60_000
 
 /**
- * A version this repository pins for its own development, as an install specifier.
+ * The exact version this repository has installed, as an install specifier.
  *
  * The published package has no runtime dependencies, so a project that installs it still has
  * to be given the peer it declares and any driver the check needs. Those come from here rather
@@ -39,17 +39,28 @@ const INSTALL_DEADLINE = 10 * 60_000
  * developed and tested against. A runner cannot read this itself: it runs in a project that
  * has no view of the repository's development dependencies.
  *
+ * The version comes from the lockfile, not from the manifest's range. A range would have the
+ * scratch project install whatever the registry serves that day, so two runs of the same check
+ * on the same tarball could disagree and neither would be reproducible — which is most of what
+ * a release check is for.
+ *
  * @param name The package to look up.
- * @returns `name@range`, exactly as the manifest declares it.
- * @throws `Error` when the repository does not declare it.
+ * @returns `name@version`, the one version this repository is developed against.
+ * @throws `Error` when the repository does not declare it or the lockfile does not record it.
  */
 export function pinnedDevelopmentVersion(name) {
   const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
-  const range = manifest.devDependencies?.[name]
-  if (typeof range !== 'string') {
+  if (typeof manifest.devDependencies?.[name] !== 'string') {
     throw new Error(`the repository does not declare a development version of ${name}`)
   }
-  return `${name}@${range}`
+  const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'))
+  const version = lock.packages?.[`node_modules/${name}`]?.version
+  if (typeof version !== 'string') {
+    throw new Error(
+      `package-lock.json records no installed version of ${name} — run \`npm install\``,
+    )
+  }
+  return `${name}@${version}`
 }
 
 /**
@@ -116,10 +127,17 @@ export function createConsumerProject(opts) {
  * `process.execPath` rather than a shell: the runner must be the same Node this check is
  * running under, and no argument may ever be interpreted by anything.
  *
+ * The runner's output goes straight to this process's own, as it is produced. A suite that
+ * takes minutes should be watchable while it runs rather than arriving in one block at the
+ * end, and a run that is killed at its deadline still leaves behind everything it had said up
+ * to that point — which is exactly the output that says where it stopped. Runners are written
+ * so that everything they print is safe to show: the live check redacts inside the process
+ * that holds the credential, never in its parent.
+ *
  * @param project What `createConsumerProject` returned.
  * @param opts `script` is the runner's file name in the project; `args` are its arguments;
  *   `values` are further allowlisted environment names; `timeout` bounds the run.
- * @returns Whether it exited zero, and everything it printed.
+ * @returns Whether it exited zero, and a note about how it ended when it did not.
  */
 export function runInConsumerProject(project, opts) {
   const result = spawnSync(
@@ -128,18 +146,27 @@ export function runInConsumerProject(project, opts) {
     {
       cwd: project.directory,
       env: buildChildEnvironment(project.home, opts.values),
-      encoding: 'utf8',
-      maxBuffer: OUTPUT_LIMIT,
       timeout: opts.timeout,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'inherit', 'inherit'],
     },
   )
-  // `error` covers the runner never starting, overflowing the buffer, and being stopped at
-  // the deadline. Any of those means the run proved nothing, which is a failure, not a pass.
+  return describeRun(result)
+}
+
+/**
+ * How a spawned check ended, in the two fields a caller needs.
+ *
+ * `error` covers the runner never starting and being stopped at its deadline; a signal covers
+ * it being killed. Any of those means the run proved nothing, which is a failure, not a pass.
+ *
+ * @param result What `spawnSync` returned.
+ * @returns Whether it exited zero, and a note about how it ended when it did not.
+ */
+export function describeRun(result) {
   const failure = result.error
-  const note = failure === undefined ? '' : `\n${failure.message}`
-  return {
-    ok: failure === undefined && result.status === 0,
-    output: `${result.stdout ?? ''}${result.stderr ?? ''}${note}`,
+  if (failure !== undefined) return { ok: false, note: failure.message }
+  if (result.signal !== null && result.signal !== undefined) {
+    return { ok: false, note: `stopped by ${result.signal}` }
   }
+  return { ok: result.status === 0, note: '' }
 }
