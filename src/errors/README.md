@@ -1,6 +1,6 @@
 # `src/errors`
 
-The two error classes adopters see. `LLMSwitchError` is what a classified failure raises: a
+The two error classes adopters see. `LLMDispatchError` is what a classified failure raises: a
 closed `code` union, a private constructor, and a `retryable` flag that is the literal of the
 spec §5b classification row rather than of the code — `PROVIDER_FAILED` is retryable for a
 `transient` failure and not for a `refused` one, which is why there is one typed factory per

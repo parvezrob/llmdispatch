@@ -30,17 +30,17 @@ const SCAFFOLD = join(TYPES_DIR, 'scaffold.d.ts')
 const README = join(ROOT, 'README.md')
 const USAGE = 'usage: check-types-fixtures.mjs [--target spec|package]\n'
 
-/** Where `llmswitch` and its subpaths point for each target. */
+/** Where `llmdispatch` and its subpaths point for each target. */
 const TARGETS = {
   spec: {
-    llmswitch: './spec-surface.d.ts',
-    'llmswitch/postgres': './spec-surface-postgres.d.ts',
-    'llmswitch/conformance': './spec-surface-conformance.d.ts',
+    llmdispatch: './spec-surface.d.ts',
+    'llmdispatch/postgres': './spec-surface-postgres.d.ts',
+    'llmdispatch/conformance': './spec-surface-conformance.d.ts',
   },
   package: {
-    llmswitch: '../../dist/index.d.ts',
-    'llmswitch/postgres': '../../dist/postgres.d.ts',
-    'llmswitch/conformance': '../../dist/conformance.d.ts',
+    llmdispatch: '../../dist/index.d.ts',
+    'llmdispatch/postgres': '../../dist/postgres.d.ts',
+    'llmdispatch/conformance': '../../dist/conformance.d.ts',
   },
 }
 

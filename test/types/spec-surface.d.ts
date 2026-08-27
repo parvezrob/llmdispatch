@@ -177,12 +177,12 @@ export interface UsageStore {
 export declare function memoryStores(): StorePair
 export declare function postgresStores(opts: {
   pool: { query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }> }
-  schema?: string                                        // default 'llmswitch'; validated identifier
+  schema?: string                                        // default 'llmdispatch'; validated identifier
   leaseMs?: number                                       // default 120_000; 5_000–600_000
 }): StorePair
 
 // ——— errors ———
-export declare class LLMSwitchError extends Error {
+export declare class LLMDispatchError extends Error {
   private constructor()                                  // instances come from the package; narrow on `code`
   readonly code: 'INVALID_INPUT' | 'MISSING_SUBJECT' | 'QUOTA_EXCEEDED'
     | 'USAGE_STORE_UNAVAILABLE' | 'CONFIG_STORE_UNAVAILABLE' | 'INVALID_CONFIG'

@@ -1,9 +1,9 @@
-import { LLMSwitchError } from 'llmswitch'
+import { LLMDispatchError } from 'llmdispatch'
 
 import { SummarizeBody, ai } from '../../../lib/switch'
 
 /** The mapping from the README's error table. */
-const STATUS_BY_CODE: Record<LLMSwitchError['code'], number> = {
+const STATUS_BY_CODE: Record<LLMDispatchError['code'], number> = {
   INVALID_INPUT: 400,
   MISSING_SUBJECT: 500,
   CONFIG_STORE_UNAVAILABLE: 503,
@@ -48,7 +48,7 @@ export async function POST(request: Request): Promise<Response> {
       usedFallback: result.usedFallback,
     })
   } catch (error) {
-    if (error instanceof LLMSwitchError) {
+    if (error instanceof LLMDispatchError) {
       return Response.json({ error: error.code }, { status: STATUS_BY_CODE[error.code] })
     }
     // Anything else is a bug in this application's own callbacks.

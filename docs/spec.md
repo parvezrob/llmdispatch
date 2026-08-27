@@ -1,6 +1,6 @@
-# llmswitch v0.1 — Normative Specification
+# llmdispatch v0.1 — Normative Specification
 
-This document is the exact contract for llmswitch v0.1. The [README](../README.md) is the
+This document is the exact contract for llmdispatch v0.1. The [README](../README.md) is the
 introduction; when they disagree, this spec wins. §8 defines the adopter-facing conformance
 suite; the core's own behavior (state machine, matrices, sanitization, type inference) is
 enforced by the package's internal test suite, including compile-time positive and negative
@@ -262,7 +262,7 @@ implementing exactly this.
   fallback-eligible unless `fallbackOnAuthOrModelNotFound` (§6) is on, and the flag governs
   a **primary** attempt only — it never introduces a second fallback and does not touch the
   local `INVALID_CONFIG` paths above. `detectedAt` is a property of the thrown
-  `LLMSwitchError`, never of an `AttemptRecord` (§6), and `detectedAt:'provider'` is set only
+  `LLMDispatchError`, never of an `AttemptRecord` (§6), and `detectedAt:'provider'` is set only
   when the terminal code is `INVALID_CONFIG` from the final attempt: a primary rescued by its
   fallback contributes an attempt record with outcome `auth`/`model_not_found` and the run
   raises no error at all, while a fallback that itself ends `auth`/`model_not_found` is
@@ -289,7 +289,7 @@ implementing exactly this.
 Pre-dispatch codes: `USAGE_STORE_UNAVAILABLE` / `CONFIG_STORE_UNAVAILABLE` → `true`;
 `QUOTA_EXCEEDED` → `false` (`resetsAt` carries timing); `INVALID_INPUT`,
 `MISSING_SUBJECT`, `ABORTED` → `false`; `INVALID_CONFIG` → `false` except the §5a
-transient-prepare case. `LLMSwitchError.retryable` is always the literal boolean from these
+transient-prepare case. `LLMDispatchError.retryable` is always the literal boolean from these
 tables.
 
 - Terminal code = final attempt's row; all dispatched attempts appear in
@@ -297,10 +297,10 @@ tables.
 - Fallback: at most once, only if configured, shares the run's slot.
 - Built-in adapters make exactly one client-side HTTP request per attempt: `redirect:
   'error'` on every fetch (a 3xx → `transient`; no prompt/credential ever reaches a
-  redirect target); no retries in llmswitch's own HTTP layer. (Gateway hosts may retry
+  redirect target); no retries in llmdispatch's own HTTP layer. (Gateway hosts may retry
   upstream internally — outside our boundary.)
 - **ProviderError recognition is brand-based, never bare `instanceof`**: the class carries
-  `Symbol.for('llmswitch.ProviderError')` and exposes `ProviderError.is(value)`; the core
+  `Symbol.for('llmdispatch.ProviderError')` and exposes `ProviderError.is(value)`; the core
   classifies with `.is()` so a `ProviderError` crossing ESM/CJS entry points (dual-package
   hazard) still classifies correctly.
 - Invalid usage numbers never fail a run: they normalize to `null`.
@@ -583,12 +583,12 @@ export interface UsageStore {
 export declare function memoryStores(): StorePair
 export declare function postgresStores(opts: {
   pool: { query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }> }
-  schema?: string                                        // default 'llmswitch'; validated identifier
+  schema?: string                                        // default 'llmdispatch'; validated identifier
   leaseMs?: number                                       // default 120_000; 5_000–600_000
 }): StorePair
 
 // ——— errors ———
-export declare class LLMSwitchError extends Error {
+export declare class LLMDispatchError extends Error {
   private constructor()                                  // instances come from the package; narrow on `code`
   readonly code: 'INVALID_INPUT' | 'MISSING_SUBJECT' | 'QUOTA_EXCEEDED'
     | 'USAGE_STORE_UNAVAILABLE' | 'CONFIG_STORE_UNAVAILABLE' | 'INVALID_CONFIG'
@@ -639,7 +639,7 @@ store that had to narrow the domain itself would not be substitutable.
 ## 6b. Packaged operational surfaces (exact declarations)
 
 ```ts
-// subpath: llmswitch/postgres
+// subpath: llmdispatch/postgres
 export declare const MIGRATIONS: ReadonlyArray<{
   version: number
   templateSha256: string                                  // hash of the canonical template (schema placeholder form)
@@ -653,7 +653,7 @@ export declare function migrationSql(opts?: { schema?: string }): { sql: string;
 // their trailing clock parameter (see the conformance note below).
 export declare const USAGE_STORE_MARKER: string
 
-// subpath: llmswitch/conformance
+// subpath: llmdispatch/conformance
 export interface ConformanceResult { passed: boolean; failures: string[]; skipped: string[] }
 export declare function runUsageStoreConformance(opts: {
   // create returns the store under test plus REQUIRED test controls:

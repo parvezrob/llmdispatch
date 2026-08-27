@@ -61,7 +61,7 @@ const ALLOWED_ADDRESSES = new Set(['48731060+parvezrob@users.noreply.github.com'
 const PLACEHOLDER_DOMAIN = 'exam' + 'ple.com'
 /** Repositories we link to on purpose: this one, and the tools the workflows pin. */
 const ALLOWED_REPOSITORIES = new Set([
-  'parvezrob/llmswitch',
+  'parvezrob/llmdispatch',
   'gitleaks/gitleaks',
   'actions/checkout',
   'actions/setup-node',
@@ -496,7 +496,7 @@ function buildNearMisses(root) {
   )
   write(
     'ok-repo.md',
-    'see ' + 'ht' + 'tps://' + 'git' + 'hub' + '.com/parvezrob/llmswitch' + '\n',
+    'see ' + 'ht' + 'tps://' + 'git' + 'hub' + '.com/parvezrob/llmdispatch' + '\n',
   )
   write('ok-import.ts', "import thing from './thing.js'\n")
   write(

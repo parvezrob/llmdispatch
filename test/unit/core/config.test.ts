@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { LLMSwitchError } from '../../../src/errors'
+import { LLMDispatchError } from '../../../src/errors'
 import { createSwitchCore } from '../../../src/core/create-switch'
 import type { CreateSwitchConfig, OperationsMap } from '../../../src/types'
 import {
@@ -203,8 +203,8 @@ describe('generation coherence', () => {
       )
       await f.runtime.advance(10_000)
       expect(mutation.state).toBe('rejected')
-      expect((mutation.error as LLMSwitchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
-      expect((mutation.error as LLMSwitchError).retryable).toBe(true)
+      expect((mutation.error as LLMDispatchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
+      expect((mutation.error as LLMDispatchError).retryable).toBe(true)
       await f.ai.run('echo', INPUT) // invalidated by the timeout outcome
       expect(getAllCount(f.s)).toBe(2)
       gate.resolve(undefined) // the ack lands after the deadline released the mutex
@@ -260,7 +260,7 @@ describe('generation coherence', () => {
     gate.resolve({ echo: { provider: 'p1' } }) // malformed
     await flushMicrotasks()
     expect(oldRun.state).toBe('rejected')
-    expect((oldRun.error as LLMSwitchError).code).toBe('INVALID_CONFIG')
+    expect((oldRun.error as LLMDispatchError).code).toBe('INVALID_CONFIG')
     await f.ai.run('echo', INPUT)
     expect(getAllCount(f.s)).toBe(reads) // the newer entry survived
   })
@@ -280,7 +280,7 @@ describe('the mutation mutex', () => {
     expect(f.s.set.calls.length).toBe(1) // B is queued behind the mutex
     await f.runtime.advance(8000) // A's store call reaches its deadline (10 s after it began)
     expect(a.state).toBe('rejected') // A's public promise rejects at the deadline …
-    expect((a.error as LLMSwitchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
+    expect((a.error as LLMDispatchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
     await flushMicrotasks()
     expect(f.s.set.calls.length).toBe(2) // … and B's set is observed …
     expect(b.state).toBe('pending') // … while A's store promise is still pending
@@ -291,7 +291,7 @@ describe('the mutation mutex', () => {
     expect(b.state).toBe('pending')
     await f.runtime.advance(1) // t = 20 s: 10 s after B's store call began
     expect(b.state).toBe('rejected')
-    expect((b.error as LLMSwitchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
+    expect((b.error as LLMDispatchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
     void gateA
     void gateB
   })
@@ -361,9 +361,9 @@ describe('numeric validation at createSwitch and setConfig (per-field §6 domain
     } catch (error) {
       caught = error
     }
-    expect(caught).toBeInstanceOf(LLMSwitchError)
-    expect((caught as LLMSwitchError).code).toBe('INVALID_CONFIG')
-    expect((caught as LLMSwitchError).message).toContain(field)
+    expect(caught).toBeInstanceOf(LLMDispatchError)
+    expect((caught as LLMDispatchError).code).toBe('INVALID_CONFIG')
+    expect((caught as LLMDispatchError).message).toContain(field)
   }
 
   const op = (config: Record<string, unknown>): Record<string, unknown> =>
@@ -644,7 +644,7 @@ describe('getQuota', () => {
     await flushMicrotasks()
     await f.runtime.advance(5000) // the 5 s getAll deadline
     expect(slow.state).toBe('rejected')
-    expect((slow.error as LLMSwitchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
+    expect((slow.error as LLMDispatchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
     void configGate
 
     const f2 = quotaFixture()
@@ -655,7 +655,7 @@ describe('getQuota', () => {
     expect(slow2.state).toBe('pending')
     await f2.runtime.advance(1) // the 10 s snapshot deadline, started at the snapshot call
     expect(slow2.state).toBe('rejected')
-    expect((slow2.error as LLMSwitchError).code).toBe('USAGE_STORE_UNAVAILABLE')
+    expect((slow2.error as LLMDispatchError).code).toBe('USAGE_STORE_UNAVAILABLE')
     void snapshotGate
   })
 })
@@ -713,7 +713,7 @@ describe('strict route validation at all three seats', () => {
           } as unknown as CreateSwitchConfig<OperationsMap>,
           runtime,
         ),
-      ).toThrow(LLMSwitchError)
+      ).toThrow(LLMDispatchError)
     })
 
     it(`rejects ${name} at setConfig, before any store call`, async () => {

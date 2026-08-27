@@ -3,7 +3,7 @@
  * route shape.
  *
  * Everything here answers a problem description or `null` rather than throwing: the caller
- * knows which `LLMSwitchError` its boundary mints (`INVALID_CONFIG` at `createSwitch` and
+ * knows which `LLMDispatchError` its boundary mints (`INVALID_CONFIG` at `createSwitch` and
  * `setConfig`, `INVALID_INPUT` for a `subjectId`, a malformed row for a stored route), and
  * one description per problem keeps the messages stable.
  *

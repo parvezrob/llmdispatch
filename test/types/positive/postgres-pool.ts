@@ -5,18 +5,18 @@
 // migrations come from the subpath, where the DDL stays out of an application that has none.
 import { Pool } from 'pg'
 
-import { MIGRATIONS, migrationSql } from 'llmswitch/postgres'
-import { postgresStores, type StorePair } from 'llmswitch'
+import { MIGRATIONS, migrationSql } from 'llmdispatch/postgres'
+import { postgresStores, type StorePair } from 'llmdispatch'
 
 export const stores: StorePair = postgresStores({ pool: new Pool() })
 
 export const configured: StorePair = postgresStores({
   pool: new Pool({ connectionString: process.env.DATABASE_URL }),
-  schema: 'llmswitch',
+  schema: 'llmdispatch',
   leaseMs: 60_000,
 })
 
-export const sql: string = migrationSql({ schema: 'llmswitch' }).sql
+export const sql: string = migrationSql({ schema: 'llmdispatch' }).sql
 
 export const published: { version: number; sha256: string }[] = MIGRATIONS.map((migration) => ({
   version: migration.version,

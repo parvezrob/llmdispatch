@@ -1,6 +1,6 @@
 # `src/conformance`
 
-The harnesses published under `llmswitch/conformance`. They exercise a provider, usage
+The harnesses published under `llmdispatch/conformance`. They exercise a provider, usage
 store or config store purely through its public interface and report which behaviours
 hold, so anyone can prove a custom implementation is substitutable for a built-in one.
 

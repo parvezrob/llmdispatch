@@ -1,9 +1,9 @@
 # Express example
 
-A minimal Express server with one llmswitch operation behind it.
+A minimal Express server with one llmdispatch operation behind it.
 
 - `switch.js` — the switch: one provider, one `summarize` operation, in-memory stores.
-- `server.js` — `POST /summarize`, with `LLMSwitchError` codes mapped to HTTP statuses,
+- `server.js` — `POST /summarize`, with `LLMDispatchError` codes mapped to HTTP statuses,
   and `GET /healthz`.
 
 Plain ESM JavaScript. The route is `openaiCompatible`, so it works against OpenAI or any
@@ -16,7 +16,7 @@ Nothing here is special to this repository except how the dependency is installe
 section below). In your own project it is simply:
 
 ```bash
-npm install llmswitch zod
+npm install llmdispatch zod
 ```
 
 Then copy `switch.js` and `server.js` and replace the `demo-user` subject with the user id
@@ -30,7 +30,7 @@ against the bytes that would be published. Two steps:
 ```bash
 # from the repository root
 tgz=$(npm pack --silent --pack-destination examples/express)
-mv "examples/express/$tgz" examples/express/llmswitch-local.tgz
+mv "examples/express/$tgz" examples/express/llmdispatch-local.tgz
 ```
 
 Then, in this directory:
@@ -41,7 +41,7 @@ OPENAI_API_KEY=your-key npm start
 ```
 
 The committed `package-lock.json` pins the transitive tree but records no checksum
-for `llmswitch-local.tgz`: you pack that file yourself, so its bytes are yours.
+for `llmdispatch-local.tgz`: you pack that file yourself, so its bytes are yours.
 
 ```bash
 curl -s localhost:3000/summarize \

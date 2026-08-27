@@ -1,4 +1,4 @@
-# llmswitch
+# llmdispatch
 
 **Control which LLM handles each operation in your app. Swap providers at runtime, fall back on failure, enforce per-user quotas.**
 
@@ -12,7 +12,7 @@ Apps that use AI usually have several distinct AI *operations* — parse a docum
 
 Today most codebases hard-code one provider SDK and scatter model names across the code. Changing anything means a deploy. Adding limits means building rate limiting from scratch.
 
-llmswitch gives you one place to declare your operations, and a control panel's worth of behavior behind a single function call:
+llmdispatch gives you one place to declare your operations, and a control panel's worth of behavior behind a single function call:
 
 - **Per-operation routing** — each operation gets its own provider + model: store overrides with an optional code-declared default, editable at runtime without a redeploy.
 - **Schema-validated output** — every operation declares the shape it expects (a [Zod](https://zod.dev) schema); responses are validated before you see them.
@@ -20,22 +20,22 @@ llmswitch gives you one place to declare your operations, and a control panel's 
 - **Per-user quotas** — daily limits per operation per subject, counted atomically in your database, fail-closed, and editable at runtime like a route.
 - **Usage accounting** — provider-reported token counts per attempt; cost estimates if you supply your prices.
 
-What llmswitch deliberately is **not**: it doesn't auto-pick models for you (it's a switchboard, not a brain), it doesn't proxy traffic through anyone's servers, and v0.1 is text-only — no streaming, no PDF/image input yet (both on the [roadmap](#roadmap)).
+What llmdispatch deliberately is **not**: it doesn't auto-pick models for you (it's a switchboard, not a brain), it doesn't proxy traffic through anyone's servers, and v0.1 is text-only — no streaming, no PDF/image input yet (both on the [roadmap](#roadmap)).
 
 ## Quickstart
 
 Two packages. That's the whole install — built-in adapters are plain-`fetch`, **zero vendor SDKs**:
 
 ```bash
-npm install llmswitch zod
+npm install llmdispatch zod
 ```
 
-Any package manager works — `pnpm add llmswitch zod` or `yarn add llmswitch zod`.
+Any package manager works — `pnpm add llmdispatch zod` or `yarn add llmdispatch zod`.
 
 The snippet uses top-level `await`, so it needs an ESM project. In a fresh directory, run `npm pkg set type=module` first, or save the file as `.mts`.
 
 ```ts
-import { createSwitch, defineOperation, defineOperations, anthropic, openaiCompatible, memoryStores } from 'llmswitch'
+import { createSwitch, defineOperation, defineOperations, anthropic, openaiCompatible, memoryStores } from 'llmdispatch'
 import { z } from 'zod'
 
 const ai = createSwitch({
@@ -111,7 +111,7 @@ The exact pipeline is spec §3.
 
 ## Errors
 
-Classified llmswitch failures throw `LLMSwitchError` with a stable `code` (exceptions from *your own* callbacks pass through raw — see below):
+Classified llmdispatch failures throw `LLMDispatchError` with a stable `code` (exceptions from *your own* callbacks pass through raw — see below):
 
 | Code | Meaning | Retryable | Sensible HTTP |
 | --- | --- | --- | --- |
@@ -125,9 +125,9 @@ Classified llmswitch failures throw `LLMSwitchError` with a stable `code` (excep
 | `PROVIDER_FAILED` | the final attempt failed at the provider level (see `error.attempts` for the full path) | per final classification (spec §5b) | 502 |
 | `OUTPUT_REJECTED` | the final attempt's output failed schema/quality validation, or was truncated by a token limit | yes | 502 |
 
-The table is ordered: pre-dispatch checks run top-to-bottom (config before quota — a misconfigured operation never consumes quota). One nuance for an operation whose *code* declares no quota and gets one only from its route: llmswitch can't know it is quota'd until config resolves, so for that case `CONFIG_STORE_UNAVAILABLE`/`INVALID_CONFIG` surfaces before `MISSING_SUBJECT`. An operation that declares a quota in code keeps the early check even when a route overrides the number. For post-dispatch failures the code reflects the **final attempt's** classification, with every attempt detailed in `error.attempts` (including token usage of failed runs). A fallback attempt can itself end in `INVALID_CONFIG` or `ABORTED` — the terminal-code mapping is spec §5b.
+The table is ordered: pre-dispatch checks run top-to-bottom (config before quota — a misconfigured operation never consumes quota). One nuance for an operation whose *code* declares no quota and gets one only from its route: llmdispatch can't know it is quota'd until config resolves, so for that case `CONFIG_STORE_UNAVAILABLE`/`INVALID_CONFIG` surfaces before `MISSING_SUBJECT`. An operation that declares a quota in code keeps the early check even when a route overrides the number. For post-dispatch failures the code reflects the **final attempt's** classification, with every attempt detailed in `error.attempts` (including token usage of failed runs). A fallback attempt can itself end in `INVALID_CONFIG` or `ABORTED` — the terminal-code mapping is spec §5b.
 
-**`LLMSwitchError`'s package-owned fields are sanitized by design**: classifications, HTTP status codes, safe metadata — never prompts, model output, or raw provider errors from a dispatched attempt. One deliberate pass-through: a pre-dispatch error may chain the underlying store or `prepare()` failure as `cause`, verbatim — your own thrown error, or a provider adapter's readiness failure; do not treat that `cause` as sanitized. Exceptions thrown by *your own* code (prompt builder, quality gate, schema transforms) pass through unwrapped; they're your bugs to see in full.
+**`LLMDispatchError`'s package-owned fields are sanitized by design**: classifications, HTTP status codes, safe metadata — never prompts, model output, or raw provider errors from a dispatched attempt. One deliberate pass-through: a pre-dispatch error may chain the underlying store or `prepare()` failure as `cause`, verbatim — your own thrown error, or a provider adapter's readiness failure; do not treat that `cause` as sanitized. Exceptions thrown by *your own* code (prompt builder, quality gate, schema transforms) pass through unwrapped; they're your bugs to see in full.
 
 ## When fallback fires
 
@@ -147,7 +147,7 @@ One fallback route per operation, one retry, decided by failure *classification*
 
 `fallbackOnAuthOrModelNotFound: true` on `createSwitch` (off by default) lets a *primary* attempt that dies on bad credentials or an unrecognized model name fall back anyway — availability over noise, when a stale key shouldn't take an operation down. It's off by default because a broken route is worth finding out about immediately, rather than paying another provider to hide it, and it changes nothing else: when the fallback *also* dies on credentials or an unknown model the terminal code is still `INVALID_CONFIG`, and otherwise the final attempt's own classification decides it, as always (spec §5b).
 
-Built-in adapters make exactly one client-side HTTP request per attempt — no retries in llmswitch's own HTTP layer, so `timeoutMs` and `attempts[]` mean what they say (a gateway host may retry upstream internally; that's outside our boundary). Truncated responses and provider refusals are detected from termination metadata (`finish_reason`/`stop_reason`), never passed off as good data — truncation falls back, refusals don't. Timeouts and caller cancellation are classified by llmswitch itself, not the adapter: a timeout is retry-worthy, a caller who hung up is not.
+Built-in adapters make exactly one client-side HTTP request per attempt — no retries in llmdispatch's own HTTP layer, so `timeoutMs` and `attempts[]` mean what they say (a gateway host may retry upstream internally; that's outside our boundary). Truncated responses and provider refusals are detected from termination metadata (`finish_reason`/`stop_reason`), never passed off as good data — truncation falls back, refusals don't. Timeouts and caller cancellation are classified by llmdispatch itself, not the adapter: a timeout is retry-worthy, a caller who hung up is not.
 
 ```ts
 operations: { summarize: { /* ... */ timeoutMs: 60_000 } }   // provider I/O timeout per attempt; default 60s
@@ -159,7 +159,7 @@ await ai.run('summarize', { input, subjectId }, { signal: controller.signal })
 Limits are per operation, per `subjectId`, per UTC day — and the *store's* clock owns the day boundary. A limit can be declared in code and overridden at runtime from the config store, exactly like a route ([Runtime config](#runtime-config)). The accounting unit is one **run**: a run and its fallback attempt share one slot. Lifecycle (spec §4 has the exact store contract):
 
 1. **Reserve** — after config checks pass, one slot is atomically reserved. Over the limit → `QUOTA_EXCEEDED`, nothing dispatched.
-2. **Commit** — an idempotent, confirmed transition immediately before the first provider request. **Committed slots are never refunded** — a run that reaches a provider counts even if it fails, because refunding failures would let a failing user burn unlimited provider spend. llmswitch never dispatches without a confirmed commit.
+2. **Commit** — an idempotent, confirmed transition immediately before the first provider request. **Committed slots are never refunded** — a run that reaches a provider counts even if it fails, because refunding failures would let a failing user burn unlimited provider spend. llmdispatch never dispatches without a confirmed commit.
 3. **Expire** — a reservation that never commits (crash before dispatch) expires after its lease and frees the slot — safe, because no provider was called.
 4. **Settle** — attempt records are written idempotently, best-effort with bounded retries and an `onSettlementError` hook. Settlement is accounting only: quota correctness was fixed at commit, and a settlement failure never changes an otherwise successful outcome (the initial write may delay delivery by up to its 10s deadline in the worst case).
 
@@ -199,24 +199,24 @@ The rules, stated plainly:
 - **Config can only reference registered provider IDs**, and secrets never enter the store. With built-in adapters, a tampered row can misroute among *your* registered endpoints but cannot redirect traffic to an arbitrary attacker URL. Scope honestly: for gateway-style providers (e.g. OpenRouter) the model string itself selects downstream infrastructure — protect store write access like the privileged surface it is.
 - Rows are **validated on every read**; a malformed row fails its own operation (`INVALID_CONFIG`) without poisoning others.
 - `defaultRoute` applies **only when a successful store read finds no row** — never as an outage fallback. Expired cache + unreachable store = `CONFIG_STORE_UNAVAILABLE`, fail-closed, so an outage can't silently undo an operator's route switch. Full resolution matrix: spec §2.
-- Reads are cached per process (default 5s, `configTtlMs`), and a change — to a route or a limit — reaches another instance when that instance's cached entry expires and it re-reads. This is not an upper bound: an instance that read just before your write can keep serving the old value for one more TTL after that read finishes, and how fast your write becomes visible to other instances' reads is your store's business, not llmswitch's. Your own process sees its own writes immediately. In-flight runs always finish on the route and limit they resolved with.
+- Reads are cached per process (default 5s, `configTtlMs`), and a change — to a route or a limit — reaches another instance when that instance's cached entry expires and it re-reads. This is not an upper bound: an instance that read just before your write can keep serving the old value for one more TTL after that read finishes, and how fast your write becomes visible to other instances' reads is your store's business, not llmdispatch's. Your own process sees its own writes immediately. In-flight runs always finish on the route and limit they resolved with.
 
 ## Stores
 
 Two interfaces; implement them for any database, or use the built-in pairs:
 
 ```ts
-import { memoryStores, postgresStores } from 'llmswitch'
+import { memoryStores, postgresStores } from 'llmdispatch'
 
 stores: memoryStores()                                 // dev & tests — resets on restart
-stores: postgresStores({ pool, schema: 'llmswitch' })  // production — plain SQL, bring your own pg.Pool
+stores: postgresStores({ pool, schema: 'llmdispatch' })  // production — plain SQL, bring your own pg.Pool
 ```
 
-`postgresStores` ships a versioned SQL migration (you run it — llmswitch never touches your schema on its own) and uses single-statement atomic operations, safe under concurrency. The exact `ConfigStore`/`UsageStore` contracts — including the idempotent commit protocol and lease semantics — are spec §4 and §6, and a **conformance test suite** ships with the package: passing it verifies your custom adapter against every executed case, concurrency included — check its `skipped` list, because scenarios you don't supply are unverified, not passed.
+`postgresStores` ships a versioned SQL migration (you run it — llmdispatch never touches your schema on its own) and uses single-statement atomic operations, safe under concurrency. The exact `ConfigStore`/`UsageStore` contracts — including the idempotent commit protocol and lease semantics — are spec §4 and §6, and a **conformance test suite** ships with the package: passing it verifies your custom adapter against every executed case, concurrency included — check its `skipped` list, because scenarios you don't supply are unverified, not passed.
 
 The pool you hand it must run at `READ COMMITTED`, which is PostgreSQL's default: that is the level the single-statement reserve is built for, and under `REPEATABLE READ` or `SERIALIZABLE` two concurrent reserves abort with a serialization failure (surfaced as the usage store being unavailable) instead of one of them being cleanly denied.
 
-Applying the schema is your job, not the library's: `migrationSql()` from `llmswitch/postgres` returns the SQL and its sha256, and you run it with whatever tool you already use, in a schema dedicated to llmswitch. Re-running the same file is safe — every statement is idempotent, so "apply twice" and "re-run after a failure" are the same operation — and a *different* version-1 template is refused by the version record at the end of the file. The file carries no transaction control of its own, though, because migration tools differ on whether they supply theirs: a tool that commits statement by statement leaves the earlier DDL in place when that final record is the thing that conflicts, and re-running the same file is what completes a partial apply.
+Applying the schema is your job, not the library's: `migrationSql()` from `llmdispatch/postgres` returns the SQL and its sha256, and you run it with whatever tool you already use, in a schema dedicated to llmdispatch. Re-running the same file is safe — every statement is idempotent, so "apply twice" and "re-run after a failure" are the same operation — and a *different* version-1 template is refused by the version record at the end of the file. The file carries no transaction control of its own, though, because migration tools differ on whether they supply theirs: a tool that commits statement by statement leaves the earlier DDL in place when that final record is the thing that conflicts, and re-running the same file is what completes a partial apply.
 
 Apply the whole rendered file in one transaction on one connection, which is also what makes an advisory lock cover the DDL rather than just the call that took it:
 
@@ -228,12 +228,12 @@ COMMIT;
 ```
 
 ```ts
-import { migrationSql } from 'llmswitch/postgres'
+import { migrationSql } from 'llmdispatch/postgres'
 
-const { sql } = migrationSql({ schema: 'llmswitch' })   // your migration tool runs this
+const { sql } = migrationSql({ schema: 'llmdispatch' })   // your migration tool runs this
 ```
 
-Whatever store you write it against, the strings llmswitch hands a store — operation names, provider IDs, models, subject IDs, reservation IDs — are well-formed Unicode, free of U+0000, and at most 1 000 bytes of UTF-8, checked before every store call, so any relational backend can hold them verbatim (spec §6).
+Whatever store you write it against, the strings llmdispatch hands a store — operation names, provider IDs, models, subject IDs, reservation IDs — are well-formed Unicode, free of U+0000, and at most 1 000 bytes of UTF-8, checked before every store call, so any relational backend can hold them verbatim (spec §6).
 
 ## Providers
 
@@ -245,12 +245,12 @@ Whatever store you write it against, the strings llmswitch hands a store — ope
 
 Built-in adapters are **zero-dependency**: plain `fetch` against pinned API versions (with redirects disabled — exactly one HTTP request per attempt), no vendor SDKs to install, ever. They're ordinary implementations of the same public `Provider` interface, including its optional `prepare()` readiness hook — nothing built-in has special powers, so the package stays provider-agnostic by construction.
 
-Why two native adapters instead of routing everything through OpenAI-compatibility layers? Because we verified the compat layers break exactly what llmswitch depends on: Anthropic's compat endpoint ignores `response_format` entirely (no JSON mode) and is documented by Anthropic as a testing tool, and Gemini's is beta with token totals that silently include unitemized "thinking" tokens — which would corrupt cost tracking. The exact wire contracts and error mappings for all three adapters are spec §5c, with sources — also published as a per-adapter reference in [docs/providers.md](./docs/providers.md).
+Why two native adapters instead of routing everything through OpenAI-compatibility layers? Because we verified the compat layers break exactly what llmdispatch depends on: Anthropic's compat endpoint ignores `response_format` entirely (no JSON mode) and is documented by Anthropic as a testing tool, and Gemini's is beta with token totals that silently include unitemized "thinking" tokens — which would corrupt cost tracking. The exact wire contracts and error mappings for all three adapters are spec §5c, with sources — also published as a per-adapter reference in [docs/providers.md](./docs/providers.md).
 
 Custom providers implement one required method (plus an optional `prepare()` readiness hook) and classify their failures with `ProviderError` — the classification is what drives the fallback matrix. Full contract and types: spec §5–6.
 
 ```ts
-import { ProviderError, type Provider } from 'llmswitch'
+import { ProviderError, type Provider } from 'llmdispatch'
 
 const myProvider: Provider = {
   async complete(req) {
@@ -280,14 +280,14 @@ createSwitch({
 
 ## TypeScript
 
-Inference-first: operation names are typed (`ai.run('summarize', …)` compiles, `ai.run('sumarize', …)` doesn't), `input` checks against the operation's input schema, and `result.data` is the output schema's inferred type. All public types — `Provider`, `ProviderError`, `ConfigStore`, `UsageStore`, `LLMSwitchError`, `OperationDefinition` — are exported and specified in spec §6.
+Inference-first: operation names are typed (`ai.run('summarize', …)` compiles, `ai.run('sumarize', …)` doesn't), `input` checks against the operation's input schema, and `result.data` is the output schema's inferred type. All public types — `Provider`, `ProviderError`, `ConfigStore`, `UsageStore`, `LLMDispatchError`, `OperationDefinition` — are exported and specified in spec §6.
 
 ## Compatibility
 
 - **Node.js ≥ 20**, server-side only. Browsers and edge runtimes are not supported in v0.1.
 - **No bundled runtime dependencies** — **Zod 4** is the one required peer you install alongside it.
 - **ESM and CJS** both supported, with explicit `exports` and bundled type declarations.
-- Postgres adapter: PostgreSQL ≥ 14, bring your own pool (any object with a `query` method — `pg` works, but isn't required by llmswitch).
+- Postgres adapter: PostgreSQL ≥ 14, bring your own pool (any object with a `query` method — `pg` works, but isn't required by llmdispatch).
 
 ## Using it in your framework
 
@@ -303,7 +303,7 @@ export async function POST(req: Request) {
     const result = await ai.run('summarize', { input: parsed.data, subjectId: userId })
     return Response.json(result.data)
   } catch (err) {
-    return toHttpResponse(err)                     // map LLMSwitchError codes as in the Errors table
+    return toHttpResponse(err)                     // map LLMDispatchError codes as in the Errors table
   }
 }
 ```

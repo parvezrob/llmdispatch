@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import type { LLMSwitchError } from '../../../src/errors'
+import type { LLMDispatchError } from '../../../src/errors'
 import { ProviderError } from '../../../src/errors'
 import type { OperationsMap, ProviderResponse } from '../../../src/types'
 import {
@@ -27,7 +27,7 @@ interface Row {
   name: string
   arrange: (f: ReturnType<typeof fixture>, which: 'p1' | 'p2') => void
   outcome: string
-  code: LLMSwitchError['code']
+  code: LLMDispatchError['code']
   retryable: boolean
   fallback: boolean
 }
@@ -217,7 +217,7 @@ describe('read-once TOCTOU defence', () => {
     let kindReads = 0
     let statusReads = 0
     const value = { message: 'shifty' } as Record<PropertyKey, unknown>
-    value[Symbol.for('llmswitch.ProviderError')] = true
+    value[Symbol.for('llmdispatch.ProviderError')] = true
     Object.defineProperty(value, 'kind', {
       enumerable: true,
       get(): unknown {

@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { LLMSwitchError, ProviderError } from '../../../src/errors'
+import { LLMDispatchError, ProviderError } from '../../../src/errors'
 import type {
   AttemptOutcome,
   OperationsMap,
@@ -120,7 +120,7 @@ function classify(outcome: AttemptOutcome): RowClass {
 interface FailureRow {
   outcome: AttemptOutcome
   eligible: boolean
-  code: LLMSwitchError['code']
+  code: LLMDispatchError['code']
   retryable: boolean
   detectedAt?: 'provider'
   arrange: (f: Fixture, which: 'p1' | 'p2') => void
@@ -263,9 +263,9 @@ async function landAttempt(f: Fixture, row: FailureRow): Promise<void> {
   await flushMicrotasks()
 }
 
-function asSwitchError(error: unknown, code: LLMSwitchError['code']): LLMSwitchError {
-  expect(error).toBeInstanceOf(LLMSwitchError)
-  const typed = error as LLMSwitchError
+function asSwitchError(error: unknown, code: LLMDispatchError['code']): LLMDispatchError {
+  expect(error).toBeInstanceOf(LLMDispatchError)
+  const typed = error as LLMDispatchError
   expect(typed.code).toBe(code)
   return typed
 }

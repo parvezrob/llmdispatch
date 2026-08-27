@@ -3,7 +3,7 @@
  * installed the package.
  *
  * A checkout of this package resolves its own name: the manifest's `name` together with its
- * `exports` makes `llmswitch/postgres` reach `dist/` from any file inside the working tree.
+ * `exports` makes `llmdispatch/postgres` reach `dist/` from any file inside the working tree.
  * A verification runner left in the repository would therefore import the tree it is meant to
  * be judging and report a pass with the tarball never involved. So the runner and this module
  * are copied into the scratch project, next to the `node_modules` the tarball was installed
@@ -60,10 +60,10 @@ export function publishedSubpaths(manifest) {
  * @returns Each subpath with the file it resolved to, in the order they were asked for.
  * @throws `Error` when the package is not installed here, when its manifest publishes nothing
  * this check can resolve, when a subpath does not resolve at all, or when one resolves to a
- * file anywhere outside `node_modules/llmswitch`.
+ * file anywhere outside `node_modules/llmdispatch`.
  */
 export function assertInstalledPackageResolves() {
-  const installed = join(projectDirectory(), 'node_modules', 'llmswitch')
+  const installed = join(projectDirectory(), 'node_modules', 'llmdispatch')
   if (!existsSync(installed)) {
     throw new Error(`the package is not installed at ${installed}`)
   }

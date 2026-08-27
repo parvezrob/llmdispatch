@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { LLMSwitchError } from '../../../src/errors'
+import { LLMDispatchError } from '../../../src/errors'
 import type { OperationsMap, ProviderResponse } from '../../../src/types'
 import {
   expectCode,
@@ -224,7 +224,7 @@ describe('the quality gate', () => {
         caught = error
       }
       expect(caught).toBeInstanceOf(TypeError)
-      expect(caught).not.toBeInstanceOf(LLMSwitchError)
+      expect(caught).not.toBeInstanceOf(LLMDispatchError)
       expect((caught as TypeError).message).toContain('malformed verdict')
       expect(f.s.settle.calls.length).toBe(1) // settled before the throw reached the caller
       expect(f.s.settle.calls[0]![1]).toBe('failed')
@@ -365,7 +365,7 @@ describe('request forwarding', () => {
     await f.runtime.advance(1)
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).attempts?.map((a) => a.outcome)).toEqual([
+    expect((run.error as LLMDispatchError).attempts?.map((a) => a.outcome)).toEqual([
       'timeout',
       'timeout',
     ])

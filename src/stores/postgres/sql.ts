@@ -14,7 +14,7 @@
  * Test harnesses that can only reach the store through an adopter-shaped pool recognise the
  * four usage statements by this prefix and substitute that trailing `null`.
  */
-export const USAGE_STORE_MARKER = '/* llmswitch:usage-store */'
+export const USAGE_STORE_MARKER = '/* llmdispatch:usage-store */'
 
 /** The four statements of the usage protocol. */
 export interface UsageStatements {

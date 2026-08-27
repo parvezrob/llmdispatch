@@ -1,24 +1,24 @@
 // An ES module: TypeScript must reach the `import` declarations of every entry point.
 import { Pool } from 'pg'
 
-import * as conformance from 'llmswitch/conformance'
-import * as postgres from 'llmswitch/postgres'
-import * as root from 'llmswitch'
+import * as conformance from 'llmdispatch/conformance'
+import * as postgres from 'llmdispatch/postgres'
+import * as root from 'llmdispatch'
 import {
-  LLMSwitchError,
+  LLMDispatchError,
   ProviderError,
   memoryStores,
   postgresStores,
   type OperationRoute,
   type StorePair,
-} from 'llmswitch'
+} from 'llmdispatch'
 
 export const reached = [root, postgres, conformance].length
 
 // The codes are a closed set, and this is what says so from outside the package: every one
 // of them is handled, and the `never` in the default arm refuses anything that is not on
 // the list. A code added to — or removed from — the union stops this file compiling.
-export function httpStatus(error: LLMSwitchError): number {
+export function httpStatus(error: LLMDispatchError): number {
   switch (error.code) {
     case 'INVALID_INPUT':
       return 400
@@ -47,7 +47,7 @@ export function httpStatus(error: LLMSwitchError): number {
 // not a discriminated union — so it is still `string | undefined` after this narrowing, and
 // the caller has to say what to do when it is absent.
 export function retryAfter(error: unknown): string | null {
-  if (error instanceof LLMSwitchError && error.code === 'QUOTA_EXCEEDED') {
+  if (error instanceof LLMDispatchError && error.code === 'QUOTA_EXCEEDED') {
     return error.resetsAt ?? null
   }
   return null
@@ -69,6 +69,6 @@ export async function reserveOne(): Promise<string | null> {
 
 // The driver pool an adopter already has, handed to the store factory as it is: no cast, no
 // adapter, no widening. This is the one claim only a real `pg` install can make.
-export const production: StorePair = postgresStores({ pool: new Pool(), schema: 'llmswitch' })
+export const production: StorePair = postgresStores({ pool: new Pool(), schema: 'llmdispatch' })
 
-export const migration: string = postgres.migrationSql({ schema: 'llmswitch' }).sql
+export const migration: string = postgres.migrationSql({ schema: 'llmdispatch' }).sql

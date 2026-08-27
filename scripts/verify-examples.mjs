@@ -63,8 +63,8 @@ const MODEL = 'gpt-4.1-mini'
 /** Not a key and not shaped like one: the fixture only checks that it arrives verbatim. */
 const FIXTURE_KEY = 'fixture-credential-for-the-examples-harness'
 /** How every example must declare the package, and how its lockfile must resolve it. */
-const LOCAL_SPEC = 'file:./llmswitch-local.tgz'
-const LOCAL_RESOLVED = 'file:llmswitch-local.tgz'
+const LOCAL_SPEC = 'file:./llmdispatch-local.tgz'
+const LOCAL_RESOLVED = 'file:llmdispatch-local.tgz'
 
 /** One per stage, so a slow install and a hung server fail as different things. */
 const DEADLINES = {
@@ -576,27 +576,27 @@ function checkLockfileShape(lockfile, name, problems) {
     problems.push(`${name}: package-lock.json has no package tree`)
     return false
   }
-  const local = packages['node_modules/llmswitch']
+  const local = packages['node_modules/llmdispatch']
   if (local === undefined) {
-    problems.push(`${name}: package-lock.json does not install llmswitch at the tree root`)
+    problems.push(`${name}: package-lock.json does not install llmdispatch at the tree root`)
     return false
   }
   // Where the package comes from, not just where it lands. Dropping the checksum below is
   // only safe because the source is this file: a lockfile edited to name a registry copy
   // would have no checksum either, and would otherwise walk straight through that waiver.
-  if (packages['']?.dependencies?.llmswitch !== LOCAL_SPEC) {
-    problems.push(`${name}: package.json must depend on llmswitch as '${LOCAL_SPEC}'`)
+  if (packages['']?.dependencies?.llmdispatch !== LOCAL_SPEC) {
+    problems.push(`${name}: package.json must depend on llmdispatch as '${LOCAL_SPEC}'`)
     return false
   }
   if (local.resolved !== LOCAL_RESOLVED) {
     problems.push(
-      `${name}: package-lock.json resolves llmswitch from ${String(local.resolved)}, ` +
+      `${name}: package-lock.json resolves llmdispatch from ${String(local.resolved)}, ` +
         `not the packed tarball at ${LOCAL_RESOLVED}`,
     )
     return false
   }
   if (local.link === true) {
-    problems.push(`${name}: package-lock.json links llmswitch rather than unpacking it`)
+    problems.push(`${name}: package-lock.json links llmdispatch rather than unpacking it`)
     return false
   }
   // The local tarball is packed fresh for every run, so no committed checksum can describe
@@ -605,7 +605,7 @@ function checkLockfileShape(lockfile, name, problems) {
   // tarball itself — which only holds while nothing else can supply the package.
   if (local.integrity !== undefined) {
     problems.push(
-      `${name}: package-lock.json records a checksum for llmswitch-local.tgz — ` +
+      `${name}: package-lock.json records a checksum for llmdispatch-local.tgz — ` +
         'regenerate it and drop that field, or no packed tarball but that one will install',
     )
     return false
@@ -619,8 +619,10 @@ function checkLockfileShape(lockfile, name, problems) {
     }
   }
   for (const path of Object.keys(packages)) {
-    if (path !== 'node_modules/llmswitch' && path.endsWith('/llmswitch')) {
-      problems.push(`${name}: package-lock.json installs a second copy of llmswitch at ${path}`)
+    if (path !== 'node_modules/llmdispatch' && path.endsWith('/llmdispatch')) {
+      problems.push(
+        `${name}: package-lock.json installs a second copy of llmdispatch at ${path}`,
+      )
       return false
     }
   }
@@ -655,7 +657,7 @@ function assembleProject(descriptor, workspace, tarball, problems) {
   const lockfile = JSON.parse(readFileSync(join(project, 'package-lock.json'), 'utf8'))
   if (!checkLockfileShape(lockfile, descriptor.name, problems)) return null
 
-  copyFileSync(tarball, join(project, 'llmswitch-local.tgz'))
+  copyFileSync(tarball, join(project, 'llmdispatch-local.tgz'))
   return project
 }
 
@@ -926,7 +928,7 @@ async function main() {
     }
   }
 
-  const workspace = mkdtempSync(join(tmpdir(), 'llmswitch-examples-'))
+  const workspace = mkdtempSync(join(tmpdir(), 'llmdispatch-examples-'))
   shutdown.directories.add(workspace)
   const problems = []
   try {

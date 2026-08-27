@@ -15,9 +15,9 @@
     // first — it has not in CI, where typecheck runs before build. Pointed at the sources
     // instead, which are what `dist/` is generated from.
     "paths": {
-      "llmswitch": ["./src/index.ts"],
-      "llmswitch/postgres": ["./src/postgres.ts"],
-      "llmswitch/conformance": ["./src/conformance.ts"]
+      "llmdispatch": ["./src/index.ts"],
+      "llmdispatch/postgres": ["./src/postgres.ts"],
+      "llmdispatch/conformance": ["./src/conformance.ts"]
     }
   },
   "include": ["test", "scripts", "*.config.ts", "eslint.config.js"],

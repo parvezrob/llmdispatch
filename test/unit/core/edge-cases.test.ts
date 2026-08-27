@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { AbortRaceLost, raceWithAbort } from '../../../src/core/abort'
 import { createSwitchCore } from '../../../src/core/create-switch'
 import { normalizeUsage } from '../../../src/core/usage'
-import { LLMSwitchError } from '../../../src/errors'
+import { LLMDispatchError } from '../../../src/errors'
 import type { OperationsMap } from '../../../src/types'
 import {
   expectCode,
@@ -124,9 +124,9 @@ describe('the remaining createSwitch shape checks', () => {
     } catch (error) {
       caught = error
     }
-    expect(caught).toBeInstanceOf(LLMSwitchError)
-    expect((caught as LLMSwitchError).code).toBe('INVALID_CONFIG')
-    expect((caught as LLMSwitchError).message).toContain('config')
+    expect(caught).toBeInstanceOf(LLMDispatchError)
+    expect((caught as LLMDispatchError).code).toBe('INVALID_CONFIG')
+    expect((caught as LLMDispatchError).message).toContain('config')
   })
 
   function build(config: Record<string, unknown>): () => unknown {
@@ -244,9 +244,9 @@ describe('the remaining createSwitch shape checks', () => {
       } catch (error) {
         caught = error
       }
-      expect(caught).toBeInstanceOf(LLMSwitchError)
-      expect((caught as LLMSwitchError).code).toBe('INVALID_CONFIG')
-      expect((caught as LLMSwitchError).message).toContain(field)
+      expect(caught).toBeInstanceOf(LLMDispatchError)
+      expect((caught as LLMDispatchError).code).toBe('INVALID_CONFIG')
+      expect((caught as LLMDispatchError).message).toContain(field)
     })
   }
 })

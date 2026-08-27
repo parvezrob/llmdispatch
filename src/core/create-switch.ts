@@ -209,7 +209,7 @@ function validateOperation(
  * Pure wiring plus §6 validation; no store is called and no provider is prepared here.
  * Internal — the public `createSwitch` in the root entry supplies the real runtime.
  *
- * @throws `LLMSwitchError` with code `INVALID_CONFIG` naming the field that failed.
+ * @throws `LLMDispatchError` with code `INVALID_CONFIG` naming the field that failed.
  */
 export function createSwitchCore<Ops extends OperationsMap>(
   config: CreateSwitchConfig<Ops>,

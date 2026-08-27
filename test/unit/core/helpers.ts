@@ -11,7 +11,7 @@
 import { z } from 'zod'
 import { expect } from 'vitest'
 
-import { LLMSwitchError } from '../../../src/errors'
+import { LLMDispatchError } from '../../../src/errors'
 import { createSwitchCore } from '../../../src/core/create-switch'
 import type { CoreRuntime, TimerMode } from '../../../src/core/runtime'
 import type {
@@ -430,16 +430,16 @@ export function fixture(options: FixtureOptions = {}): Fixture {
   return { ai, runtime, s, p1, p2 }
 }
 
-/** Awaits a rejection and asserts it is an `LLMSwitchError` with the given code. */
+/** Awaits a rejection and asserts it is an `LLMDispatchError` with the given code. */
 export async function expectCode(
   promise: Promise<unknown>,
-  code: LLMSwitchError['code'],
-): Promise<LLMSwitchError> {
+  code: LLMDispatchError['code'],
+): Promise<LLMDispatchError> {
   try {
     await promise
   } catch (error) {
-    expect(error).toBeInstanceOf(LLMSwitchError)
-    const typed = error as LLMSwitchError
+    expect(error).toBeInstanceOf(LLMDispatchError)
+    const typed = error as LLMDispatchError
     expect(typed.code).toBe(code)
     return typed
   }

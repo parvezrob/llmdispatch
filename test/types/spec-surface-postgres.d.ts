@@ -1,7 +1,7 @@
 // Generated from the code fences of docs/spec.md by scripts/check-spec-surface.mjs.
 // Edit the spec, then run `npm run surface:update`.
 
-// subpath: llmswitch/postgres
+// subpath: llmdispatch/postgres
 export declare const MIGRATIONS: ReadonlyArray<{
   version: number
   templateSha256: string                                  // hash of the canonical template (schema placeholder form)

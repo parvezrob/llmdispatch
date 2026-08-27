@@ -4,7 +4,7 @@
 // quickstart needs no scaffold: its fence is self-contained, and the fixture checker
 // compiles it straight out of README.md.)
 
-import type { ProviderRequest, TokenUsage } from 'llmswitch'
+import type { ProviderRequest, TokenUsage } from 'llmdispatch'
 
 declare global {
   /** The backend the README's custom provider adapter calls. */

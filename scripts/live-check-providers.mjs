@@ -124,7 +124,7 @@ async function main() {
     return 2
   }
 
-  const workspace = mkdtempSync(join(tmpdir(), 'llmswitch-live-check-'))
+  const workspace = mkdtempSync(join(tmpdir(), 'llmdispatch-live-check-'))
   removeOnSignal(workspace)
   const problems = []
   let ran = 0

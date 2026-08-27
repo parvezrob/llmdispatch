@@ -2,7 +2,7 @@
 /**
  * The packaged migrations (spec §6b).
  *
- * llmswitch never runs DDL: it hands you the SQL and its hash, and you apply it with whatever
+ * llmdispatch never runs DDL: it hands you the SQL and its hash, and you apply it with whatever
  * tool you already use. The hash a version records is the hash of its template — the schema
  * placeholder still in place — so two adopters using different schema names still agree on
  * which version 1 they applied.
@@ -18,9 +18,9 @@ declare const MIGRATIONS: readonly {
   /**
    * Renders this migration for one schema.
    *
-   * @param opts `schema` defaults to `llmswitch` and is validated, then quoted.
+   * @param opts `schema` defaults to `llmdispatch` and is validated, then quoted.
    * @returns The SQL to apply, and the hash of exactly those bytes.
-   * @throws `RangeError` when the schema is not a name llmswitch may own.
+   * @throws `RangeError` when the schema is not a name llmdispatch may own.
    */
   render(opts?: {
     schema?: string;
@@ -33,8 +33,8 @@ declare const MIGRATIONS: readonly {
  * Every migration rendered for one schema and concatenated in version order, with the sha256
  * of exactly the bytes it hands back.
  *
- * @param opts `schema` defaults to `llmswitch` and is validated, then quoted.
- * @throws `RangeError` when the schema is not a name llmswitch may own.
+ * @param opts `schema` defaults to `llmdispatch` and is validated, then quoted.
+ * @throws `RangeError` when the schema is not a name llmdispatch may own.
  */
 declare function migrationSql(opts?: {
   schema?: string;
@@ -59,7 +59,7 @@ declare function migrationSql(opts?: {
  * Test harnesses that can only reach the store through an adopter-shaped pool recognise the
  * four usage statements by this prefix and substitute that trailing `null`.
  */
-declare const USAGE_STORE_MARKER = "/* llmswitch:usage-store */";
+declare const USAGE_STORE_MARKER = "/* llmdispatch:usage-store */";
 //#endregion
 export { MIGRATIONS, USAGE_STORE_MARKER, migrationSql };
 //# sourceMappingURL=postgres.d.ts.map

@@ -1,5 +1,5 @@
 /**
- * Conformance entry point — `import { … } from 'llmswitch/conformance'`.
+ * Conformance entry point — `import { … } from 'llmdispatch/conformance'`.
  *
  * For anyone writing their own usage store, config store or provider adapter: the harnesses
  * check an implementation against the behaviour the rest of the package relies on, so a store

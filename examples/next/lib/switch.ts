@@ -4,7 +4,7 @@ import {
   defineOperations,
   memoryStores,
   openaiCompatible,
-} from 'llmswitch'
+} from 'llmdispatch'
 import { z } from 'zod'
 
 /** The body `POST /api/summarize` accepts, checked before the switch ever sees it. */

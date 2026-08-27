@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import type { LLMSwitchError } from '../../../src/errors'
+import type { LLMDispatchError } from '../../../src/errors'
 import { ProviderError } from '../../../src/errors'
 import { createGlobalRuntime } from '../../../src/runtime'
 import { createSwitchCore } from '../../../src/core/create-switch'
@@ -81,7 +81,7 @@ describe('commit recovery', () => {
     await f.runtime.advance(1000)
     expect(f.s.commit.calls.length).toBe(4)
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('USAGE_STORE_UNAVAILABLE')
+    expect((run.error as LLMDispatchError).code).toBe('USAGE_STORE_UNAVAILABLE')
     const ids = new Set(f.s.commit.calls.map((call) => call[0]))
     expect(ids.size).toBe(1) // always the same reservation id
     expect(f.s.settle.calls.length).toBe(0)
@@ -115,7 +115,7 @@ describe('abort × recovery interleavings', () => {
     controller.abort() // inside the 250 ms backoff window
     await f.runtime.advance(1000)
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('ABORTED')
+    expect((run.error as LLMDispatchError).code).toBe('ABORTED')
     expect(f.s.commit.calls.length).toBe(1) // the retry never started
     expect(f.s.settle.calls.length).toBe(0) // nothing was committed
     expect(f.s.log.filter((e) => e.startsWith('reserve')).length).toBe(1)
@@ -512,7 +512,7 @@ describe('settlement hook isolation', () => {
       return { value: JSON.parse(JSON.stringify(run.value)) as unknown }
     }
     expect(run.state).toBe('rejected')
-    const error = run.error as LLMSwitchError
+    const error = run.error as LLMDispatchError
     return {
       code: error.code,
       message: error.message,
@@ -686,7 +686,7 @@ describe('§6a deadlines on the usage store', () => {
     expect(run.state).toBe('pending')
     await f.runtime.advance(1)
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('USAGE_STORE_UNAVAILABLE')
+    expect((run.error as LLMDispatchError).code).toBe('USAGE_STORE_UNAVAILABLE')
     void gate
   })
 

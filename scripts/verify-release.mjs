@@ -19,12 +19,12 @@
  *
  * A database for the run, thrown away with the container:
  *
- *   docker run --rm -d --name llmswitch-verify-db -p 127.0.0.1:5433:5432 \
+ *   docker run --rm -d --name llmdispatch-verify-db -p 127.0.0.1:5433:5432 \
  *     -e POSTGRES_PASSWORD=<throwaway> \
  *     postgres:14@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
  *   export DATABASE_URL=postgres://postgres:<throwaway>@127.0.0.1:5433/postgres
  *   npm run verify:release -- <path-to-tgz>
- *   docker rm -f llmswitch-verify-db
+ *   docker rm -f llmdispatch-verify-db
  *
  * The image is pinned by digest so two runs a month apart are the same check.
  * Exit codes: 0 verified, 1 a check failed, 2 wrong usage or a missing database.
@@ -51,7 +51,7 @@ const USAGE = 'usage: verify-release.mjs <path-to-tgz>\n'
 const RUNNER = join(import.meta.dirname, 'runners', 'release-conformance.mjs')
 const TEMPLATE = join(import.meta.dirname, 'fixtures', 'openai-chat-completion.json')
 
-/** What a project installing llmswitch has to bring: the declared peer and the driver. */
+/** What a project installing llmdispatch has to bring: the declared peer and the driver. */
 const PEERS = ['zod', 'pg', 'pg-connection-string']
 
 /** Long enough for the suites on a cold database, short enough that a hang is a failure. */
@@ -188,7 +188,7 @@ async function main() {
   const before = hashFile(tarball)
   cleanUpOnSignal()
   owned.databaseUrl = databaseUrl
-  owned.workspace = mkdtempSync(join(tmpdir(), 'llmswitch-release-'))
+  owned.workspace = mkdtempSync(join(tmpdir(), 'llmdispatch-release-'))
   try {
     const project = createConsumerProject({
       workspace: owned.workspace,

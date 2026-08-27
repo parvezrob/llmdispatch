@@ -1,7 +1,7 @@
 // @targets spec, package
 // The typo the README promises is a compile error: `prompt` reads a field the input schema
 // does not declare.
-import { defineOperation, defineOperations } from 'llmswitch'
+import { defineOperation, defineOperations } from 'llmdispatch'
 import { z } from 'zod'
 
 export const operations = defineOperations({

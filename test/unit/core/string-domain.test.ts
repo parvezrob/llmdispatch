@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { LLMSwitchError } from '../../../src/errors'
+import { LLMDispatchError } from '../../../src/errors'
 import { createSwitchCore } from '../../../src/core/create-switch'
 import { settleDetached } from '../../../src/core/quota'
 import type { CreateSwitchConfig, OperationsMap } from '../../../src/types'
@@ -61,8 +61,8 @@ function expectInvalidConfigThrow(make: () => unknown): void {
   } catch (error) {
     caught = error
   }
-  expect(caught).toBeInstanceOf(LLMSwitchError)
-  expect((caught as LLMSwitchError).code).toBe('INVALID_CONFIG')
+  expect(caught).toBeInstanceOf(LLMDispatchError)
+  expect((caught as LLMDispatchError).code).toBe('INVALID_CONFIG')
 }
 
 describe('violations at the createSwitch boundary — no store method called at all', () => {

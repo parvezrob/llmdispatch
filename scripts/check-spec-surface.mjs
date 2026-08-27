@@ -36,8 +36,8 @@ const ENTRY_POINTS = [
 
 /** The comments §6b uses to say which subpath the declarations under them belong to. */
 const SUBPATH_MARKERS = {
-  postgres: '// subpath: llmswitch/postgres',
-  conformance: '// subpath: llmswitch/conformance',
+  postgres: '// subpath: llmdispatch/postgres',
+  conformance: '// subpath: llmdispatch/conformance',
 }
 
 /** A section: its heading down to the next one of the same level. */

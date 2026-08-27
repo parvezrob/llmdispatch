@@ -16,7 +16,7 @@ import type { QueryablePool } from '../../../src/stores/postgres/driver'
  * Pinned so that editing the template is a decision: the template's own hash is what the
  * database records, and a change to it makes every applied version-1 schema a different one.
  */
-const TEMPLATE_SHA256 = '4045ea8ccbd3c2102a733d379e27927451b65a62806e7cd8dd4fb0337ef9661e'
+const TEMPLATE_SHA256 = '404877cedf22ce3ed1ce6070f2d4710f9601e36cc4ac098385f1ac7216bd163f'
 
 const KEY = { operation: 'summarize', subjectId: 'user-1' }
 
@@ -66,11 +66,11 @@ describe('the packaged migration', () => {
     expect(aggregate.sha256).toBe(
       createHash('sha256').update(aggregate.sql, 'utf8').digest('hex'),
     )
-    expect(migrationSql({ schema: 'llmswitch' })).toEqual(aggregate)
+    expect(migrationSql({ schema: 'llmdispatch' })).toEqual(aggregate)
   })
 
   it('renders for a different schema without changing the version it records', () => {
-    const here = migrationSql({ schema: 'llmswitch' })
+    const here = migrationSql({ schema: 'llmdispatch' })
     const there = migrationSql({ schema: 'other_schema' })
 
     expect(there.sql).not.toBe(here.sql)
@@ -87,10 +87,10 @@ describe('the statements the usage store sends', () => {
    * correct against a real database, so editing one has to be a decision and not a detail.
    */
   const STATEMENT_SHA256 = {
-    reserve: '9e055a7852fa670ea49dfbc3011f7c3a98136ba5faddcffa6c2fd2b7f77d52aa',
-    commit: '283a0f4d21055b81bd810461318cdf3335e1c4110758a11a28e64a5767f244c9',
-    settle: '97e9c82200ee2505ebd4cfddfc3354f77e3d3e8b07570e683702370a90724a2b',
-    snapshot: '0eae1ed1c274af515cce9fb4c3adcc8447c1221f966187e46030eb3213fb54ba',
+    reserve: '7485e2f259a7b7f723d16a89105f52a7b53f64802f8521abe66344c239c7e1e5',
+    commit: '51fa87eefc789b7fe38ec3d1eeb8f4656706462e321b0decc9247053b80b075e',
+    settle: '9567bc8b7c3f5de07961cbf5dce807c5e735e2a43a1f8fc1bd4b774e3305a481',
+    snapshot: '77a2cbc2a56056a69175872255c385426643edcd9aa21440fe0649852a0533c4',
   }
 
   it('are the ones this test pins', () => {
@@ -149,7 +149,7 @@ describe('the store pair', () => {
   it('asks the database nothing at all while it is being built', () => {
     const pool = recordingPool()
 
-    postgresStores({ pool, schema: 'llmswitch', leaseMs: 60_000 })
+    postgresStores({ pool, schema: 'llmdispatch', leaseMs: 60_000 })
 
     expect(pool.calls).toEqual([])
   })
@@ -194,7 +194,7 @@ describe('the store pair', () => {
     await sent(stores.config.getAll())
 
     const marked = pool.calls.filter((call) =>
-      call.sql.startsWith('/* llmswitch:usage-store */'),
+      call.sql.startsWith('/* llmdispatch:usage-store */'),
     )
     expect(marked).toHaveLength(3)
     for (const call of marked) expect(call.params.at(-1)).toBeNull()
@@ -223,7 +223,7 @@ describe('the public factory', () => {
     // pattern test and spell something else into the SQL.
     const twoFaced = {
       startsWith: () => false,
-      toString: () => 'llmswitch"; DROP SCHEMA public CASCADE; --',
+      toString: () => 'llmdispatch"; DROP SCHEMA public CASCADE; --',
     }
 
     expect(() =>

@@ -8,7 +8,7 @@
 import { getEventListeners } from 'node:events'
 import { describe, expect, it } from 'vitest'
 
-import type { LLMSwitchError } from '../../../src/errors'
+import type { LLMDispatchError } from '../../../src/errors'
 import { ProviderError } from '../../../src/errors'
 import { createSwitchCore } from '../../../src/core/create-switch'
 import type { OperationsMap } from '../../../src/types'
@@ -82,7 +82,7 @@ describe('cancellation while each raced seam is pending', () => {
       controller.abort()
       await flushMicrotasks()
       expect(run.state).toBe('rejected') // the seam is still open; the core stopped waiting
-      expect((run.error as LLMSwitchError).code).toBe('ABORTED')
+      expect((run.error as LLMDispatchError).code).toBe('ABORTED')
       // The loser provably rejects only after the run has ended, and stays silent.
       gate.reject(new Error(`late ${seam} failure`))
       await macrotask()
@@ -136,8 +136,8 @@ describe('abort at stage boundaries', () => {
     })
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('ABORTED')
-    expect((run.error as LLMSwitchError).attempts).toBeUndefined()
+    expect((run.error as LLMDispatchError).code).toBe('ABORTED')
+    expect((run.error as LLMDispatchError).attempts).toBeUndefined()
     // Pre-commit: the pending envelope stands and expires on its own; nothing was settled.
     expect(s.log).toEqual(['getAll', 'reserve u 5'])
   })
@@ -157,7 +157,7 @@ describe('abort at stage boundaries', () => {
     gate.resolve('committed')
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('ABORTED')
+    expect((run.error as LLMDispatchError).code).toBe('ABORTED')
     // Committed counts: the post-commit path settles, failed, with no attempts.
     expect(f.p1.requests.length).toBe(0)
     expect(f.s.settle.calls.length).toBe(1)
@@ -182,8 +182,8 @@ describe('abort precedence over non-successful awaited quota results', () => {
     gate.resolve({ ok: false, used: 5, resetsAt: '2026-08-27T00:00:00.000Z' })
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('ABORTED') // the abort wins over the denial
-    expect((run.error as LLMSwitchError).attempts).toBeUndefined()
+    expect((run.error as LLMDispatchError).code).toBe('ABORTED') // the abort wins over the denial
+    expect((run.error as LLMDispatchError).attempts).toBeUndefined()
     expect(s.log).toEqual(['getAll', 'reserve u 5']) // no commit, no settle
   })
 
@@ -201,7 +201,7 @@ describe('abort precedence over non-successful awaited quota results', () => {
     gate.reject(new Error('store down'))
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('ABORTED')
+    expect((run.error as LLMDispatchError).code).toBe('ABORTED')
     expect(s.log).toEqual(['getAll', 'reserve u 5'])
   })
 
@@ -220,7 +220,7 @@ describe('abort precedence over non-successful awaited quota results', () => {
     gate.resolve('missing')
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    expect((run.error as LLMSwitchError).code).toBe('ABORTED')
+    expect((run.error as LLMDispatchError).code).toBe('ABORTED')
     // Nothing was validated committed, so nothing settles; quota state stands as reached.
     expect(f.s.settle.calls.length).toBe(0)
     expect(f.p1.requests.length).toBe(0)
@@ -351,7 +351,7 @@ describe('adapter-reported aborts and the composed signal', () => {
     // The provider promise is still pending; the core classified from its own flags.
     expect(request.signal.aborted).toBe(true)
     expect(run.state).toBe('rejected')
-    const error = run.error as LLMSwitchError
+    const error = run.error as LLMDispatchError
     expect(error.code).toBe('ABORTED')
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['aborted'])
     expect(f.runtime.pending('referenced')).toBe(0) // the timeout timer was cancelled
@@ -370,7 +370,7 @@ describe('adapter-reported aborts and the composed signal', () => {
     expect(controller.signal.aborted).toBe(false) // this source alone fired
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    const error = run.error as LLMSwitchError
+    const error = run.error as LLMDispatchError
     expect(error.code).toBe('PROVIDER_FAILED')
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['timeout'])
     void hang
@@ -395,7 +395,7 @@ describe('adapter-reported aborts and the composed signal', () => {
     await f.runtime.advance(2000)
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    const error = run.error as LLMSwitchError
+    const error = run.error as LLMDispatchError
     expect(error.code).toBe('PROVIDER_FAILED')
     expect(error.retryable).toBe(true)
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['timeout'])

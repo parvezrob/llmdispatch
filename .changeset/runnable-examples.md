@@ -1,5 +1,5 @@
 ---
-'llmswitch': patch
+'llmdispatch': patch
 ---
 
 Docs: the README now links two runnable examples — `examples/next` (TypeScript, App

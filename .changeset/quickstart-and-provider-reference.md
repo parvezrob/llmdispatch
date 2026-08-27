@@ -1,5 +1,5 @@
 ---
-'llmswitch': patch
+'llmdispatch': patch
 ---
 
 Docs: the README quickstart is now self-contained and mechanically verified — its

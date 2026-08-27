@@ -9,7 +9,7 @@ describe('entry points', () => {
     // Compared sorted: this is the published set of runtime exports, not an artefact of how
     // the entry file happens to be written (or of the test runner's module transform).
     expect(Object.keys(index).sort()).toEqual([
-      'LLMSwitchError',
+      'LLMDispatchError',
       'ProviderError',
       'anthropic',
       'createSwitch',

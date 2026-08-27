@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 
 import {
-  LLMSwitchError,
+  LLMDispatchError,
   ProviderError,
   aborted,
   configStoreUnavailable,
@@ -21,7 +21,7 @@ import type { OutputRejectionKind, ProviderFailureKind } from '../../src/errors/
 import type { AttemptRecord, ProviderErrorKind } from '../../src/types'
 
 /** The brand is looked up the same way the class installs it: from the global registry. */
-const brand = Symbol.for('llmswitch.ProviderError')
+const brand = Symbol.for('llmdispatch.ProviderError')
 
 const attempts: AttemptRecord[] = [
   {
@@ -71,7 +71,7 @@ describe('the codes raised before dispatch', () => {
   for (const row of rows) {
     it(`reports ${row.code} as retryable ${String(row.retryable)}`, () => {
       const error = row.error()
-      expect(error).toBeInstanceOf(LLMSwitchError)
+      expect(error).toBeInstanceOf(LLMDispatchError)
       expect(error.code).toBe(row.code)
       expect(error.retryable).toBe(row.retryable)
       expect(error.operation).toBe('summarize')
@@ -192,7 +192,7 @@ describe('the fields an error carries', () => {
   })
 
   it('names itself so a log line says which error it is', () => {
-    expect(missingSubject('summarize').name).toBe('LLMSwitchError')
+    expect(missingSubject('summarize').name).toBe('LLMDispatchError')
     expect(new ProviderError('auth').name).toBe('ProviderError')
   })
 
@@ -280,7 +280,7 @@ describe('recognising a provider error', () => {
 
   it('recognises one thrown from another realm, where instanceof cannot', () => {
     const foreign: object = runInNewContext(`
-      const brand = Symbol.for('llmswitch.ProviderError')
+      const brand = Symbol.for('llmdispatch.ProviderError')
       class ForeignProviderError extends Error {
         constructor(kind, status) {
           super('the other realm failed')

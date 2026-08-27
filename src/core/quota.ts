@@ -366,7 +366,7 @@ export interface SettlementContext {
 
 /** The stable message `logger.error` carries when settlement finally fails. */
 export const SETTLEMENT_FAILED_MESSAGE =
-  'llmswitch: settlement failed after every retry; attempt records were not persisted'
+  'llmdispatch: settlement failed after every retry; attempt records were not persisted'
 
 /** The §6 string-domain re-check before `settle` (spec §6): envelope and attempt strings. */
 function settlementDomainProblem(

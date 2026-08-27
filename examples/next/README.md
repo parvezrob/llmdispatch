@@ -1,9 +1,9 @@
 # Next.js example
 
-A Next.js App Router project with one llmswitch operation behind a route handler.
+A Next.js App Router project with one llmdispatch operation behind a route handler.
 
 - `lib/switch.ts` — the switch: one provider, one `summarize` operation, in-memory stores.
-- `app/api/summarize/route.ts` — `POST`, with `LLMSwitchError` codes mapped to HTTP
+- `app/api/summarize/route.ts` — `POST`, with `LLMDispatchError` codes mapped to HTTP
   statuses.
 - `app/api/healthz/route.ts` — `GET`.
 
@@ -17,7 +17,7 @@ Nothing here is special to this repository except how the dependency is installe
 section below). In your own project it is simply:
 
 ```bash
-npm install llmswitch zod
+npm install llmdispatch zod
 ```
 
 Then copy `lib/switch.ts` and the route handler, and replace the `demo-user` subject with
@@ -31,7 +31,7 @@ against the bytes that would be published. Two steps:
 ```bash
 # from the repository root
 tgz=$(npm pack --silent --pack-destination examples/next)
-mv "examples/next/$tgz" examples/next/llmswitch-local.tgz
+mv "examples/next/$tgz" examples/next/llmdispatch-local.tgz
 ```
 
 Then, in this directory:
@@ -43,7 +43,7 @@ OPENAI_API_KEY=your-key npm start
 ```
 
 The committed `package-lock.json` pins the transitive tree but records no checksum
-for `llmswitch-local.tgz`: you pack that file yourself, so its bytes are yours.
+for `llmdispatch-local.tgz`: you pack that file yourself, so its bytes are yours.
 
 ```bash
 curl -s localhost:3000/api/summarize \

@@ -1,5 +1,5 @@
 /**
- * The typed constructors for every `LLMSwitchError` the package raises.
+ * The typed constructors for every `LLMDispatchError` the package raises.
  *
  * One factory per classification, not per code: spec §5b makes `retryable` a function of the
  * classification, so `PROVIDER_FAILED` is retryable for a `transient` failure and not for a
@@ -11,8 +11,8 @@
  */
 
 import type { AttemptRecord } from '../types'
-import { constructLLMSwitchError } from './llmswitch-error'
-import type { LLMSwitchError } from './llmswitch-error'
+import { constructLLMDispatchError } from './llmdispatch-error'
+import type { LLMDispatchError } from './llmdispatch-error'
 import type { ProviderError } from './provider-error'
 
 /** The classifications that end a run as `PROVIDER_FAILED` (spec §5b). */
@@ -46,8 +46,8 @@ const outputRejectionRetryable: Readonly<Record<OutputRejectionKind, boolean>> =
 }
 
 /** The input failed the operation's schema, or the operation name is not one of ours. */
-export function invalidInput(operation: string, field: string): LLMSwitchError {
-  return constructLLMSwitchError({
+export function invalidInput(operation: string, field: string): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'INVALID_INPUT',
     message: `invalid input for "${operation}": ${field}`,
     operation,
@@ -56,8 +56,8 @@ export function invalidInput(operation: string, field: string): LLMSwitchError {
 }
 
 /** The operation has an effective quota, so it cannot run without a subject. */
-export function missingSubject(operation: string): LLMSwitchError {
-  return constructLLMSwitchError({
+export function missingSubject(operation: string): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'MISSING_SUBJECT',
     message: `"${operation}" has an effective quota, so it requires a subjectId`,
     operation,
@@ -66,8 +66,8 @@ export function missingSubject(operation: string): LLMSwitchError {
 }
 
 /** The subject has used its allowance for the store's current UTC day. */
-export function quotaExceeded(operation: string, resetsAt: string): LLMSwitchError {
-  return constructLLMSwitchError({
+export function quotaExceeded(operation: string, resetsAt: string): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'QUOTA_EXCEEDED',
     message: `"${operation}" is over its daily quota until ${resetsAt}`,
     operation,
@@ -77,8 +77,8 @@ export function quotaExceeded(operation: string, resetsAt: string): LLMSwitchErr
 }
 
 /** The usage store did not answer, so the run is refused rather than risked. */
-export function usageStoreUnavailable(operation: string, cause: unknown): LLMSwitchError {
-  return constructLLMSwitchError({
+export function usageStoreUnavailable(operation: string, cause: unknown): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'USAGE_STORE_UNAVAILABLE',
     message: `the usage store did not answer, so "${operation}" was refused`,
     operation,
@@ -88,8 +88,8 @@ export function usageStoreUnavailable(operation: string, cause: unknown): LLMSwi
 }
 
 /** The config store did not answer and no fresh route was cached. */
-export function configStoreUnavailable(operation: string, cause: unknown): LLMSwitchError {
-  return constructLLMSwitchError({
+export function configStoreUnavailable(operation: string, cause: unknown): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'CONFIG_STORE_UNAVAILABLE',
     message: `the config store did not answer, so "${operation}" was refused`,
     operation,
@@ -109,8 +109,8 @@ export function invalidConfigLocal(
   operation: string,
   field: string,
   opts: { cause?: unknown } = {},
-): LLMSwitchError {
-  return constructLLMSwitchError({
+): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'INVALID_CONFIG',
     message: `invalid configuration for "${operation}": ${field}`,
     operation,
@@ -124,8 +124,8 @@ export function invalidConfigLocal(
 export function invalidConfigTransientPrepare(
   operation: string,
   cause: ProviderError,
-): LLMSwitchError {
-  return constructLLMSwitchError({
+): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'INVALID_CONFIG',
     message: `a provider for "${operation}" could not be prepared; the failure is transient`,
     operation,
@@ -139,8 +139,8 @@ export function invalidConfigTransientPrepare(
 export function invalidConfigProvider(
   operation: string,
   attempts: AttemptRecord[],
-): LLMSwitchError {
-  return constructLLMSwitchError({
+): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'INVALID_CONFIG',
     message: `the provider rejected the credentials or model configured for "${operation}"`,
     operation,
@@ -151,8 +151,8 @@ export function invalidConfigProvider(
 }
 
 /** The caller's signal fired; `attempts` only when the run had already dispatched. */
-export function aborted(operation: string, attempts?: AttemptRecord[]): LLMSwitchError {
-  return constructLLMSwitchError({
+export function aborted(operation: string, attempts?: AttemptRecord[]): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'ABORTED',
     message: `"${operation}" was aborted by its caller`,
     operation,
@@ -166,8 +166,8 @@ export function providerFailed(
   operation: string,
   kind: ProviderFailureKind,
   attempts: AttemptRecord[],
-): LLMSwitchError {
-  return constructLLMSwitchError({
+): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'PROVIDER_FAILED',
     message: `"${operation}" failed at the provider: ${kind}`,
     operation,
@@ -181,8 +181,8 @@ export function outputRejected(
   operation: string,
   kind: OutputRejectionKind,
   attempts: AttemptRecord[],
-): LLMSwitchError {
-  return constructLLMSwitchError({
+): LLMDispatchError {
+  return constructLLMDispatchError({
     code: 'OUTPUT_REJECTED',
     message: `"${operation}" produced output that was rejected: ${kind}`,
     operation,

@@ -1,13 +1,13 @@
 /**
  * The error layer: the two classes adopters see, and the factories the package throws through.
  *
- * Only the classes reach the published surface. Letting an adopter build an `LLMSwitchError`
+ * Only the classes reach the published surface. Letting an adopter build an `LLMDispatchError`
  * would make its code mean "someone said so" rather than "the package classified it".
  *
  * @module
  */
 
-export { LLMSwitchError } from './llmswitch-error'
+export { LLMDispatchError } from './llmdispatch-error'
 export { ProviderError } from './provider-error'
 export {
   aborted,

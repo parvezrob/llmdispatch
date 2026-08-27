@@ -1,5 +1,5 @@
 /**
- * The error every classified llmswitch failure raises.
+ * The error every classified llmdispatch failure raises.
  *
  * Adopters catch it and branch on `code`; they never construct it, which is why the
  * constructor is private (spec §6). Inside the package it is reached through `./factories`,
@@ -11,8 +11,8 @@
 import type { AttemptRecord } from '../types'
 
 /** The fields a factory supplies. Not public: the shape an adopter sees is the class. */
-interface LLMSwitchErrorInit {
-  code: LLMSwitchError['code']
+interface LLMDispatchErrorInit {
+  code: LLMDispatchError['code']
   message: string
   operation: string
   retryable: boolean
@@ -28,15 +28,15 @@ interface LLMSwitchErrorInit {
  * A class's static block runs with the class's own privileges, so it can hand the constructor
  * to this module without widening it for anyone.
  */
-let construct: (init: LLMSwitchErrorInit) => LLMSwitchError
+let construct: (init: LLMDispatchErrorInit) => LLMDispatchError
 
 /** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
-export class LLMSwitchError extends Error {
-  private constructor(init: LLMSwitchErrorInit) {
+export class LLMDispatchError extends Error {
+  private constructor(init: LLMDispatchErrorInit) {
     // Presence, not value: `new Error(m, { cause: undefined })` carries a `cause`, and a
     // caught `undefined` is still something the caller chose to chain.
     super(init.message, 'cause' in init ? { cause: init.cause } : {})
-    this.name = 'LLMSwitchError'
+    this.name = 'LLMDispatchError'
     this.code = init.code
     this.operation = init.operation
     this.retryable = init.retryable
@@ -77,15 +77,15 @@ export class LLMSwitchError extends Error {
   // adopter's own thrown store/prepare failure as `cause`, verbatim.
 
   static {
-    construct = (init) => new LLMSwitchError(init)
+    construct = (init) => new LLMDispatchError(init)
   }
 }
 
 /**
- * Builds an `LLMSwitchError`.
+ * Builds an `LLMDispatchError`.
  *
  * @internal Only `./factories` calls this; it is not part of the published surface.
  */
-export function constructLLMSwitchError(init: LLMSwitchErrorInit): LLMSwitchError {
+export function constructLLMDispatchError(init: LLMDispatchErrorInit): LLMDispatchError {
   return construct(init)
 }

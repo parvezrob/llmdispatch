@@ -7,7 +7,7 @@ interface Switch<Ops extends OperationsMap> {
   /**
    * Runs one operation end to end and resolves with its validated result.
    *
-   * @throws `LLMSwitchError` with the code the final classification maps to (spec §5b).
+   * @throws `LLMDispatchError` with the code the final classification maps to (spec §5b).
    */
   run<K extends keyof Ops & string>(operation: K, args: {
     input: z.input<Ops[K]['input']>;

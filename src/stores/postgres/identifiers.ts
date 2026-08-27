@@ -11,10 +11,10 @@
 const SCHEMA_PATTERN = /^[a-z_][a-z0-9_]{0,62}$/
 
 /** The schema `postgresStores()` and `render()` use when the caller names none. */
-export const DEFAULT_SCHEMA = 'llmswitch'
+export const DEFAULT_SCHEMA = 'llmdispatch'
 
 /**
- * Checks a schema name llmswitch may own.
+ * Checks a schema name llmdispatch may own.
  *
  * @param schema The name as the caller supplied it.
  * @throws `RangeError` for anything that is not a string, for anything outside
@@ -41,7 +41,7 @@ export function assertSchema(schema: string): void {
  * Checks a schema name and returns it quoted, ready to be spliced into SQL text.
  *
  * @param schema The name as the caller supplied it.
- * @throws `RangeError` when the name is not one llmswitch may own.
+ * @throws `RangeError` when the name is not one llmdispatch may own.
  */
 export function quotedSchema(schema: string): string {
   assertSchema(schema)

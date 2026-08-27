@@ -4,12 +4,12 @@
 // why recognition is brand-based rather than `instanceof`.
 import { createRequire } from 'node:module'
 
-import * as conformance from 'llmswitch/conformance'
-import * as postgres from 'llmswitch/postgres'
-import * as root from 'llmswitch'
+import * as conformance from 'llmdispatch/conformance'
+import * as postgres from 'llmdispatch/postgres'
+import * as root from 'llmdispatch'
 
 const requireFromHere = createRequire(import.meta.url)
-const commonjs = requireFromHere('llmswitch')
+const commonjs = requireFromHere('llmdispatch')
 
 for (const [name, entry] of Object.entries({ root, postgres, conformance })) {
   if (typeof entry !== 'object' || entry === null) {
@@ -54,7 +54,7 @@ for (const value of [
 }
 
 const forged = {
-  [Symbol.for('llmswitch.ProviderError')]: true,
+  [Symbol.for('llmdispatch.ProviderError')]: true,
   kind: 'overloaded',
   message: 'x',
 }

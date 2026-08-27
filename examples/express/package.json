@@ -1,5 +1,5 @@
 {
-  "name": "llmswitch-example-express",
+  "name": "llmdispatch-example-express",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "express": "5.2.1",
-    "llmswitch": "file:./llmswitch-local.tgz",
+    "llmdispatch": "file:./llmdispatch-local.tgz",
     "zod": "4.4.3"
   }
 }
