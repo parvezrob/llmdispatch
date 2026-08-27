@@ -11,6 +11,7 @@ import { LLMDispatchError, ProviderError } from '../../../src/errors'
 import {
   MAX_FILE_PAYLOAD_CHARACTERS,
   MAX_FILENAME_LENGTH,
+  MAX_PARTS,
   normalizePromptParts,
 } from '../../../src/core/parts'
 import type { ContentPart, ProviderRequest } from '../../../src/types'
@@ -316,6 +317,11 @@ describe('structural rules, each a descriptive TypeError', () => {
       rule: /filename must be a string/,
     },
     {
+      name: 'an empty filename',
+      returned: [{ ...PDF, filename: '' }],
+      rule: /filename must not be empty/,
+    },
+    {
       name: 'a filename one character over the bound',
       returned: [{ ...PDF, filename: 'a'.repeat(MAX_FILENAME_LENGTH + 1) }],
       rule: /filename must be at most 128 characters/,
@@ -353,6 +359,38 @@ describe('structural rules, each a descriptive TypeError', () => {
     expect(() =>
       normalizePromptParts([{ type: 'text', text: 'fine' }, { type: 'audio' }], 'summarize'),
     ).toThrow(/operation "summarize".*index 1/)
+  })
+})
+
+describe('the part-count cap, a descriptive RangeError', () => {
+  /** `count` text parts, the cheapest kind to build a long list from. */
+  function textParts(count: number): ContentPart[] {
+    return Array.from({ length: count }, (_, index) => ({
+      type: 'text' as const,
+      text: `part ${String(index)}`,
+    }))
+  }
+
+  it('admits a request carrying exactly the cap', () => {
+    expect(normalizePromptParts(textParts(MAX_PARTS), 'echo')).toHaveLength(MAX_PARTS)
+  })
+
+  it('rejects one part over the cap, naming the count, the cap and the operation', () => {
+    let caught: unknown
+    try {
+      normalizePromptParts(textParts(MAX_PARTS + 1), 'summarize')
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(RangeError)
+    const { message } = caught as RangeError
+    expect(message).toMatch(/returned 257 content parts, more than the 256 a request may carry/)
+    expect(message).toContain('summarize')
+  })
+
+  it('counts every part, not only the file ones', () => {
+    const parts = [...textParts(MAX_PARTS), PDF]
+    expect(() => normalizePromptParts(parts, 'echo')).toThrow(RangeError)
   })
 })
 

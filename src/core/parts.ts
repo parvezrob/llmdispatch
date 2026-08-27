@@ -18,6 +18,9 @@ export const MAX_FILE_PAYLOAD_CHARACTERS = 15_000_000
 /** The §6 bound on `FilePart.filename`. */
 export const MAX_FILENAME_LENGTH = 128
 
+/** The §6 ceiling on how many parts one request may carry. */
+export const MAX_PARTS = 256
+
 const MEDIA_TYPES: ReadonlySet<string> = new Set([
   'application/pdf',
   'image/jpeg',
@@ -55,6 +58,8 @@ function base64Problem(data: unknown): string | null {
 function filenameProblem(filename: unknown): string | null {
   if (filename === undefined) return null
   if (typeof filename !== 'string') return 'filename must be a string'
+  // An empty name is not a name: it would reach a wire field an adapter fills by default.
+  if (filename === '') return 'filename must not be empty'
   if (filename.length > MAX_FILENAME_LENGTH) {
     return `filename must be at most ${String(MAX_FILENAME_LENGTH)} characters`
   }
@@ -120,8 +125,9 @@ function ownPart(operation: string, index: number, raw: unknown): ContentPart {
  * @param returned What the callback resolved with, unvalidated.
  * @param operation The operation being run, named in every message.
  * @returns The frozen, non-empty parts for the run's `ProviderRequest`s.
- * @throws `TypeError` when the return or a part is structurally wrong, `RangeError` when
- *   the file parts exceed the §6 payload cap. Both are user bugs and pass through unwrapped.
+ * @throws `TypeError` when the return or a part is structurally wrong, `RangeError` when a
+ *   §6 cap is exceeded: the part count, or the file payload. Both are user bugs and pass
+ *   through unwrapped.
  */
 export function normalizePromptParts(
   returned: unknown,
@@ -141,6 +147,11 @@ export function normalizePromptParts(
   if (length === 0) {
     throw new TypeError(
       `the prompt callback for operation "${operation}" returned an empty array of content parts`,
+    )
+  }
+  if (length > MAX_PARTS) {
+    throw new RangeError(
+      `the prompt callback for operation "${operation}" returned ${String(length)} content parts, more than the ${String(MAX_PARTS)} a request may carry`,
     )
   }
   const parts: ContentPart[] = []
