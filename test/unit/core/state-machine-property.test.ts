@@ -1,6 +1,6 @@
 /**
  * The state-machine property test: over arbitrary sequences of
- * provider outcomes, store outcomes and signal timings — never two reservations per run
+ * provider outcomes, store outcomes and signal timings, never two reservations per run
  * beyond the single §4 re-reserve, never a lost settle on a post-commit path, `retryable`
  * always the literal, cleanup invariants as postconditions, and the terminal-code
  * invariant conditioned on attempt-determined termination.
@@ -170,7 +170,7 @@ async function runScenario(scenario: Scenario): Promise<void> {
   // Never more than two reservations: the original plus §4's single re-reserve.
   expect(f.s.reserve.calls.length).toBeLessThanOrEqual(2)
 
-  // Never a lost settle on a post-commit path — and never a settle without a commit.
+  // Never a lost settle on a post-commit path, and never a settle without a commit.
   const committed = f.s.commit.calls.length > 0 && sawValidatedCommit(scenario)
   const initialSettles = f.s.settle.calls.length > 0
   if (committed) {
@@ -233,7 +233,7 @@ function sawValidatedCommit(scenario: Scenario): boolean {
       const answer = step(index)
       index += 1
       if (answer === 'reject') {
-        // A transport failure retries — unless the abort fired inside the commit handler,
+        // A transport failure retries, unless the abort fired inside the commit handler,
         // in which case the pre-retry signal check ends the run first.
         if (scenario.abortAt === 'commit') return 'aborted'
         continue
@@ -264,7 +264,7 @@ describe('the run state machine, property-tested', () => {
     const f = fixture({ quota: { perDay: 5 } })
     const controller = new AbortController()
     f.p1.next(() => {
-      // The abort lands a few microtasks after the classified rejection — exactly at the
+      // The abort lands a few microtasks after the classified rejection: exactly at the
       // stage-10 boundary, after the transient attempt was recorded and before the
       // fallback decision. (One tick earlier it would race the dispatch itself.)
       void Promise.resolve()

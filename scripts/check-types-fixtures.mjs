@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Compiles every fixture under `test/types/` in a program of its own — one at a time, since
- * the negative ones are meant to fail — and checks that each behaves as it says it will.
+ * Compiles every fixture under `test/types/` in a program of its own, one at a time, since
+ * the negative ones are meant to fail, and checks that each behaves as it says it will.
  *
  * Line one is `// @targets spec[, package]`: `spec` is what docs/spec.md declares, `package`
  * what the build ships, and every fixture must target `spec`, the only run that happens
@@ -11,7 +11,7 @@
  *
  * One fixture does not live on disk: the README quickstart's TypeScript fence is extracted
  * verbatim at check time and compiled in memory against both targets. The printed example
- * is therefore the compiled example — there is no second copy to drift, and the fence never
+ * is therefore the compiled example: there is no second copy to drift, and the fence never
  * carries a `@targets` header the reader shouldn't see.
  *
  * Usage: node scripts/check-types-fixtures.mjs [--target spec|package]
@@ -240,8 +240,8 @@ function readableSource(fixture, problems) {
 
 /**
  * `{ line, code }` for every diagnostic, split into the fixture's own and everything else.
- * `lineOffset` shifts the fixture's own lines — for the README fence, whose line 1 is not
- * the README's line 1 — so every reported number is one the reader can jump to.
+ * `lineOffset` shifts the fixture's own lines, for the README fence, whose line 1 is not
+ * the README's line 1, so every reported number is one the reader can jump to.
  */
 function collectDiagnostics(program, fixturePath, lineOffset) {
   const own = []
@@ -273,8 +273,8 @@ function asPairs(entries) {
 }
 
 /**
- * A compiler host that serves one file from memory — the README fence, which exists at
- * check time only — and everything else from disk as usual.
+ * A compiler host that serves one file from memory: the README fence, which exists at
+ * check time only, and everything else from disk as usual.
  */
 function virtualHost(options, fixture) {
   const host = ts.createCompilerHost(options)

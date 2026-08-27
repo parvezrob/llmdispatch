@@ -2,7 +2,7 @@
  * The error a provider adapter throws to say how a call failed.
  *
  * Its `kind` drives the fallback matrix (spec §5b), so recognising one must work even when
- * the thrower and the reader loaded different copies of this module — the dual-package
+ * the thrower and the reader loaded different copies of this module: the dual-package
  * hazard. Recognition is therefore brand-based, and `ProviderError.is()` is the only
  * supported check; bare `instanceof` is never used.
  *

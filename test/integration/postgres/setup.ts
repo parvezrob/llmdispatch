@@ -1,8 +1,8 @@
 /**
  * What every PostgreSQL suite needs: a pool, a schema of its own, and the migration applied.
  *
- * Each file works in a schema named after itself plus a random suffix, so two files — or two
- * runs — never share a table. `DATABASE_URL` is what decides whether these suites run at all:
+ * Each file works in a schema named after itself plus a random suffix, so two files, or two
+ * runs, never share a table. `DATABASE_URL` is what decides whether these suites run at all:
  * absent locally they are skipped with the reason in the suite's name, and absent in CI they
  * fail, because a workflow that lost its database must not report a green skipped suite.
  */

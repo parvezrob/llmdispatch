@@ -9,21 +9,21 @@
  * committed template with content derived from that same nonce. So a passing run means the
  * example parsed the input, routed it through the installed package, reached the provider
  * with the right model and credentials, validated the answer against its own schema, and
- * reported the route it took — a chain no cached build or stale server can fake. The
+ * reported the route it took: a chain no cached build or stale server can fake. The
  * fixture's address reaches the example only when its server starts: the build stage is
  * given an address nothing answers on, so a value captured at build time cannot pass for a
  * value read at runtime.
  *
  * The temporary project is assembled outside the repository from an explicit list of the
- * example's tracked files, so nothing untracked — a local `.env`, an `.npmrc`, a stray
- * `node_modules` — can travel into it. The child environment is the shared allowlist, which
+ * example's tracked files, so nothing untracked: a local `.env`, an `.npmrc`, a stray
+ * `node_modules`: can travel into it. The child environment is the shared allowlist, which
  * carries a synthetic key and the fixture's base URL and nothing else: no run of this can
  * become live billed traffic.
  *
  * Needs the network for `npm ci`.
  *
  * Usage: node scripts/verify-examples.mjs [path-to-tarball]
- *   With no argument, packs the working tree — including whatever `dist/` currently holds,
+ *   With no argument, packs the working tree, including whatever `dist/` currently holds,
  *   so a stale local build is verified as it is. CI passes the audited tarball.
  * Exit codes: 0 every example ran as documented, 1 one did not, 2 bad arguments.
  */
@@ -77,7 +77,7 @@ const DEADLINES = {
 }
 /**
  * The whole run, comfortably inside the workflow job's own timeout so this trips first and
- * says which stage was running — a bare job kill says nothing.
+ * says which stage was running: a bare job kill says nothing.
  */
 const BUDGET = 30 * 60_000
 /** How long a server gets to leave on its own after TERM before it is killed. */
@@ -386,8 +386,8 @@ let shuttingDown = null
 
 /**
  * The signal, budget and uncaught paths: whatever any session still holds, wherever it is.
- * Processes are stopped across every session — newest first, so an example's server dies
- * before the workspace it lives in — and only then is anything removed from disk.
+ * Processes are stopped across every session: newest first, so an example's server dies
+ * before the workspace it lives in, and only then is anything removed from disk.
  */
 function releaseAll() {
   shuttingDown ??= (async () => {
@@ -510,7 +510,7 @@ async function runToCompletion(session, command, args, cwd, environment, timeout
   session.timers.add(deadline)
 
   // `close`, not `exit`: the streams are drained by then, so what the command printed on
-  // its way out — a packed filename, an EADDRINUSE — is all here rather than partly here.
+  // its way out: a packed filename, an EADDRINUSE: is all here rather than partly here.
   const result = await new Promise((done) => {
     started.child.once('error', (error) => done({ status: null, error }))
     started.child.once('close', (status) => done({ status, error: null }))
@@ -568,7 +568,7 @@ function trackedFiles(name) {
 
 /**
  * The one shape the tarball waiver below is safe for: the package is installed once, at the
- * root of the tree, from the local file — no workspace, no override, no second copy.
+ * root of the tree, from the local file, no workspace, no override, no second copy.
  */
 function checkLockfileShape(lockfile, name, problems) {
   const packages = lockfile.packages
@@ -602,10 +602,10 @@ function checkLockfileShape(lockfile, name, problems) {
   // The local tarball is packed fresh for every run, so no committed checksum can describe
   // it and `npm ci` refuses one that does not match. The lockfile is there for the
   // transitive tree; what was actually installed is proved a step later, against the
-  // tarball itself — which only holds while nothing else can supply the package.
+  // tarball itself, which only holds while nothing else can supply the package.
   if (local.integrity !== undefined) {
     problems.push(
-      `${name}: package-lock.json records a checksum for llmdispatch-local.tgz — ` +
+      `${name}: package-lock.json records a checksum for llmdispatch-local.tgz: ` +
         'regenerate it and drop that field, or no packed tarball but that one will install',
     )
     return false
@@ -635,7 +635,7 @@ function assembleProject(descriptor, workspace, tarball, problems) {
   const expected = [...descriptor.files].sort()
   if (tracked.join('\n') !== expected.join('\n')) {
     problems.push(
-      `${descriptor.name}: the tracked files are not the ones this harness copies — ` +
+      `${descriptor.name}: the tracked files are not the ones this harness copies: ` +
         `tracked ${tracked.join(', ')}; expected ${expected.join(', ')}`,
     )
     return null
@@ -854,7 +854,7 @@ async function verifyExample(descriptor, workspace, tarball, reference, template
       session,
     )
     if (server.problem !== null) {
-      problems.push(`${stage} failed — ${server.problem}`)
+      problems.push(`${stage} failed: ${server.problem}`)
       return
     }
 
@@ -881,7 +881,7 @@ async function verifyExample(descriptor, workspace, tarball, reference, template
           `${String(state.accepted)}; exactly one of each was expected`,
       )
     }
-    // After the drain, nothing may still be in flight — otherwise the counts above are a
+    // After the drain, nothing may still be in flight: otherwise the counts above are a
     // snapshot of a conversation that had not finished.
     if (state.active !== 0) {
       found.push(
@@ -894,7 +894,7 @@ async function verifyExample(descriptor, workspace, tarball, reference, template
     for (const problem of found) problems.push(`${descriptor.name}: ${problem}`)
   } catch (error) {
     problems.push(
-      `${stage} failed — ${error instanceof Error ? error.message : 'unknown error'}`,
+      `${stage} failed: ${error instanceof Error ? error.message : 'unknown error'}`,
     )
   } finally {
     stage = `${descriptor.name}: tearing down`
@@ -938,7 +938,7 @@ async function main() {
       template = JSON.parse(readFileSync(TEMPLATE, 'utf8'))
     } catch (error) {
       process.stderr.write(
-        `${stage} failed — ${error instanceof Error ? error.message : 'unknown error'}\n`,
+        `${stage} failed: ${error instanceof Error ? error.message : 'unknown error'}\n`,
       )
       return 1
     }
@@ -948,7 +948,7 @@ async function main() {
     const named = EXAMPLES.map((descriptor) => descriptor.name).sort()
     if (directories.join(', ') !== named.join(', ')) {
       process.stderr.write(
-        `${stage} failed — the repository tracks examples/${directories.join(', examples/')}, ` +
+        `${stage} failed: the repository tracks examples/${directories.join(', examples/')}, ` +
           `but this harness verifies ${named.join(', ')}\n`,
       )
       return 1

@@ -45,7 +45,7 @@ const USAGE = 'usage: live-check-providers.mjs [--release <path-to-tgz>]\n'
  *
  * The models are the smallest each provider offers, and the runner asks for a handful of
  * tokens: a full run should cost a fraction of a cent. Change them here when a provider
- * retires one — nowhere else names a model.
+ * retires one: nowhere else names a model.
  */
 const PROVIDERS = [
   { name: 'anthropic', key: 'ANTHROPIC_API_KEY', model: 'claude-haiku-4-5' },

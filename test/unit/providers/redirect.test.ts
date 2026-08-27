@@ -1,7 +1,7 @@
 /**
  * The redirect-exfiltration fixture (spec §5c/§8, plan §2 box 1): a real `fetch` against a
  * local two-endpoint `node:http` pair, source answering 302 to target. Proves what
- * `redirect: 'error'` does under the real runtime — no scripted fetch can show this.
+ * `redirect: 'error'` does under the real runtime, no scripted fetch can show this.
  */
 
 import { createServer } from 'node:http'

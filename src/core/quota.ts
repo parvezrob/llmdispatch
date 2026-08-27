@@ -1,8 +1,8 @@
 /**
  * The quota lifecycle (spec §4): reserve, commit with recovery, and settlement.
  *
- * Every store return is validated fail-closed — the core never dispatches without a
- * validated `'committed'` — and the caller's signal is checked before every recovery I/O.
+ * Every store return is validated fail-closed: the core never dispatches without a
+ * validated `'committed'`, and the caller's signal is checked before every recovery I/O.
  * Settlement never changes a run's outcome: the initial `settle` is awaited to its deadline,
  * the retries are detached on unreferenced timers, and the failure hook and logger are
  * reached only through caught chains.
@@ -132,7 +132,7 @@ function storeFields<K extends string>(
 /**
  * Reserves the run's slot (spec §4, stage 7).
  *
- * Never raced with the signal — a reserve in flight is awaited to its deadline-bounded
+ * Never raced with the signal: a reserve in flight is awaited to its deadline-bounded
  * result (§1); the caller checks the signal afterwards. `limit === 0` still reserves: the
  * denial's `used` and `resetsAt` must be store-authoritative.
  *
@@ -169,7 +169,7 @@ async function reserveOnce(
     checkRecoverySignal(ctx)
     throw usageStoreUnavailable(ctx.operation, error)
   }
-  // §1: an in-flight reserve is awaited to its result first — then, before that result is
+  // §1: an in-flight reserve is awaited to its result first, then, before that result is
   // interpreted, an abort ends the run. Whatever state was reached stands: a granted
   // envelope simply expires on its own; a denial changed nothing.
   checkRecoverySignal(ctx)
@@ -229,7 +229,7 @@ function checkRecoverySignal(ctx: QuotaContext): void {
 
 /**
  * Commits the reservation, running the §4 recovery table, and answers the envelope the run
- * settles against — the original, or the replacement after a single re-reserve.
+ * settles against: the original, or the replacement after a single re-reserve.
  *
  * The signal is checked before every recovery I/O; an in-flight call is always awaited to
  * its deadline-bounded result first (§1).
@@ -299,7 +299,7 @@ async function commitWithTransportRetries(
       continue
     }
     // A validated 'committed' counts (§1): the run proceeds into the post-commit region,
-    // whose first boundary check reports the abort — with settlement. Every other answer
+    // whose first boundary check reports the abort, with settlement. Every other answer
     // yields to the abort before it is interpreted.
     if (answer === 'committed') return answer
     checkRecoverySignal(ctx)
@@ -399,7 +399,7 @@ function settlementDomainProblem(
  *
  * The returned promise is the awaited part: the initial `settle`, bounded by its 10 s
  * deadline, resolving whether or not that call succeeded. On failure, up to three retries
- * run on detached unreferenced timers — the process may exit before them (§4) — and if all
+ * run on detached unreferenced timers (the process may exit before them, §4), and if all
  * fail, `onSettlementError` and `logger.error` each run once through a caught chain.
  *
  * `attempts` must already be the run's own snapshot: the caller's arrays are reachable from

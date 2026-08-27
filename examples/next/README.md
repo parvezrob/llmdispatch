@@ -2,13 +2,13 @@
 
 A Next.js App Router project with one llmdispatch operation behind a route handler.
 
-- `lib/switch.ts` — the switch: one provider, one `summarize` operation, in-memory stores.
-- `app/api/summarize/route.ts` — `POST`, with `LLMDispatchError` codes mapped to HTTP
+- `lib/switch.ts`: the switch, one provider, one `summarize` operation, in-memory stores.
+- `app/api/summarize/route.ts`: `POST`, with `LLMDispatchError` codes mapped to HTTP
   statuses.
-- `app/api/healthz/route.ts` — `GET`.
+- `app/api/healthz/route.ts`: `GET`.
 
 TypeScript, Node.js runtime. The route is `openaiCompatible`, so it works against OpenAI
-or any OpenAI-compatible endpoint — a gateway, or a local model server — by setting
+or any OpenAI-compatible endpoint (a gateway, or a local model server) by setting
 `OPENAI_BASE_URL`.
 
 ## In your own project

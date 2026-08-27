@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
   const subjectId = 'demo-user'
 
   try {
-    // If the caller goes away, the work goes with it — an abandoned request should not
+    // If the caller goes away, the work goes with it, since an abandoned request should not
     // carry on spending provider budget. `run` then ends in `ABORTED`.
     const result = await ai.run(
       'summarize',

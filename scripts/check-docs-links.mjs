@@ -2,11 +2,11 @@
 /**
  * Checks every markdown link in the repository the way GitHub will resolve it: relative
  * targets must exist, and `#fragment` anchors must match a heading slug in the target
- * document. External URLs are counted but never fetched — their health is a different
+ * document. External URLs are counted but never fetched: their health is a different
  * question, and this gate stays network-free and deterministic.
  *
  * The embedded slugger mirrors GitHub's, and is validated against fixed fixtures taken
- * from known GitHub outputs before anything is checked — never against expectations this
+ * from known GitHub outputs before anything is checked, never against expectations this
  * script generated for itself, so the checker cannot quietly agree with its own mistakes.
  * A heading character or a link form the fixtures do not cover fails the gate loudly
  * instead of being skipped.
@@ -23,7 +23,7 @@ import { dirname, join, normalize, sep } from 'node:path'
 const ROOT = join(import.meta.dirname, '..')
 const USAGE = 'usage: check-docs-links.mjs\n'
 
-// ——— slugger ———
+// --- slugger ---
 
 /**
  * GitHub's slug algorithm for the character classes this repository actually uses:
@@ -41,13 +41,13 @@ function slugOf(headingText) {
 
 /**
  * Exactly the character classes the fixtures below prove `slugOf` handles the way GitHub
- * does. A heading using anything else fails the gate loudly — the maintainer then adds a
+ * does. A heading using anything else fails the gate loudly: the maintainer then adds a
  * fixture with the known GitHub output and widens this set, never the other way around.
  */
 const COVERED_HEADING = /^[\p{L}\p{N} `*\-.():;+,/'—]*$/u
 
 /**
- * Known GitHub outputs, not outputs of `slugOf` — the point is that the two agree.
+ * Known GitHub outputs, not outputs of `slugOf`: the point is that the two agree.
  * Sourced from GitHub's rendering of these exact heading texts. Together they cover every
  * character `COVERED_HEADING` admits.
  */
@@ -92,11 +92,11 @@ function sluggerSelfTest(problems) {
   }
 }
 
-// ——— markdown reading ———
+// --- markdown reading ---
 
 /**
  * Two views of the file with line numbers preserved. Fenced code blocks are blanked in
- * both — nothing inside a fence is markup. Inline code spans are blanked only in the
+ * both: nothing inside a fence is markup. Inline code spans are blanked only in the
  * link-scanning view: a bracket inside backticks is not a link, but a heading's inline
  * code DOES contribute its text to GitHub's slug, so the heading view keeps it.
  */
@@ -176,7 +176,7 @@ function linksOf(lines, file, problems) {
   return links
 }
 
-// ——— resolution ———
+// --- resolution ---
 
 function main() {
   if (process.argv.length > 2) {

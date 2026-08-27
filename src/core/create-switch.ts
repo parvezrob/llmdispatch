@@ -71,7 +71,7 @@ export function defineOperation<In extends z.ZodType, Out extends z.ZodType>(
  * Collects operations for `createSwitch`.
  *
  * An identity collector (spec §6): it returns exactly the object it was given and does not
- * itself restore inference — that is {@link defineOperation}'s job, per entry.
+ * itself restore inference; that is {@link defineOperation}'s job, per entry.
  *
  * @param operations The map of operations, each wrapped in `defineOperation`.
  * @returns The same object.
@@ -207,7 +207,7 @@ function validateOperation(
  * Builds a configured switch (spec §6).
  *
  * Pure wiring plus §6 validation; no store is called and no provider is prepared here.
- * Internal — the public `createSwitch` in the root entry supplies the real runtime.
+ * Internal: the public `createSwitch` in the root entry supplies the real runtime.
  *
  * @throws `LLMDispatchError` with code `INVALID_CONFIG` naming the field that failed.
  */

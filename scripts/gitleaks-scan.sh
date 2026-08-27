@@ -3,7 +3,7 @@
 #
 # Continuous integration runs it over the tree and over the history; the tree scanner's
 # self-test runs it over a directory of deliberately matching strings. Sharing this file
-# is what stops the two from drifting apart — a self-test that proved a different command
+# is what stops the two from drifting apart: a self-test that proved a different command
 # would prove nothing about the one that actually runs.
 #
 # Usage: sh scripts/gitleaks-scan.sh dir|git <path>

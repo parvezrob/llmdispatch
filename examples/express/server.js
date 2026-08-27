@@ -35,7 +35,7 @@ app.post('/summarize', async (request, response) => {
   // the server from the session and never read out of the request body.
   const subjectId = 'demo-user'
 
-  // If the caller goes away, the work goes with it — an abandoned request should not carry
+  // If the caller goes away, the work goes with it, since an abandoned request should not carry
   // on spending provider budget. `run` then ends in `ABORTED`. It is the RESPONSE that says
   // whether the client is still there: `request`'s own `close` fires as soon as its body has
   // been read, which is every request, not an abandoned one.

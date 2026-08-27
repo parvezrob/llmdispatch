@@ -12,5 +12,5 @@ from any real call is stored. The harness fills `model` and `choices[0].message.
 per run, deriving the content from that run's nonce, so a response can only have come from
 this fixture during this run.
 
-Refresh it from the provider's published response schema — never by pasting a captured
+Refresh it from the provider's published response schema, never by pasting a captured
 transcript.

@@ -4,7 +4,7 @@
  * One factory per classification, not per code: spec §5b makes `retryable` a function of the
  * classification, so `PROVIDER_FAILED` is retryable for a `transient` failure and not for a
  * `refused` one. Taking the classification and looking the literal up is what stops a throw
- * site disagreeing with the table. Messages carry an operation, a field or a classification —
+ * site disagreeing with the table. Messages carry an operation, a field or a classification;
  * never a prompt, a model's output, or a raw provider error (spec §4).
  *
  * @module

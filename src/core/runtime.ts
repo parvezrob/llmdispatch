@@ -5,7 +5,7 @@
  * handed this object, the root entry wires the real one from `globalThis`, and tests inject a
  * fake. The referenced/unreferenced distinction is the process-liveness contract: a referenced
  * timer may keep the process alive (store deadlines, provider timeouts, the awaited settle),
- * an unreferenced one must not (the detached settlement retries — spec §4 lets the process
+ * an unreferenced one must not (the detached settlement retries: spec §4 lets the process
  * exit before them, losing attempt records but never slot accounting).
  *
  * @module

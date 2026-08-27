@@ -58,7 +58,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run depcruise
       - run: npm run build
-      # Every fixture — the README quickstart fence included — compiled against the build
+      # Every fixture, the README quickstart fence included, compiled against the build
       # rather than against the spec.
       - name: Compile the fixtures the build can satisfy against it
         run: node scripts/check-types-fixtures.mjs --target package

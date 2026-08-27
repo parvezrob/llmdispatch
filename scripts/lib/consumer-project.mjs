@@ -64,7 +64,7 @@ export function pinnedDevelopmentVersion(name) {
   const found = resolveFromLock(readLockfile(), '', name)
   if (found === null || typeof found.entry.version !== 'string') {
     throw new Error(
-      `package-lock.json records no installed version of ${name} — run \`npm install\``,
+      `package-lock.json records no installed version of ${name}, run \`npm install\``,
     )
   }
   return `${name}@${found.entry.version}`
@@ -78,8 +78,8 @@ function readLockfile() {
 /**
  * Exact versions for the transitive closure of the named packages, as npm `overrides`.
  *
- * Pinning the roots alone leaves their own dependencies — `pg-pool`, `pg-protocol` and the
- * rest — resolving from the registry at install time, so the check would be unreproducible in
+ * Pinning the roots alone leaves their own dependencies: `pg-pool`, `pg-protocol` and the
+ * rest: resolving from the registry at install time, so the check would be unreproducible in
  * the part of it nobody looks at. Overrides pin every nested resolution without adding
  * anything to the dependency list: an optional dependency stays optional, so a platform that
  * cannot install `pg-cloudflare` is not made to.
@@ -87,7 +87,7 @@ function readLockfile() {
  * @param names The packages whose closure to pin, each of which the repository must declare.
  * @returns A map of package name to exact version, for the project's `overrides` field.
  * @throws `Error` when a package is not declared or recorded, when a required dependency
- * cannot be resolved, or when two nodes reach the same name at different versions — that has
+ * cannot be resolved, or when two nodes reach the same name at different versions: that has
  * no single answer, so it is refused rather than decided quietly.
  */
 export function pinnedDevelopmentOverrides(names) {
@@ -128,7 +128,7 @@ export function pinnedDevelopmentOverrides(names) {
         if (found === null || typeof found.entry.version !== 'string') {
           if (optional) continue
           throw new Error(
-            `package-lock.json does not resolve ${wanted}, required by ${name} — ` +
+            `package-lock.json does not resolve ${wanted}, required by ${name}: ` +
               'run `npm install`',
           )
         }
@@ -189,7 +189,7 @@ export function createConsumerProject(opts) {
     },
   )
   if (install.status !== 0 || install.error !== undefined) {
-    // `error` is set when npm never started, overran the output limit or hit the deadline —
+    // `error` is set when npm never started, overran the output limit or hit the deadline,
     // cases that often produce no output at all.
     const reason = install.error === undefined ? '' : `\n${install.error.message}`
     throw new Error(
@@ -303,7 +303,7 @@ let stopping = false
  * Kills every running child and waits for it to go.
  *
  * A signal sent to this process is not delivered to a child it spawned, so without this a
- * handler would tidy up and exit while a keyed runner carried on orphaned — still holding a
+ * handler would tidy up and exit while a keyed runner carried on orphaned: still holding a
  * credential, still writing to a schema that had just been dropped. Every signal handler must
  * await this before cleaning up anything else.
  *

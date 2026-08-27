@@ -117,7 +117,7 @@ declare function defineOperation<In extends z.ZodType, Out extends z.ZodType>(de
  * Collects operations for `createSwitch`.
  *
  * An identity collector (spec §6): it returns exactly the object it was given and does not
- * itself restore inference — that is {@link defineOperation}'s job, per entry.
+ * itself restore inference; that is {@link defineOperation}'s job, per entry.
  *
  * @param operations The map of operations, each wrapped in `defineOperation`.
  * @returns The same object.
@@ -129,8 +129,8 @@ declare function defineOperations<Ops extends OperationsMap>(operations: Ops): O
  * Builds a configured switch: providers, operations and stores in; `run` plus the admin
  * surface out (spec §6).
  *
- * Construction is pure wiring — no store is called, no provider is prepared, no network is
- * touched — plus the §6 validation of every range and name, so a misconfiguration fails
+ * Construction is pure wiring: no store is called, no provider is prepared, no network is
+ * touched, plus the §6 validation of every range and name, so a misconfiguration fails
  * here, loudly, rather than on the first request.
  *
  * @param config Who can be called, what the app does, and where config and counters live.

@@ -1,12 +1,12 @@
 # Releasing
 
-How a version of this package reaches npm. Written so that whoever does it next — including
-me, six months from now — does not have to work out the reasoning again.
+How a version of this package reaches npm. Written so that whoever does it next, including
+me, six months from now, does not have to work out the reasoning again.
 
 A release is staged before it is published. The workflow builds the bytes, audits them and
 hands them to the registry as a _staged_ version: reserved, downloadable by a maintainer,
 and installable by nobody. The same bytes are then downloaded, verified, and promoted by
-hand behind a 2FA challenge. That split is the point of this document — what gets verified
+hand behind a 2FA challenge. That split is the point of this document: what gets verified
 is what gets published, because there is only ever one tarball.
 
 ## Before any release
@@ -40,18 +40,18 @@ both pass:
 ( cd <checkout>; node scripts/live-check-providers.mjs --release ~/release-<version>/<tarball> )
 ```
 
-**Where they run from:** both are scripts in this repository, so they need a checkout of it —
+**Where they run from:** both are scripts in this repository, so they need a checkout of it,
 the directory the tarball sits in holds nothing but the tarball and its hashes. The
 subshells are what keep that a detour: the shell you are working in stays where it was, and
 the tarball is passed across by path.
 
-That checkout must be at the commit being released and clean — `git status --porcelain`
-prints nothing — because the scripts and the helpers they import come out of it: an edited
+That checkout must be at the commit being released and clean (`git status --porcelain`
+prints nothing), because the scripts and the helpers they import come out of it: an edited
 harness verifies something other than the release. What comes from the tarball is the package
 under test, which each script installs into a scratch project and exercises from there.
 
 The first installs that tarball into a scratch project, applies the packaged SQL to a real
-PostgreSQL and runs all three conformance suites from the installed package — not from the
+PostgreSQL and runs all three conformance suites from the installed package, not from the
 working tree, so what is verified is what adopters get. It needs `DATABASE_URL` pointing at
 a throwaway database on this machine; `CONTRIBUTING.md` has the shape it accepts and the
 script's own header has a container to run it against.
@@ -63,7 +63,7 @@ is a failure rather than a skip. Use throwaway keys and revoke them when you sto
 when you finish.
 
 **When they run:** on the staged tarball, after the workflow has staged the release and
-before you approve it — that is the only moment the bytes are both final and not yet
+before you approve it: that is the only moment the bytes are both final and not yet
 installable by anyone. The release candidate in the bootstrap below is verified the same
 way, on the audited artifact, before it is published from a laptop.
 
@@ -86,7 +86,7 @@ staging.
    hash record names, in the same step, so there is no window between verifying the bytes and
    sending them. It authenticates over OIDC and carries no token. A staged version is
    reserved and downloadable, and `npm install` cannot reach it. The stage also records the
-   dist-tag the version will take — `latest`, since the step passes no `--tag` — and that tag
+   dist-tag the version will take (`latest`, since the step passes no `--tag`) and that tag
    is applied when the stage is approved rather than now. That is what a stable release
    wants. A prerelease is a different matter: npm refuses to stage one under the default tag
    at all, so staging a prerelease through this workflow would mean adding `--tag` to the
@@ -102,7 +102,7 @@ staging.
 
    Work from this directory for the rest of the flow, and keep it outside any checkout of
    this repository: the scratch install in step 10 needs a directory that is nobody's
-   subdirectory. The two verification commands are the exception — they are scripts in this
+   subdirectory. The two verification commands are the exception: they are scripts in this
    repository, so they run from a checkout at the released commit with the tarball passed by
    path, as _Release verification_ shows.
 
@@ -113,8 +113,8 @@ staging.
    npm stage list llmdispatch
    ```
 
-   Exactly one stage for the version being released. If there is another — an abandoned
-   attempt, most likely — reject it before going on, so that "the stage" means one thing for
+   Exactly one stage for the version being released. If there is another, an abandoned
+   attempt, most likely, reject it before going on, so that "the stage" means one thing for
    the rest of these steps. Every `npm stage` subcommand needs authenticated maintainer
    access; OIDC can only stage.
 
@@ -122,7 +122,7 @@ staging.
    the listing above. npm scans staged bytes like any other upload, and a stage it has not
    finished with can be neither downloaded nor approved. At the time of writing the CLI
    reports that condition as `validating`; wait for it to report the stage as ready. A stage
-   that ends in a failed or rejected state is not something to retry into — reject it and
+   that ends in a failed or rejected state is not something to retry into. Reject it and
    find out why, as in the mismatch branch below. The exact state names, like the `shasum`
    field that branch reads, are worth confirming here on the first staged release, before
    anything depends on them.
@@ -144,17 +144,17 @@ staging.
    giving each the full path to the file you just downloaded; in the subshell form shown
    there, they leave you in this directory. If the hashes differ, this is not a retry and not a rebuild: the
    registry is holding bytes that were never audited. Do not approve. Reject the stage, and
-   treat it as a security incident — audit the account, its tokens and the workflow before
+   treat it as a security incident: audit the account, its tokens and the workflow before
    anything is dispatched again.
 
-9. Approve the stage you just downloaded and verified — the same identifier, not the newest
+9. Approve the stage you just downloaded and verified, the same identifier, not the newest
    one on the listing:
 
    ```bash
    npm stage approve <stage-id>
    ```
 
-   npm answers with a 2FA challenge. If none appears, **stop** — the credential in play is
+   npm answers with a 2FA challenge. If none appears, **stop**: the credential in play is
    not the one this process assumes. Approval promotes the same registry-held bytes; nothing
    is rebuilt and nothing is re-uploaded. Staged versions carry provenance exactly as direct
    publishes do. The version is installable from this moment, under the tag the stage
@@ -200,7 +200,7 @@ staging.
 
     Two statements print: the publish attestation, and the provenance one, whose
     `predicateType` names SLSA provenance. In the provenance statement,
-    `subject[0].digest.sha512` is the subject digest — it must equal `$expected` — and
+    `subject[0].digest.sha512` is the subject digest, and it must equal `$expected`;
     `subject[0].name` is the package and version it was signed for. The rest sits under
     `predicate`: `buildDefinition.externalParameters.workflow` carries the repository, the
     workflow file and the ref, `buildDefinition.resolvedDependencies[0].digest.gitCommit` the
@@ -216,13 +216,13 @@ staging.
 
     That prints `sha512-` and the registry's digest for the tarball in base64; decode it with
     `node -p "Buffer.from('<base64>', 'base64').toString('hex')"` and compare with
-    `$expected`. It is a different question from the attestation — what installers receive,
-    rather than what the registry attests about where it came from — and both must answer
+    `$expected`. It is a different question from the attestation (what installers receive,
+    rather than what the registry attests about where it came from) and both must answer
     the same digest.
 
     A missing attestation, a missing entry, or a digest that does not match is an incident on
-    a version that is already installable. Deprecate it while you investigate —
-    `npm deprecate llmdispatch@<version> "under investigation"` — rather than leaving it
+    a version that is already installable. Deprecate it while you investigate,
+    `npm deprecate llmdispatch@<version> "under investigation"`, rather than leaving it
     recommended to everyone, and do not go on to step 11.
 
 11. Settle the dist-tags. Approval already applied `latest`, so the only question left is
@@ -233,9 +233,9 @@ staging.
     ```
 
     In practice only the bootstrap leaves anything to do here, because the release candidate
-    is what puts `next` on the package. If `next` is present, either move it —
-    `npm dist-tag add llmdispatch@<version> next` — or remove it —
-    `npm dist-tag rm llmdispatch next` — and read the tags back. If it is absent, there is
+    is what puts `next` on the package. If `next` is present, either move it,
+    `npm dist-tag add llmdispatch@<version> next`, or remove it,
+    `npm dist-tag rm llmdispatch next`, and read the tags back. If it is absent, there is
     nothing to move and nothing to add. Then close the session.
 
 Consult `npm stage --help` for exact subcommand syntax at the time you run it: staged
@@ -245,7 +245,7 @@ The workflow also takes an `audit_only` input. With it set, the publish job neve
 eligible at all, so nothing is staged: the run produces the audited `release-tarball`
 artifact and stops. Use it whenever you want the exact audited bytes without leaving a run
 parked one approval away from the registry. However you dispatch it, look at the run
-afterwards and confirm the publish job shows as skipped — that check costs seconds and does
+afterwards and confirm the publish job shows as skipped. That check costs seconds and does
 not depend on how the input was delivered.
 
 ### Temporary authenticated sessions
@@ -267,12 +267,12 @@ rm -f "$NPM_CONFIG_USERCONFIG"
 
 Every npm command in that shell inherits both settings, which is the point: the commands in
 this document that belong to a session carry no `--userconfig` or `--registry` of their own,
-and a command that needs different settings — the scratch install in step 10 — overrides them
+and a command that needs different settings (the scratch install in step 10) overrides them
 on its own command line. The path is absolute so that changing directory mid-task cannot
 strand the credential in a file nobody deletes.
 
 The separate user config keeps the credential out of `~/.npmrc`, where it would outlive the
-task by default. `npm whoami` is an identity check, not a formality — it says which account
+task by default. `npm whoami` is an identity check, not a formality: it says which account
 the following commands will act as, and the registry is pinned for the same reason it is
 pinned everywhere else here: a configured mirror would otherwise answer instead.
 
@@ -286,7 +286,7 @@ any of this.
 
 - The workflow's successful **stage** proves the trusted-publisher binding works: npm accepted
   an OIDC credential naming this repository, this workflow and this environment. That the job
-  used no token is a separate claim, and a different mechanism proves it — the workflow file
+  used no token is a separate claim, and a different mechanism proves it: the workflow file
   passes no credential to the step, and the repository's secrets list holds none for it. Read
   both; a successful stage cannot tell you that.
 - The **approval** proves owner presence: it is interactive, it is answered with 2FA, and it
@@ -298,7 +298,7 @@ approval, and an approval says nothing about how the bytes got there.
 ### When something fails
 
 Everything here turns on one question: has the stage been approved yet. Before approval the
-version exists only as a stage — it reserves its number while being invisible to a plain
+version exists only as a stage: it reserves its number while being invisible to a plain
 `npm view`, so "nothing is on the registry" is not evidence of anything, and anything wrong
 with it is undone by rejecting it. After approval the version is live and cannot be rejected,
 withdrawn or replaced; the remedy there is to deprecate it while you investigate. Work out
@@ -307,25 +307,25 @@ which side of that line you are on before you type anything.
 **The workflow run failed and the stage state is unknown.** Inspect `npm stage list` and
 `npm stage view` from a temporary authenticated session, which is also what pins the registry
 for the commands below. What a stage listing shows of the bytes is a `shasum`, which is a
-SHA-1 — the legacy field, and the only digest on offer there — so compare it against
+SHA-1, the legacy field and the only digest on offer there, so compare it against
 `sha1sum` of the tarball in the run's artifact rather than against either recorded hash. The
 release candidate never stages, since it is published from a laptop, so the first chance to
 confirm this reading is steps 5 and 6 of the first staged release: read the fields there,
 before this branch depends on them.
 
-- No stage — fix the cause and dispatch again.
-- A stage whose `shasum` matches the artifact's `sha1sum` — the send succeeded and something
+- No stage: fix the cause and dispatch again.
+- A stage whose `shasum` matches the artifact's `sha1sum`: the send succeeded and something
   after it did not. Carry on with verification of that stage, whose full check is step 8.
-- A stage whose `shasum` does not match, or one left in a failed validation state — reject it
+- A stage whose `shasum` does not match, or one left in a failed validation state: reject it
   with `npm stage reject <stage-id>` and find out where those bytes came from before doing
   anything else.
 
 **You issued an approval and do not know whether it promoted.** Query the version on the
 pinned public registry.
 
-- Absent — re-check the stage and approve again.
-- Present, digest matches, provenance as expected — it worked; reconcile and carry on.
-- Present with a different digest, or with no provenance — treat it as a security incident.
+- Absent: re-check the stage and approve again.
+- Present, digest matches, provenance as expected: it worked; reconcile and carry on.
+- Present with a different digest, or with no provenance: treat it as a security incident.
   The version is live and cannot be taken back, so deprecate it with a message saying it is
   under investigation, then stop: audit the account, its tokens and the workflow, and do not
   retry.
@@ -333,11 +333,11 @@ pinned public registry.
 Three more, none of which is a retry:
 
 - **A verification command fails before approval.** The release is blocked and the gate did
-  what it is for. Do not approve the stage — reject it with `npm stage reject <stage-id>`,
+  what it is for. Do not approve the stage. Reject it with `npm stage reject <stage-id>`,
   because a stage left standing still holds that version number while being invisible to
   `npm view`, and the next dispatch would collide with your own abandoned attempt. Revoke the
   provider keys before you put it down.
-- **Something is wrong after approval** — a missing attestation, a digest that does not match,
+- **Something is wrong after approval**: a missing attestation, a digest that does not match,
   anything the step-10 checks turn up. There is no stage left to reject: deprecate the
   version with a message saying so while you investigate, and treat a digest or provenance
   discrepancy as a security incident rather than a bookkeeping error.
@@ -347,7 +347,7 @@ Three more, none of which is a retry:
   page is healthy.
 
 If you stop for any reason once a release candidate exists, say explicitly what happens to
-the `next` tag — kept, with a reason, or removed — rather than leaving it pointing at
+the `next` tag, kept with a reason or removed, rather than leaving it pointing at
 whatever it happened to point at.
 
 ## Every release after the first
@@ -359,7 +359,7 @@ configured trusted publisher, and no publish token exists in it at all.
 
 npm will only let a trusted publisher be configured on a package that already exists, so the
 very first version cannot go through the workflow. This section exists once. Follow it in
-order — several steps are ordered for a reason, noted where it matters.
+order: several steps are ordered for a reason, noted where it matters.
 
 1. **Recheck the name.** The name is already held by a `0.0.0` placeholder published from
    this project, so the check is ownership, not absence. Immediately before publishing:
@@ -370,14 +370,14 @@ order — several steps are ordered for a reason, noted where it matters.
 
    It must show exactly the placeholder `0.0.0` and the maintainer account this document's
    sessions sign in as. The registry is named explicitly because a mirror or a corporate
-   proxy can answer differently from the public registry. Anything else — extra versions, an
-   unfamiliar maintainer — means the name is not in the expected state: **stop** and find out
-   why before publishing. Moving to a different name is not a rename — the import specifier
+   proxy can answer differently from the public registry. Anything else (extra versions, an
+   unfamiliar maintainer) means the name is not in the expected state: **stop** and find out
+   why before publishing. Moving to a different name is not a rename: the import specifier
    is the package's public contract, and it appears in the README, the type fixtures, the
    consumer tests, the examples and their lockfiles, and the verification harnesses. That is
    a migration with every release gate re-run, and it needs planning on its own.
 
-2. **Build a release candidate.** Set the version to `0.1.0-rc.0` — this one bump is an
+2. **Build a release candidate.** Set the version to `0.1.0-rc.0`. This one bump is an
    exception to the changesets rule above, because the RC is not a stable release: edit
    `version` in `package.json` and in `package-lock.json` (both the root entry and the
    self-referencing packages entry) by hand, and land it as its own reviewed commit. Run the
@@ -395,7 +395,7 @@ order — several steps are ordered for a reason, noted where it matters.
    ```
 
    You must be presented with a 2FA challenge. If none appears, **stop** and find out why
-   before republishing — an unchallenged publish means the credential in play is not the one
+   before republishing: an unchallenged publish means the credential in play is not the one
    this process assumes. The `next` tag keeps the version that bootstraps the registry entry
    out of what a plain `npm install` gets.
 
@@ -403,11 +403,11 @@ order — several steps are ordered for a reason, noted where it matters.
    included.
 
 5. **Wait.** npm scans a fresh publish before the package page and its settings are usable.
-   Allow minutes, not seconds — often around five, sometimes fifteen or more. Poll rather
+   Allow minutes, not seconds, often around five, sometimes fifteen or more. Poll rather
    than assume, and read what the page says: pending is not the same as rejected.
 
 6. **Configure the trusted publisher**, interactively, on the package's settings. The binding
-   is data — copy it character for character:
+   is data, so copy it character for character:
 
    | Field             | Value               |
    | ----------------- | ------------------- |
@@ -419,7 +419,7 @@ order — several steps are ordered for a reason, noted where it matters.
 
    The workflow field is a filename, not a path. The environment name is case-sensitive. A
    package gets one trusted publisher, so there is no second entry to fall back on. npm does
-   not validate any of these fields when you save them — a mismatch first shows up as a
+   not validate any of these fields when you save them, and a mismatch first shows up as a
    failed stage, which is why they are copied rather than typed from memory. The allowed
    action is the whole point of the arrangement: the workflow may stage a version and may
    not publish one, so the automated half of a release can never reach an installable
@@ -427,7 +427,7 @@ order — several steps are ordered for a reason, noted where it matters.
 
 7. **Restrict the package**: require 2FA, and disallow publishing with a token. Do this now,
    before the first stable release rather than after it. It is safe at this point precisely
-   because the flow is split — the workflow stages over OIDC, which the restriction does not
+   because the flow is split: the workflow stages over OIDC, which the restriction does not
    touch, and the promotion is the interactive, 2FA-answered step the restriction is meant to
    enforce. Leaving it until the end would mean the one release that matters most is the one
    published under the looser rules. Confirm on the settings page that turning the
@@ -437,13 +437,13 @@ order — several steps are ordered for a reason, noted where it matters.
    trusted-publisher list shows the single entry above and nothing else.
 
 9. **Restore the real version**, as its own reviewed commit. `npx changeset version` run
-   against `0.1.0-rc.0` consumes the pending patch changesets and lands on exactly `0.1.0` —
+   against `0.1.0-rc.0` consumes the pending patch changesets and lands on exactly `0.1.0`,
    a patch bump of a prerelease drops the prerelease rather than adding to it. Confirm that
    rather than trusting it; if the tool produces anything else, correct the version by hand
    in the same commit. The released version is `0.1.0`, not a `0.1.1` that a pending
    changeset produced by accident. Changesets edits `package.json` and the changelog but not
    the lockfile, so bring `package-lock.json` along by running
-   `npm install --package-lock-only --ignore-scripts` — continuous integration checks the
+   `npm install --package-lock-only --ignore-scripts`, since continuous integration checks the
    lockfile is canonical and will fail the commit otherwise.
 
    The same commit is where the pre-release prose goes, because changesets only ever inserts
@@ -459,20 +459,20 @@ order — several steps are ordered for a reason, noted where it matters.
     provenance naming the repository, the workflow and the run.
 
 11. **Clean up the `next` tag**, as step 11 of that flow. Approving the stage applied `latest`
-    to `0.1.0`; `next` is still on the RC until you move it —
-    `npm dist-tag add llmdispatch@0.1.0 next` — or remove it —
+    to `0.1.0`; `next` is still on the RC until you move it,
+    `npm dist-tag add llmdispatch@0.1.0 next`, or remove it,
     `npm dist-tag rm llmdispatch next`. Read the result back with
     `npm dist-tag ls llmdispatch` and check both tags say what you intended. These commands run
     in the same authenticated session as the approval, which is what pins the registry for
     them; a configured mirror would otherwise take them silently.
 
     This is the last thing that session is for. Close it as _Temporary authenticated
-    sessions_ describes — token audit, logout, delete the user config. The bootstrap is not
+    sessions_ describes: token audit, logout, delete the user config. The bootstrap is not
     finished while a credential is still sitting on disk.
 
 No granular access token with Bypass 2FA is used at any point. Besides being one more
 credential to protect, npm has said such tokens lose their direct-publish capability around
 January 2027, so a release process built on one would have to be rebuilt.
 
-Stable releases carry provenance. The bootstrap RC does not — a publish from a laptop has
+Stable releases carry provenance. The bootstrap RC does not: a publish from a laptop has
 nothing to attest with.

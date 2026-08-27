@@ -34,8 +34,8 @@ export function createMemoryConfigStore(): MemoryConfigStore {
       set: (operation, route) =>
         asPromise(() => {
           assertStoreString(operation, 'operation')
-          // The checked copy is what is kept, so editing the caller's object afterwards — or
-          // answering differently on a second read — cannot change what the store holds.
+          // The checked copy is what is kept, so editing the caller's object afterwards, or
+          // answering differently on a second read, cannot change what the store holds.
           rows.set(operation, validatedRoute(route))
         }),
       delete: (operation) =>

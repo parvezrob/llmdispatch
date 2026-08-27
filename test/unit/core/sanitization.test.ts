@@ -1,8 +1,8 @@
 /**
  * Sanitization: sentinel strings seeded into prompt text, input,
  * provider error messages and model output must never appear in any core-constructed field
- * of any `LLMDispatchError` — message, own enumerable properties, attempts, or the cause
- * chain — while an adopter's own thrown value passes into `cause` verbatim, which is the
+ * of any `LLMDispatchError`: message, own enumerable properties, attempts, or the cause
+ * chain, while an adopter's own thrown value passes into `cause` verbatim, which is the
  * documented scope boundary, not a leak. Logger payloads are swept too.
  */
 
@@ -44,7 +44,7 @@ function reachableStrings(value: unknown, seen = new Set<object>()): string[] {
   return found
 }
 
-/** The same walk, excluding everything below `cause` — the core-constructed fields only. */
+/** The same walk, excluding everything below `cause`: the core-constructed fields only. */
 function coreConstructedStrings(error: LLMDispatchError): string[] {
   const found: string[] = [error.message]
   for (const [key, entry] of Object.entries(error)) {
@@ -192,7 +192,7 @@ describe('the sentinel sweep over the whole error matrix', () => {
       const error = caught as LLMDispatchError
       // Core-constructed fields: no dispatch content, ever.
       expectNoSentinels(coreConstructedStrings(error), DISPATCH_SENTINELS)
-      // The full chain, cause included: still no dispatch content with core-safe doubles —
+      // The full chain, cause included: still no dispatch content with core-safe doubles,
       // the provider sentinel is permitted only inside a PRE-dispatch cause chain.
       expectNoSentinels(reachableStrings(error), DISPATCH_SENTINELS)
       if (postDispatch) {
@@ -243,7 +243,7 @@ describe('the sentinel sweep over the whole error matrix', () => {
     const error = caught as LLMDispatchError
     expect(error.code).toBe('INVALID_CONFIG')
     expect(error.retryable).toBe(true)
-    expect(error.cause).toBe(prepareFailure) // verbatim — prepare ran before the prompt
+    expect(error.cause).toBe(prepareFailure) // verbatim: prepare ran before the prompt
     expectNoSentinels(coreConstructedStrings(error), [...DISPATCH_SENTINELS, PROVIDER_SENTINEL])
   })
 
@@ -285,6 +285,6 @@ describe('the sentinel sweep over the whole error matrix', () => {
     } catch (error) {
       caught = error
     }
-    expect(caught).toBe(bug) // raw, by design (spec §1) — the user's bug in full
+    expect(caught).toBe(bug) // raw, by design (spec §1): the user's bug in full
   })
 })

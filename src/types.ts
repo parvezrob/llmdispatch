@@ -3,7 +3,7 @@
  *
  * Shapes only: the file imports nothing but Zod, so every other folder can depend on it
  * without inheriting anything, and a public shape is never declared twice. Ranges and
- * defaults stay in the comments the spec gives them — they are enforced at runtime, since a
+ * defaults stay in the comments the spec gives them, and they are enforced at runtime, since a
  * `number` cannot say "safe integer, 0 to 1 000 000".
  *
  * @module
@@ -11,7 +11,7 @@
 
 import type { z } from 'zod'
 
-// ——— entry point ———
+// --- entry point ---
 
 /** The operations a switch is built from; every entry MUST be wrapped in `defineOperation`. */
 export type OperationsMap = Record<string, OperationDefinition<z.ZodType, z.ZodType>>
@@ -69,7 +69,7 @@ export interface Logger {
   error(message: string, data?: unknown): void | Promise<void>
 }
 
-// ——— operations ———
+// --- operations ---
 
 /** One operation: its schemas, its prompt, and the optional gates around them. */
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
@@ -89,7 +89,7 @@ export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType
 /** What a `quality` gate answers: accepted, or rejected with an optional reason. */
 export type QualityVerdict = { ok: true } | { ok: false; reason?: string }
 
-// ——— routing / views ———
+// --- routing / views ---
 
 /** One operation's stored route: who answers, with what, under which limit. */
 export interface OperationRoute {
@@ -123,7 +123,7 @@ export interface QuotaView {
   resetsAt: string
 }
 
-// ——— run results ———
+// --- run results ---
 
 /** What a successful `run` resolves with. */
 export interface RunResult<Out> {
@@ -171,7 +171,7 @@ export interface ModelPrice {
   outputPerM: number
 }
 
-// ——— providers ———
+// --- providers ---
 
 /** What a provider adapter implements: one call out, optionally with a readiness step. */
 export interface Provider {
@@ -189,8 +189,8 @@ export interface ProviderRequest {
   prompt: string
   model: string
   responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
-  maxOutputTokens?: number // omitted from the wire body when unset — never defaulted (§5c)
-  temperature?: number // omitted from the wire body when unset — never defaulted (§5c)
+  maxOutputTokens?: number // omitted from the wire body when unset, never defaulted (§5c)
+  temperature?: number // omitted from the wire body when unset, never defaulted (§5c)
   signal: AbortSignal
 }
 
@@ -219,7 +219,7 @@ export type ProviderErrorKind =
 /** How a built-in adapter reaches its API key, resolved lazily on every run. */
 export type ApiKeyResolver = () => string | undefined | Promise<string | undefined>
 
-// ——— stores ———
+// --- stores ---
 
 /** Where routes live. Rows come back verbatim; validating them is the core's job. */
 export interface ConfigStore {
@@ -259,7 +259,7 @@ export interface UsageStore {
   snapshot(key: QuotaKey): Promise<{ used: number; resetsAt: string }>
 }
 
-// ——— packaged operational surfaces (spec §6b) ———
+// --- packaged operational surfaces (spec §6b) ---
 //
 // The shapes `llmdispatch/postgres` and `llmdispatch/conformance` publish are declared below this
 // line and re-exported by those entry points alone, so the root surface stays exactly §6.

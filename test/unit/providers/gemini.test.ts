@@ -37,7 +37,7 @@ describe('request shape', () => {
   })
 
   // A model containing URL-meaningful characters proves encodeURIComponent runs, not a bare
-  // string interpolation — an unencoded value would change the request path (D11).
+  // string interpolation: an unencoded value would change the request path (D11).
   it.each([
     ['slash', 'org/model', 'org%2Fmodel'],
     ['question mark', 'model?x', 'model%3Fx'],

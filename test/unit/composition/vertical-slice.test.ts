@@ -1,6 +1,6 @@
 /**
- * The vertical slice: one operation end to end through the public surface — `createSwitch`,
- * the `openaiCompatible` factory over a scripted wire, `memoryStores` — with the fallback
+ * The vertical slice: one operation end to end through the public surface: `createSwitch`,
+ * the `openaiCompatible` factory over a scripted wire, `memoryStores`, with the fallback
  * exercised, the output parsed by the operation's schema, and the daily quota enforced.
  * One green spec demonstrating the assembled whole is fit.
  */
@@ -67,7 +67,7 @@ describe('vertical slice: one operation through the assembled package', () => {
     expect(second.usedFallback).toBe(false)
     expect(second.route).toEqual({ provider: 'openai', model: 'gpt-primary' })
 
-    // Run 3: both daily slots are spent — denied before any dispatch. The fallback shared
+    // Run 3: both daily slots are spent; denied before any dispatch. The fallback shared
     // its run's slot, so two runs consumed two slots, not three attempts' worth.
     expect(dispatched).toBe(3)
     const denied = await expectCode(

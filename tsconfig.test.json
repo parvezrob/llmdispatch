@@ -12,7 +12,7 @@
     "skipLibCheck": true,
     // The runners import the package by its published name. Left to the manifest that
     // resolves into `dist/`, which makes this typecheck depend on a build having happened
-    // first — it has not in CI, where typecheck runs before build. Pointed at the sources
+    // first, and it has not in CI, where typecheck runs before build. Pointed at the sources
     // instead, which are what `dist/` is generated from.
     "paths": {
       "llmdispatch": ["./src/index.ts"],

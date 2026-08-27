@@ -4,8 +4,8 @@ import { z } from 'zod'
 import { defineOperation, defineOperations } from '../../src/index'
 
 describe('the inference builders', () => {
-  // Spec §6: defineOperations is an identity collector — it returns exactly the object it
-  // was given — and defineOperation is the per-entry identity that carries the inference.
+  // Spec §6: defineOperations is an identity collector: it returns exactly the object it
+  // was given, and defineOperation is the per-entry identity that carries the inference.
   it('defineOperations returns the very object it was handed', () => {
     const operations = {
       summarize: defineOperation({

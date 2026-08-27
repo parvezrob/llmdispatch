@@ -1,7 +1,7 @@
 /**
  * Prepared-dispatcher concurrency under load (spec §5a): N overlapping runs over one
  * shared provider registered as both primary and fallback, each run resolving its own
- * credential — proof that nothing prepared leaks across runs — plus store reconciliation
+ * credential: proof that nothing prepared leaks across runs, plus store reconciliation
  * at quiescence, admin writes interleaved with in-flight runs, and a seeded stochastic
  * smoke over shuffled settlement orders. The scripted interleavings are the gate; the
  * seeded shuffle is evidence.
@@ -66,7 +66,7 @@ describe('the alternating-credentials race', () => {
         return currentKey
       },
     })
-    // Pinned clock: no UTC-midnight straddle, and time moves only when the test says so —
+    // Pinned clock: no UTC-midnight straddle, and time moves only when the test says so,
     // the zero-pending proof at the end depends on that.
     let nowMs = Date.parse('2026-08-26T12:00:00.000Z')
     const internal = createMemoryStores({ now: () => new Date(nowMs), leaseMs: 60_000 })
@@ -114,7 +114,7 @@ describe('the alternating-credentials race', () => {
     // the fallback wave would have moved this counter after the first assertion above.
     expect(resolverCalls).toBe(N)
 
-    // The named oracle: every dispatched request — primary and fallback alike — carries
+    // The named oracle: every dispatched request: primary and fallback alike: carries
     // exactly the key its run resolved.
     for (const call of wire.calls) {
       expect(call.headers.authorization).toBe(`Bearer key-${String(runIndexOf(call))}`)
@@ -137,7 +137,7 @@ describe('the alternating-credentials race', () => {
     })
 
     // Quiescence reconciliation. What each line pins: N grants observed, N commit acks
-    // observed (committed == runs that dispatched — the fallback shares its run's slot,
+    // observed (committed == runs that dispatched: the fallback shares its run's slot,
     // so attempts != slots), every granted slot settled with its run's attempt count,
     // and the public snapshot agreeing with the committed count.
     expect(recorded.envelopes).toHaveLength(N)
@@ -168,7 +168,7 @@ describe('the alternating-credentials race', () => {
 })
 
 describe('admin writes interleaved with in-flight runs', () => {
-  // What this proves is invalidation-on-write while earlier runs are still in flight —
+  // What this proves is invalidation-on-write while earlier runs are still in flight,
   // every run resolves exactly the write before it, never a stale cache entry. The
   // generation guard against a *read* racing a write is owned by the config suite
   // (test/unit/core/config.test.ts), whose scripted store can hold a read open.

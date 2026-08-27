@@ -168,13 +168,13 @@ export async function executeRun(
   }
   throwIfAborted()
 
-  // Stage 3: subject check for a declared quota only — it must precede all I/O.
+  // Stage 3: subject check for a declared quota only: it must precede all I/O.
   const subjectId = args.subjectId
   if (op.quota !== undefined && !isNonEmptyString(subjectId)) throw missingSubject(operation)
   throwIfAborted()
 
   // Stage 4: config resolution for both routes in one read, then the route-enabled subject
-  // check — after config errors, per the §1 precedence rule.
+  // check, after config errors, per the §1 precedence rule.
   const route = await ctx.configService.resolve(operation)
   const effectiveQuota = route.quota ?? op.quota
   if (effectiveQuota !== undefined && !isNonEmptyString(subjectId))
@@ -205,7 +205,7 @@ export async function executeRun(
   throwIfAborted()
 
   // Stages 7 and 8: reserve and commit, only for an effective quota. Neither is raced with
-  // the signal — an in-flight call is awaited to its deadline-bounded result first (§1).
+  // the signal: an in-flight call is awaited to its deadline-bounded result first (§1).
   let envelope: ReservationEnvelope | null = null
   if (effectiveQuota !== undefined) {
     // Re-narrowing only: the stage 3/4 checks above already threw for a missing subject.

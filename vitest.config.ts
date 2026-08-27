@@ -35,7 +35,7 @@ export default defineConfig({
       reporter: ['text', 'text-summary', 'lcov'],
       // Held to a threshold: what decides, and what is thrown. The stores, the harnesses,
       // and the built-in adapters are measured and reported so their number is visible, and
-      // gated later rather than at 90 % on the day they land — a ratchet only ever goes up.
+      // gated later rather than at 90 % on the day they land: a ratchet only ever goes up.
       thresholds: {
         'src/core/**/*.ts': { lines: 90, branches: 90 },
         'src/errors/**/*.ts': { lines: 90, branches: 90 },

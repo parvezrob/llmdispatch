@@ -28,7 +28,7 @@ export interface Wire {
  * Stubs global `fetch` so every call parks in `calls` until the test resolves it.
  *
  * An already-aborted signal rejects immediately, as the real fetch does. A signal firing
- * *after* dispatch is deliberately ignored — no composition test aborts a parked call, and
+ * *after* dispatch is deliberately ignored, no composition test aborts a parked call, and
  * a future one would need an abort listener here first. Restore with
  * `vi.unstubAllGlobals()` in `afterEach`.
  */

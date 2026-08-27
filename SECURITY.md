@@ -27,7 +27,7 @@ These are properties of the design, described in full in
 **Credentials stay in your process.** Provider credentials are supplied in code, as
 functions that return them when a request is about to be made. They are never read from
 runtime configuration, never written to the database, and never part of what an
-administrator can edit at runtime. Changing a route changes a provider and a model — never
+administrator can edit at runtime. Changing a route changes a provider and a model, never
 a credential or an endpoint.
 
 **Prompts and outputs are never persisted.** What the stores hold is the operation name,
@@ -39,7 +39,7 @@ prompt, not the input, not the model's output, not a raw provider error.
 run carries a code, a retryable flag, and attempt records; those fields do not carry
 prompt text, model output, or the provider's raw error body from a dispatched attempt.
 One deliberate pass-through: a pre-dispatch error may chain the underlying store or
-`prepare()` failure as `cause`, verbatim — treat that `cause` as unsanitised.
+`prepare()` failure as `cause`, verbatim, so treat that `cause` as unsanitised.
 
 **Requests are not redirected.** Every built-in adapter sends its request with redirects
 disabled, so a credential or a prompt is never replayed to a host you did not configure. A

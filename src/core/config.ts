@@ -2,12 +2,12 @@
  * Config resolution (spec §2): the per-operation cache, the generation counter, the
  * per-operation mutation mutex, and the admin reads.
  *
- * Coherence rules, all from §2: every mutation outcome — success, rejection, timeout, and a
- * late ack after a timeout — bumps the operation's generation and invalidates its cache
+ * Coherence rules, all from §2: every mutation outcome (success, rejection, timeout, and a
+ * late ack after a timeout) bumps the operation's generation and invalidates its cache
  * entry; a read begun under an older generation installs nothing; cache age is stamped when
  * the read completes, not when it starts. Mutations are serialized per operation (FIFO, one
  * in flight), and the mutex is released at the store call's deadline even though the store
- * promise is still pending — the 10 s budget binds the store call itself, so a queued
+ * promise is still pending: the 10 s budget binds the store call itself, so a queued
  * mutation's own call still gets its full 10 s from the moment it starts.
  *
  * @module
@@ -85,7 +85,7 @@ export interface ConfigService {
 /**
  * Builds the config service for one switch.
  *
- * @param operations Every declared operation, keyed by name — the source of `defaultRoute`.
+ * @param operations Every declared operation, keyed by name, the source of `defaultRoute`.
  * @param registered The registered provider IDs, for validation-on-read of stored rows.
  */
 export function createConfigService(opts: {
@@ -225,7 +225,7 @@ export function createConfigService(opts: {
 
   /**
    * One serialized mutation. The mutex is released when the store call settles or times
-   * out — at the deadline the store promise is still pending, and its late outcome bumps
+   * out: at the deadline the store promise is still pending, and its late outcome bumps
    * the generation again when it finally lands (§2).
    */
   async function mutate(
@@ -263,7 +263,7 @@ export function createConfigService(opts: {
       } catch (error) {
         bumpAndInvalidate(operation)
         if (error instanceof DeadlineExceeded) {
-          // Unknown ack: the write may still land. When it does — either way — it bumps
+          // Unknown ack: the write may still land. When it does, either way, it bumps
           // again, so a stale entry cached in between is invalidated (§2).
           suppress(
             storePromise.then(

@@ -3,7 +3,7 @@
  * One provider's live check, in a process that holds one provider's credential.
  *
  * Two calls: a plain one and one asking for a JSON object. Both have to come back complete,
- * with text, and with usage the package was able to normalize — a provider whose wire shape
+ * with text, and with usage the package was able to normalize: a provider whose wire shape
  * has moved under the adapter shows up here as a null usage or a missing field, which is the
  * whole reason this check exists.
  *

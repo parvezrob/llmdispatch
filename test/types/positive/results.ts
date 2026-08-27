@@ -1,7 +1,7 @@
 // @targets spec, package
 // What a caller can do with the shapes a run hands back: read a typed result, walk the
 // attempt records, read a quota view, and switch over a provider response without a
-// default arm. The last one is the check that matters — an added `ProviderResponse` member
+// default arm. The last one is the check that matters: an added `ProviderResponse` member
 // has to break this file rather than fall through it silently.
 import type { AttemptRecord, ProviderResponse, QuotaView, RunResult } from 'llmdispatch'
 

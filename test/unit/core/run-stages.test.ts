@@ -26,7 +26,7 @@ import type { CreateSwitchConfig, OperationsMap } from '../../../src/types'
 
 const INPUT = { input: { text: 'hi' } }
 
-describe('stage 0 — pre-aborted signal', () => {
+describe('stage 0: pre-aborted signal', () => {
   it('ends ABORTED before anything else, with no store call and no attempts', async () => {
     const { ai, s } = fixture()
     const controller = new AbortController()
@@ -41,7 +41,7 @@ describe('stage 0 — pre-aborted signal', () => {
   })
 })
 
-describe('stage 1 — operation lookup', () => {
+describe('stage 1: operation lookup', () => {
   it('rejects an unknown operation with INVALID_INPUT and touches nothing', async () => {
     const { ai, s } = fixture()
     const error = await expectCode(ai.run('nope', INPUT), 'INVALID_INPUT')
@@ -51,7 +51,7 @@ describe('stage 1 — operation lookup', () => {
   })
 })
 
-describe('stage 2 — input parse', () => {
+describe('stage 2: input parse', () => {
   it('maps a ZodError to INVALID_INPUT with no store call', async () => {
     const { ai, s } = fixture()
     const error = await expectCode(ai.run('echo', { input: { text: 42 } }), 'INVALID_INPUT')
@@ -77,7 +77,7 @@ describe('stage 2 — input parse', () => {
   })
 })
 
-describe('stage 3 — declared-quota subject check', () => {
+describe('stage 3: declared-quota subject check', () => {
   it('requires a subject before any I/O when the definition declares a quota', async () => {
     const { ai, s } = fixture({ quota: { perDay: 5 } })
     const error = await expectCode(ai.run('echo', INPUT), 'MISSING_SUBJECT')
@@ -92,7 +92,7 @@ describe('stage 3 — declared-quota subject check', () => {
   })
 })
 
-describe('stage 4 — config resolution', () => {
+describe('stage 4: config resolution', () => {
   it('maps a store outage to CONFIG_STORE_UNAVAILABLE, retryable, quota untouched', async () => {
     const { ai, s } = fixture()
     s.getAll.nextReject(new Error('down'))
@@ -134,7 +134,7 @@ describe('stage 4 — config resolution', () => {
   })
 })
 
-describe('stage 5 — readiness', () => {
+describe('stage 5: readiness', () => {
   function preparingProvider(): {
     provider: Provider
     prepareCalls: number[]
@@ -349,7 +349,7 @@ describe('stage 5 — readiness', () => {
   })
 })
 
-describe('stage 6 — prompt build', () => {
+describe('stage 6: prompt build', () => {
   it('passes a thrown prompt exception through unwrapped, quota untouched', async () => {
     const bug = new Error('prompt bug')
     const operations = {
@@ -391,7 +391,7 @@ describe('stage 6 — prompt build', () => {
   })
 })
 
-describe('stages 7 and 8 — quota reserve and commit', () => {
+describe('stages 7 and 8: quota reserve and commit', () => {
   it('ends QUOTA_EXCEEDED on a denial, carrying the store resetsAt, no commit', async () => {
     const { ai, s } = fixture({ quota: { perDay: 5 } })
     s.reserve.nextResolve({ ok: false, used: 5, resetsAt: '2026-08-27T00:00:00.000Z' })
@@ -405,7 +405,7 @@ describe('stages 7 and 8 — quota reserve and commit', () => {
     expect(s.log).toEqual(['getAll', 'reserve u 5'])
   })
 
-  it('still calls reserve at limit 0 — denial must be store-authoritative', async () => {
+  it('still calls reserve at limit 0: denial must be store-authoritative', async () => {
     const { ai, s } = fixture({ quota: { perDay: 0 } })
     s.reserve.nextResolve({ ok: false, used: 3, resetsAt: '2026-08-27T00:00:00.000Z' })
     await expectCode(ai.run('echo', { ...INPUT, subjectId: 'u' }), 'QUOTA_EXCEEDED')
@@ -461,7 +461,7 @@ describe('stages 7 and 8 — quota reserve and commit', () => {
   })
 })
 
-describe('stages 9–11 — attempts, fallback and finalization', () => {
+describe('stages 9–11: attempts, fallback and finalization', () => {
   it('returns the primary result with route, usedFallback false and one attempt', async () => {
     const { ai, s, p1, p2 } = fixture({ quota: { perDay: 5 } })
     const result = await ai.run('echo', { ...INPUT, subjectId: 'u' })

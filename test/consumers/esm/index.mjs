@@ -101,7 +101,7 @@ console.log('esm consumer round-tripped a reservation through the in-memory stor
 
 // The core pipeline end to end, from the installed package: an in-fixture provider, a
 // declared operation, and a run that parses, validates and counts against a quota. The
-// other build's createSwitch is checked too — both module systems reach the same factory.
+// other build's createSwitch is checked too, both module systems reach the same factory.
 const { z } = await import('zod')
 check(
   'the CommonJS build does not export createSwitch',

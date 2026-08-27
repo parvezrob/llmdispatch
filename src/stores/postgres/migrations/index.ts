@@ -2,8 +2,8 @@
  * The packaged migrations (spec §6b).
  *
  * llmdispatch never runs DDL: it hands you the SQL and its hash, and you apply it with whatever
- * tool you already use. The hash a version records is the hash of its template — the schema
- * placeholder still in place — so two adopters using different schema names still agree on
+ * tool you already use. The hash a version records is the hash of its template, with the schema
+ * placeholder still in place, so two adopters using different schema names still agree on
  * which version 1 they applied.
  *
  * @module

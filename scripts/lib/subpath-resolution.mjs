@@ -68,7 +68,7 @@ export function assertInstalledPackageResolves() {
     throw new Error(`the package is not installed at ${installed}`)
   }
   const manifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'))
-  // Resolved paths come back with symlinks followed — a package manager that links its store
+  // Resolved paths come back with symlinks followed: a package manager that links its store
   // would otherwise compare a link against its target and reject an honest install.
   const root = realpathSync(installed)
   const resolved = []

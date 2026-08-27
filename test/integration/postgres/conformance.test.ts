@@ -65,8 +65,8 @@ describeDatabase('the store conformance suites on PostgreSQL', () => {
 
   it('passes both suites through the public factory and a pool that supplies the clock', async () => {
     // The public factory has no clock option, so a harness drives its clock from the pool it
-    // supplies: it knows the store's convention — a usage statement starts with the marker and
-    // ends with the clock parameter — and substitutes that last parameter. The wrapper is
+    // supplies: it knows the store's convention: a usage statement starts with the marker and
+    // ends with the clock parameter, and substitutes that last parameter. The wrapper is
     // strict on purpose: if the convention ever drifted, this fails rather than quietly
     // testing the database's own clock.
     let pinned: Date | null = null

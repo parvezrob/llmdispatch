@@ -23,7 +23,7 @@
  * The self-test writes one deliberately matching input per rule, plus the near-misses
  * that must stay silent, into a temporary directory it deletes afterwards. Those inputs
  * are assembled at run time from harmless pieces and are never committed in any
- * encoding — a committed one would fail every ordinary run of this script and of the
+ * encoding: a committed one would fail every ordinary run of this script and of the
  * secret scanner that runs beside it.
  */
 
@@ -249,8 +249,8 @@ function collectResolved(node, found) {
  * being scanned, which the examples use so they always install the packed tarball.
  *
  * The answer comes from resolving the path, not from reading it. A test that looks for
- * `..` misses every other spelling of the same escape — `..%2f`, `%2e%2e`, a backslash
- * separator, a drive letter, a `~` home reference — so each is decoded or rejected before
+ * `..` misses every other spelling of the same escape: `..%2f`, `%2e%2e`, a backslash
+ * separator, a drive letter, a `~` home reference, so each is decoded or rejected before
  * the containment check, which is the only thing that actually decides.
  */
 function isLocalFileSpec(resolved, root, lockfileDirectory) {
@@ -401,7 +401,7 @@ function buildCanaries(root) {
   )
   write('ip-literal.md', 'see ' + 'ht' + 'tps://' + '203.0.113.7' + '/x\n', 'unreviewed-host')
   // The bracketed form ends at the closing bracket, so the token does not parse as a
-  // link at all — which the host rule treats as unreviewed, exactly as it should.
+  // link at all, which the host rule treats as unreviewed, exactly as it should.
   write(
     'ipv6-literal.md',
     'see ' + 'ht' + 'tps://' + '[2001:db8::1]' + '/x\n',
@@ -450,7 +450,7 @@ function buildCanaries(root) {
     'foreign-registry',
   )
   // A `file:` spec is only ever the repository's own, so one reaching outside the tree is
-  // as much a finding as a mirror — in every spelling, since a reader who only knows `..`
+  // as much a finding as a mirror, in every spelling, since a reader who only knows `..`
   // would wave most of these through.
   const escapes = {
     relative: '../../elsewhere/t.tgz',

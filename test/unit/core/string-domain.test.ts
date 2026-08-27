@@ -65,7 +65,7 @@ function expectInvalidConfigThrow(make: () => unknown): void {
   expect((caught as LLMDispatchError).code).toBe('INVALID_CONFIG')
 }
 
-describe('violations at the createSwitch boundary — no store method called at all', () => {
+describe('violations at the createSwitch boundary: no store method called at all', () => {
   for (const { name, value } of VIOLATIONS) {
     it(`rejects an operation name carrying ${name}`, () => {
       const { s, make } = buildSwitch({
@@ -120,7 +120,7 @@ describe('violations at the createSwitch boundary — no store method called at 
   }
 })
 
-describe('violations at the setConfig boundary — no store method called', () => {
+describe('violations at the setConfig boundary: no store method called', () => {
   for (const { name, value } of VIOLATIONS) {
     it(`rejects a route model carrying ${name}`, async () => {
       const f = fixture()
@@ -154,7 +154,7 @@ describe('violations in a subjectId', () => {
   }
 })
 
-describe('violations in store-originated values — no dependent call', () => {
+describe('violations in store-originated values: no dependent call', () => {
   for (const { name, value } of VIOLATIONS) {
     it(`treats a stored row model carrying ${name} as a malformed row`, async () => {
       const f = fixture()
@@ -191,8 +191,8 @@ describe('violations in store-originated values — no dependent call', () => {
   }
 
   it('never calls settle for a violating envelope or attempt at finalization', async () => {
-    // Unreachable through the public API — reserve validates the envelope and the routes
-    // validate every attempt string — so the §6 re-check is exercised at the seam itself.
+    // Unreachable through the public API: reserve validates the envelope and the routes
+    // validate every attempt string, so the §6 re-check is exercised at the seam itself.
     const runtime = fakeRuntime()
     const s = scriptedStores()
     const hookCalls: unknown[] = []
@@ -221,7 +221,7 @@ describe('violations in store-originated values — no dependent call', () => {
   })
 
   it('never calls settle for a violating attempt record behind a valid envelope', async () => {
-    // The envelope passes; the attempt strings do not — the re-check must still refuse the
+    // The envelope passes; the attempt strings do not: the re-check must still refuse the
     // store call, and the failure still travels the retry-then-hook path.
     const runtime = fakeRuntime()
     const s = scriptedStores()
@@ -309,7 +309,7 @@ describe('valid-hostile keys', () => {
         stored: null,
         effective: { provider: 'p1', model: 'm1' },
       })
-      // An unknown name still resolves as unknown — the registry is not the prototype chain.
+      // An unknown name still resolves as unknown: the registry is not the prototype chain.
       await expectCode(ai.run('valueOf', INPUT), 'INVALID_INPUT')
     })
   }

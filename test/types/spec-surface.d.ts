@@ -3,13 +3,13 @@
 
 import { z } from 'zod'
 
-// ——— entry point ———
+// --- entry point ---
 export declare function createSwitch<Ops extends OperationsMap>(
   config: CreateSwitchConfig<Ops>
 ): Switch<Ops>
 
 // Inference builders. defineOperation correlates each operation's schemas with its
-// callbacks; **every entry in defineOperations MUST be wrapped in defineOperation** —
+// callbacks; **every entry in defineOperations MUST be wrapped in defineOperation**;
 // defineOperations is an identity collector and does not itself restore inference.
 // The README quickstart uses exactly this shape; negative compile fixtures assert that
 // invalid `prompt` input and `quality.data` accesses FAIL to compile in that shape.
@@ -54,7 +54,7 @@ export interface Logger {                                // invoked through caug
   error(message: string, data?: unknown): void | Promise<void>
 }
 
-// ——— operations ———
+// --- operations ---
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
@@ -67,7 +67,7 @@ export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType
 }
 export type QualityVerdict = { ok: true } | { ok: false; reason?: string }
 
-// ——— routing / views ———
+// --- routing / views ---
 export interface OperationRoute {
   provider: string                                       // non-empty registered provider ID
   model: string                                          // non-empty
@@ -85,7 +85,7 @@ export interface OperationConfigView {
 }
 export interface QuotaView { limit: number; used: number; remaining: number; resetsAt: string } // limit = the effective limit (route override, else declared); remaining = max(0, limit - used); getQuota requires non-empty subjectId
 
-// ——— run results ———
+// --- run results ---
 export interface RunResult<Out> {
   data: Out
   route: { provider: string; model: string }
@@ -112,7 +112,7 @@ export interface AttemptRecord {
 export interface TokenUsage { inputTokens: number; outputTokens: number }  // non-negative SAFE integers
 export interface ModelPrice { inputPerM: number; outputPerM: number }      // finite, ≥ 0
 
-// ——— providers ———
+// --- providers ---
 export interface Provider {
   prepare?(): PreparedProvider | Promise<PreparedProvider>  // §5a; memoized per run per provider ID
   complete(req: ProviderRequest): Promise<ProviderResponse> // used directly when prepare absent
@@ -157,7 +157,7 @@ export declare function openaiCompatible(opts: {
 export declare function gemini(opts: { apiKey: ApiKeyResolver }): Provider
 export type ApiKeyResolver = () => string | undefined | Promise<string | undefined>
 
-// ——— stores ———
+// --- stores ---
 export interface ConfigStore {
   getAll(): Promise<Record<string, unknown>>
   set(operation: string, route: OperationRoute): Promise<void>
@@ -181,7 +181,7 @@ export declare function postgresStores(opts: {
   leaseMs?: number                                       // default 120_000; 5_000–600_000
 }): StorePair
 
-// ——— errors ———
+// --- errors ---
 export declare class LLMDispatchError extends Error {
   private constructor()                                  // instances come from the package; narrow on `code`
   readonly code: 'INVALID_INPUT' | 'MISSING_SUBJECT' | 'QUOTA_EXCEEDED'
@@ -194,6 +194,6 @@ export declare class LLMDispatchError extends Error {
   readonly attempts?: AttemptRecord[]
   // Sanitized, scoped to the package's own fields: they never carry prompts, model
   // output, or raw provider errors from a dispatched attempt. A pre-dispatch error may
-  // chain the underlying store or `prepare()` failure as `cause`, verbatim — the
+  // chain the underlying store or `prepare()` failure as `cause`, verbatim: the
   // adopter's own thrown error, or a provider adapter's readiness failure.
 }

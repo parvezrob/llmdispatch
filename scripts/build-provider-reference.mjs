@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Builds `docs/providers.md` from spec §5c — the research-verified adapter wire contracts.
+ * Builds `docs/providers.md` from spec §5c: the research-verified adapter wire contracts.
  *
  * The reference is a verbatim slice, not a rewrite: the section between the `### 5c.`
  * heading and the next heading of equal or higher rank is copied as it stands, split into
  * one page section per adapter factory at the bold `**`factory(...)`**` paragraph leads the
- * spec already uses. The generator authors no provider fact of its own — the banner and the
+ * spec already uses. The generator authors no provider fact of its own: the banner and the
  * one structural label are fixed strings, every name and every sentence comes from the
- * spec — so the page cannot drift from the contract it documents. Anything it cannot parse
+ * spec, so the page cannot drift from the contract it documents. Anything it cannot parse
  * exactly (missing heading, missing boundary, an unexpected number of factory leads) is a
  * loud failure, never a guess.
  *
@@ -44,7 +44,7 @@ function sliceSection(lines, problems) {
   let end = null
   for (let index = start + 1; index < lines.length; index += 1) {
     // Equal or higher rank than the `###` opener: `#`, `##` or `###`. §5c is the last
-    // subsection of its parent today, so the boundary is `## 6.` — assuming a later `###`
+    // subsection of its parent today, so the boundary is `## 6.`: assuming a later `###`
     // would swallow the sections that follow.
     if (/^#{1,3} /.test(lines[index])) {
       end = index
@@ -97,7 +97,7 @@ function build(problems) {
 
   const chunks = []
   chunks.push(
-    '<!-- Generated from docs/spec.md §5c by scripts/build-provider-reference.mjs — do not',
+    '<!-- Generated from docs/spec.md §5c by scripts/build-provider-reference.mjs: do not',
     '     edit this file. Edit the spec, then run `npm run docs:providers`. -->',
     '',
     '# Provider wire reference',
@@ -147,12 +147,12 @@ function main() {
     try {
       existing = readFileSync(OUT, 'utf8')
     } catch {
-      process.stderr.write(`${out} is missing — run 'npm run docs:providers'\n`)
+      process.stderr.write(`${out} is missing, run 'npm run docs:providers'\n`)
       return 1
     }
     if (existing !== page) {
       process.stderr.write(
-        `${out} does not match docs/spec.md §5c — run 'npm run docs:providers' and commit the result\n`,
+        `${out} does not match docs/spec.md §5c, run 'npm run docs:providers' and commit the result\n`,
       )
       return 1
     }

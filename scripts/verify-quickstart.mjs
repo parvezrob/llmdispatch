@@ -6,12 +6,12 @@
  * section must contain exactly one `bash` install fence followed by one `ts` code fence.
  * The install is the documented command with only the unpublished registry argument
  * `llmdispatch` replaced by the tarball path; the code fence is written byte-for-byte to its
- * own file — never edited, wrapped or rewritten — and executed by a two-line harness that
+ * own file, never edited, wrapped or rewritten, and executed by a two-line harness that
  * imports it. The child environment is the shared allowlist, which carries no provider key
  * and no `NODE_OPTIONS`, so the run cannot become live billed traffic and nothing preloaded
  * can put a key back: without a key, the documented outcome is an `LLMDispatchError`
  * with code `INVALID_CONFIG` from the unresolvable key, and that exact rejection is the
- * pass condition. Anything else — a ReferenceError, a different code, a run that resolves —
+ * pass condition. Anything else: a ReferenceError, a different code, a run that resolves,
  * means the printed quickstart is wrong.
  *
  * Needs Node >= 23.6 (native type stripping executes the `ts` fence as printed) and network
@@ -35,14 +35,14 @@ const README = join(ROOT, 'README.md')
 const USAGE = 'usage: verify-quickstart.mjs [path-to-tarball]\n'
 
 /**
- * The harness: import the printed file, require the documented rejection — a real
+ * The harness: import the printed file, require the documented rejection: a real
  * `LLMDispatchError` from the installed package, `INVALID_CONFIG`, detected locally (the
  * unresolvable key), never a dispatched provider rejection.
  */
 const HARNESS = `import { LLMDispatchError } from 'llmdispatch'
 try {
   await import('./quickstart.ts')
-  console.error('the quickstart ran to completion without an API key — expected INVALID_CONFIG')
+  console.error('the quickstart ran to completion without an API key: expected INVALID_CONFIG')
   process.exit(1)
 } catch (error) {
   if (
@@ -140,7 +140,7 @@ function main() {
     })
     return 0
   } catch {
-    process.stderr.write(`the quickstart walk-through failed while ${step} — output above\n`)
+    process.stderr.write(`the quickstart walk-through failed while ${step}: output above\n`)
     return 1
   } finally {
     rmSync(directory, { recursive: true, force: true })
