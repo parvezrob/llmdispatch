@@ -38,7 +38,7 @@ const PROVIDER_ERROR_KINDS: ReadonlySet<string> = new Set<ProviderErrorKind>([
  * Classifies a value thrown by `complete()` (spec §5b).
  *
  * A branded `ProviderError` classifies by its captured `kind`; a captured kind outside the
- * closed set — or a second read that throws — follows the `provider_unclassified` row. An
+ * closed set, or a second read that throws, follows the `provider_unclassified` row. An
  * adapter-reported `'aborted'` is the caller's abort only if the caller's signal actually
  * fired; otherwise it re-classifies `timeout` (the adapter saw the core's own timeout).
  * Anything else thrown is `provider_unclassified`, or `transient` under

@@ -1,7 +1,7 @@
 /**
  * The output pipeline (spec §3): from a completed response's text to validated data.
  *
- * Termination is checked before content by the caller — this module only ever sees a
+ * Termination is checked before content by the caller, so this module only ever sees a
  * `kind: 'complete'` text. Parse and shape failures are output rejections (fallback-eligible);
  * a non-Zod exception from user transform code and anything wrong in the quality gate are the
  * user's own bugs, reported for settlement and then re-thrown raw.

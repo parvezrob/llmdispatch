@@ -2,7 +2,7 @@
 
 These sit in the repository on purpose: they are scanned like every other tracked file, so
 if a rule ever became too eager, an ordinary run would say so. Deliberately matching
-inputs are never committed — the scanner's self-test builds those in a temporary directory
+inputs are never committed: the scanner's self-test builds those in a temporary directory
 and deletes them.
 
 An address in the documentation domain: reader@example.com

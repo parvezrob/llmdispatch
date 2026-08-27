@@ -2,7 +2,7 @@
 /**
  * Regenerates `test/types/spec-surface*.d.ts` from the §6 and §6b code fences of
  * docs/spec.md, compiles them with the fixtures' own options, and compares every name
- * `dist/` exports — ESM and CommonJS, type told apart from value — with what the spec says.
+ * `dist/` exports: ESM and CommonJS, type told apart from value, with what the spec says.
  *
  * A spec name the implementation has not reached yet belongs in `spec-pending.json`; any
  * other difference is a failure. Signatures are not compared: printed text does not
@@ -199,7 +199,7 @@ function reconcileSurfaces(surfaces, update, problems) {
     const recorded = existsSync(path) ? readFileSync(path, 'utf8') : null
     if (recorded !== expected) {
       problems.push(
-        `test/types/${surface} no longer matches docs/spec.md — run \`npm run surface:update\``,
+        `test/types/${surface} no longer matches docs/spec.md, run \`npm run surface:update\``,
       )
     }
   }
@@ -502,7 +502,7 @@ function comparePublished(entry, found, pending, problems) {
       problems.push(`${entry}: ${name} is listed as pending but the spec does not declare it`)
     if (esm.has(name)) {
       problems.push(
-        `${entry}: ${name} is published but still listed in spec-pending.json — remove it there`,
+        `${entry}: ${name} is published but still listed in spec-pending.json, so remove it there`,
       )
     }
     if (spec.get(name) !== kind) {
@@ -580,7 +580,7 @@ function main() {
   if (missing.length > 0) {
     if (!update) {
       problems.push(
-        `${relative(ROOT, missing[0] ?? '')} is missing — run \`npm run build\` first`,
+        `${relative(ROOT, missing[0] ?? '')} is missing, run \`npm run build\` first`,
       )
       return report(problems)
     }

@@ -2,7 +2,7 @@
 
 Thanks for looking. This package is pre-release: the design in [`docs/spec.md`](docs/spec.md)
 is settled and the implementation is being written against it. If you are thinking of a
-change, open an issue first — it is a short conversation, and it saves you from writing
+change, open an issue first. It is a short conversation, and it saves you from writing
 code against a contract that says something different.
 
 ## Getting set up
@@ -12,12 +12,12 @@ npm ci
 npm run check
 ```
 
-`npm run check` is the whole local pass: formatting, lint, types — the compile fixtures
-included — module boundaries, the build, then the subset of those fixtures whose imports
+`npm run check` is the whole local pass: formatting, lint, types (the compile fixtures
+included), module boundaries, the build, then the subset of those fixtures whose imports
 already exist in the build compiled against it (the rest join as the remaining exports land),
 the export inventory comparing `dist/` with the specification, package
 linting, package typing, the public type surface, the size budget, and the unit tests with
-coverage. If it is green, continuous integration will almost certainly agree — it runs the
+coverage. If it is green, continuous integration will almost certainly agree, since it runs the
 same thing plus a few checks that need a database, a second Node, or a network download.
 
 Node 24.19.0 is the development version (`.nvmrc`); the package supports Node 20 and up,
@@ -29,7 +29,7 @@ Nothing below is a matter of taste. Each one has a check behind it, so you will 
 from `npm run check` rather than from a comment on your pull request.
 
 **Types.** `strict` plus `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. No
-`any` anywhere — the lint rule is an error, not a warning. No non-null assertions outside
+`any` anywhere: the lint rule is an error, not a warning. No non-null assertions outside
 tests. Type-only imports are written as such.
 
 **Module boundaries.** The folders in `src/` are a dependency order, not a filing system;
@@ -52,33 +52,33 @@ changeset (`npx changeset`).
 **The specification is the surface.** `test/types/spec-surface*.d.ts` are generated from the
 §6 and §6b code fences of [`docs/spec.md`](docs/spec.md): edit the spec, run `npm run
 surface:update`, never edit them by hand. `check-spec-surface.mjs` compares every name
-`dist/` exports — both module systems, type told from value — with what the spec declares. A
+`dist/` exports, both module systems and type told from value, with what the spec declares. A
 spec name the implementation has not reached yet is listed in `test/types/spec-pending.json`;
 a name on that list which has appeared in `dist/` fails as loudly as one that is missing.
 
-**Compile fixtures.** `test/types/positive/` must compile with no diagnostic at all — the
-README's examples among them — and `test/types/negative/` holds the shapes the README
+**Compile fixtures.** `test/types/positive/` must compile with no diagnostic at all, the
+README's examples among them, and `test/types/negative/` holds the shapes the README
 promises will not compile. `check-types-fixtures.mjs` compiles each in a program of its own:
 
 - line one is `// @targets spec[, package]`; every fixture targets `spec`, and gains
   `package` once every value it imports exists in `dist/`.
 - a negative fixture carries `// @expect TS####` on the line above the offending one and must
   produce exactly that: "something went wrong" is not evidence.
-- no suppression and no `any` — either would let a fixture compile proving nothing.
+- no suppression and no `any`, since either would let a fixture compile proving nothing.
 - `test/types/scaffold.d.ts` declares the values the README examples use without introducing
   them, so those examples compile as printed.
 
 **Errors.** Two public classes. `LLMDispatchError` has a closed set of codes and a `retryable`
 flag copied from the classification row in spec §5b rather than worked out on the spot. The
-flag belongs to the row and not to the code — `PROVIDER_FAILED` is retryable for a
-`transient` failure and not for a `refused` one — which is why `src/errors` has one factory
+flag belongs to the row and not to the code: `PROVIDER_FAILED` is retryable for a
+`transient` failure and not for a `refused` one, which is why `src/errors` has one factory
 per classification, and why nothing is ever constructed by hand. `ProviderError` is what a
-provider adapter throws, and it is recognised with `ProviderError.is()` — never bare
+provider adapter throws, and it is recognised with `ProviderError.is()`, never bare
 `instanceof`, which breaks the moment ESM and CommonJS copies meet. Messages never contain a
 prompt, a model's output, or a raw provider error.
 
 **Tests.** Vitest. Unit tests run everywhere; the ones that need PostgreSQL live in
-`test/integration` and read `DATABASE_URL`. They are skipped when it is unset — except in
+`test/integration` and read `DATABASE_URL`. They are skipped when it is unset, except in
 continuous integration, where a missing database is a failure rather than a quiet pass. The
 version they are written against is the one CI runs:
 
@@ -129,7 +129,7 @@ section.
 Everything that takes a tarball takes one you produced with `npm pack`; they never pack one
 themselves, so what you audit is what you test.
 
-`verify:release` needs `DATABASE_URL` pointing at a throwaway database on this machine — it
+`verify:release` needs `DATABASE_URL` pointing at a throwaway database on this machine. It
 creates a schema, writes to it and drops it, so it takes exactly one shape,
 `postgres://user:password@127.0.0.1:port/database`: an address in 127.0.0.0/8, a port written
 out, and no query string or fragment. The header of `scripts/verify-release.mjs` has a
@@ -139,12 +139,12 @@ container to run it against.
 `npm run check` and never runs in continuous integration. Each provider is called in a process
 of its own holding only that provider's key; use throwaway keys and revoke them afterwards. Run
 `npm run live:providers -- --release <tgz>` to check a packed tarball rather than your working
-tree — that form requires every adapter to run, so a missing key is a failure instead of a
+tree, since that form requires every adapter to run, so a missing key is a failure instead of a
 skip. (The `--` is what stops npm from eating the arguments.)
 
 ## How changes land
 
-**Commit messages follow Conventional Commits** — `feat:`, `fix:`, `docs:`, and the rest.
+**Commit messages follow Conventional Commits**: `feat:`, `fix:`, `docs:`, and the rest.
 That is the convention the history is written in; the changelog itself is generated from
 changesets, not from commit messages, so the prefix is for the reader of `git log`.
 
@@ -152,7 +152,7 @@ changesets, not from commit messages, so the prefix is for the reader of `git lo
 away before the final review. The history is linear and there are no merge commits, so
 `git log` reads as the order things actually happened.
 
-**Never a live API key** — not in a pull request, not in a fixture, not in continuous
+**Never a live API key**: not in a pull request, not in a fixture, not in continuous
 integration. Fixtures are synthetic, or recorded from a real response and then redacted; CI
 runs without provider keys by construction rather than by anyone remembering. `npm run scan`
 is part of reviewing a change, and secret hygiene is checked before anything is pushed, not
@@ -164,7 +164,7 @@ Getting a version out is a separate procedure with its own preconditions:
 ## Pull requests
 
 One coherent change per pull request, with the checks green. Explain what the change does
-and why in the description — the commit history is the project's memory. If the change is
+and why in the description, because the commit history is the project's memory. If the change is
 visible to users of the package, say so in a changeset.
 
 Security problems do not go in a pull request: see [`SECURITY.md`](SECURITY.md).

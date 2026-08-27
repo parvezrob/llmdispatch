@@ -188,7 +188,7 @@ function main() {
           'across the ESM and CommonJS builds in both directions, rejected the values that only ' +
           'look like one, narrowed LLMDispatchError by code, and round-tripped a reservation ' +
           'through the in-memory stores, and rendered the same packaged migration from both ' +
-          `builds — from sha256 ${before}\n`
+          `builds, from sha256 ${before}\n`
       : `${String(problems.length)} problem(s)\n`,
   )
   return problems.length === 0 ? 0 : 1

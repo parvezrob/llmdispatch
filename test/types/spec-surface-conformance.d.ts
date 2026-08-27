@@ -33,7 +33,7 @@ export declare function runProviderConformance(opts: {
   // 'success' is MANDATORY; each other scenario puts the adopter's backend into the named
   // condition and resolves when ready; the harness dispatches and asserts the resulting
   // ProviderResponse.kind or ProviderError classification. Absent optional scenarios are
-  // reported in `skipped` — a skipped scenario means that classification is UNVERIFIED.
+  // reported in `skipped`: a skipped scenario means that classification is UNVERIFIED.
   scenarios: { success: () => Promise<void> } & Partial<Record<
     'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient'
     | 'malformed_response' | 'truncated' | 'refused', () => Promise<void>>>

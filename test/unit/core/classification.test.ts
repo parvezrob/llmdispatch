@@ -1,7 +1,7 @@
 /**
  * Classification and whose-bug (spec §5b): every row at the classification level with
  * the kind↔outcome agreement invariant, fallback eligibility per row, the read-once TOCTOU
- * defence for `kind` and `status`, and the crossed-origin fixtures — origin decides, never
+ * defence for `kind` and `status`, and the crossed-origin fixtures: origin decides, never
  * the thrown class.
  */
 
@@ -297,7 +297,7 @@ describe('read-once TOCTOU defence', () => {
   })
 })
 
-describe('crossed origins — the origin decides, never the thrown class', () => {
+describe('crossed origins: the origin decides, never the thrown class', () => {
   it('propagates a branded ProviderError from the stage-2 input transform, unwrapped', async () => {
     const branded = new ProviderError('rate_limit', { status: 429 })
     const operations = {
@@ -370,7 +370,7 @@ describe('crossed origins — the origin decides, never the thrown class', () =>
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['provider_unclassified'])
   })
 
-  it('wraps a ZodError thrown by complete() the same way — origin, not class', async () => {
+  it('wraps a ZodError thrown by complete() the same way: origin, not class', async () => {
     let zodError: unknown
     try {
       z.string().parse(42)

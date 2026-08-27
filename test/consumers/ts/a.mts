@@ -17,7 +17,7 @@ export const reached = [root, postgres, conformance].length
 
 // The codes are a closed set, and this is what says so from outside the package: every one
 // of them is handled, and the `never` in the default arm refuses anything that is not on
-// the list. A code added to — or removed from — the union stops this file compiling.
+// the list. A code added to, or removed from: the union stops this file compiling.
 export function httpStatus(error: LLMDispatchError): number {
   switch (error.code) {
     case 'INVALID_INPUT':
@@ -43,8 +43,8 @@ export function httpStatus(error: LLMDispatchError): number {
   }
 }
 
-// `resetsAt` is optional on the class as a whole rather than tied to a code — the error is
-// not a discriminated union — so it is still `string | undefined` after this narrowing, and
+// `resetsAt` is optional on the class as a whole rather than tied to a code: the error is
+// not a discriminated union, so it is still `string | undefined` after this narrowing, and
 // the caller has to say what to do when it is absent.
 export function retryAfter(error: unknown): string | null {
   if (error instanceof LLMDispatchError && error.code === 'QUOTA_EXCEEDED') {

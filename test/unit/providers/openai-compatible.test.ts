@@ -75,7 +75,7 @@ describe('request shape', () => {
     expect(body.temperature).toBe(0.4)
   })
 
-  // The host-specific token parameter, not a hardcoded name — kills a fixed 'max_tokens'.
+  // The host-specific token parameter, not a hardcoded name: kills a fixed 'max_tokens'.
   it.each([
     [
       'api.openai.com default -> max_completion_tokens',
@@ -112,7 +112,7 @@ describe('request shape', () => {
     expect(other in body).toBe(false)
   })
 
-  // The capability table (native/gateway/unknown) x both override knobs — kills a rule that
+  // The capability table (native/gateway/unknown) x both override knobs: kills a rule that
   // always sends response_format, or never does.
   const TEXT = { type: 'text' } as const
   const JSON_OBJECT = { type: 'json', topLevel: 'object' } as const

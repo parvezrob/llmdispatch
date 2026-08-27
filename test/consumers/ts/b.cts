@@ -33,8 +33,8 @@ export function httpStatus(error: root.LLMDispatchError): number {
   }
 }
 
-// `resetsAt` is optional on the class as a whole rather than tied to a code — the error is
-// not a discriminated union — so it is still `string | undefined` after this narrowing.
+// `resetsAt` is optional on the class as a whole rather than tied to a code: the error is
+// not a discriminated union, so it is still `string | undefined` after this narrowing.
 export function retryAfter(error: unknown): string | null {
   if (error instanceof root.LLMDispatchError && error.code === 'QUOTA_EXCEEDED') {
     return error.resetsAt ?? null

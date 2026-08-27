@@ -142,7 +142,7 @@ describe('abort at stage boundaries', () => {
     expect(s.log).toEqual(['getAll', 'reserve u 5'])
   })
 
-  it('awaits an in-flight commit, then ends ABORTED undispatched — and still settles', async () => {
+  it('awaits an in-flight commit, then ends ABORTED undispatched, and still settles', async () => {
     const f = fixture({ quota: { perDay: 5 } })
     const controller = new AbortController()
     const gate = f.s.commit.nextHang()
@@ -237,7 +237,7 @@ describe('abort precedence at the finalization boundary over user-error paths', 
         output: {
           parseAsync: () => {
             // The signal fires with the user bug already decided: the boundary check must
-            // report the abort, not hand back the raw error (§1 — only an abort after a
+            // report the abort, not hand back the raw error (§1, only an abort after a
             // SUCCESSFUL attempt is outcome-immune).
             controller.abort()
             throw bug
@@ -277,7 +277,7 @@ describe('abort precedence at the finalization boundary over user-error paths', 
   })
 })
 
-describe('suppression companions — what must NOT be suppressed', () => {
+describe('suppression companions: what must NOT be suppressed', () => {
   it('propagates a seam rejection raw when no abort happened', async () => {
     const bug = new Error('prompt exploded')
     const operations = {
@@ -302,7 +302,7 @@ describe('suppression companions — what must NOT be suppressed', () => {
     expect(error.retryable).toBe(true)
   })
 
-  it('never suppresses a settlement rejection — it drives the retry tail', async () => {
+  it('never suppresses a settlement rejection: it drives the retry tail', async () => {
     const { ai, s, runtime } = fixture({ quota: { perDay: 5 } })
     s.settle.nextReject(new Error('settle down'))
     await ai.run('echo', { ...INPUT, subjectId: 'u' })
@@ -355,7 +355,7 @@ describe('adapter-reported aborts and the composed signal', () => {
     expect(error.code).toBe('ABORTED')
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['aborted'])
     expect(f.runtime.pending('referenced')).toBe(0) // the timeout timer was cancelled
-    void hang // never settled — deliberately
+    void hang // never settled, deliberately
   })
 
   it('aborts the provider-observed signal on timeoutMs alone, with the caller quiescent', async () => {

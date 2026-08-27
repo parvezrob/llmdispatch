@@ -2,12 +2,12 @@
 
 A minimal Express server with one llmdispatch operation behind it.
 
-- `switch.js` — the switch: one provider, one `summarize` operation, in-memory stores.
-- `server.js` — `POST /summarize`, with `LLMDispatchError` codes mapped to HTTP statuses,
+- `switch.js`: the switch, one provider, one `summarize` operation, in-memory stores.
+- `server.js`: `POST /summarize`, with `LLMDispatchError` codes mapped to HTTP statuses,
   and `GET /healthz`.
 
 Plain ESM JavaScript. The route is `openaiCompatible`, so it works against OpenAI or any
-OpenAI-compatible endpoint — a gateway, or a local model server — by setting
+OpenAI-compatible endpoint (a gateway, or a local model server) by setting
 `OPENAI_BASE_URL`.
 
 ## In your own project

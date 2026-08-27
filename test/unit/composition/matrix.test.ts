@@ -2,7 +2,7 @@
  * The §5b classification table composed end to end (spec 271–308): every attempt-outcome
  * row driven through `run` over its applicable fallback compositions, the flag axis on
  * exactly its two rows, per-outcome-shape assertions including the quota-effect call log,
- * and two-part completeness enforcement — an exhaustive `switch` over the
+ * and two-part completeness enforcement: an exhaustive `switch` over the
  * `ProviderErrorKind` and `AttemptOutcome` unions builds the case list (a union member
  * added later fails to compile), and the case count is pinned to a review-time inventory
  * literal a reader diffs against the spec table.
@@ -33,11 +33,11 @@ const QUOTA = { perDay: 5 }
 const TIMEOUT_MS = 1_000
 const TABLE = { quota: QUOTA, timeoutMs: TIMEOUT_MS }
 
-// ——— completeness enforcement ———
+// --- completeness enforcement ---
 
 /**
  * Review-time inventory: the §5b row counts a reader diffs against the spec table. An aid
- * for the human pass — the compile-time checks below are what fail when a union moves.
+ * for the human pass: the compile-time checks below are what fail when a union moves.
  */
 const INVENTORY = { attemptOutcomes: 15, providerErrorKinds: 7 }
 
@@ -115,7 +115,7 @@ function classify(outcome: AttemptOutcome): RowClass {
   }
 }
 
-// ——— the dispatched-failure rows ———
+// --- the dispatched-failure rows ---
 
 interface FailureRow {
   outcome: AttemptOutcome
@@ -245,7 +245,7 @@ const FAILURE_ROWS: FailureRow[] = [
   },
 ]
 
-// ——— instruments ———
+// --- instruments ---
 
 /** The quota-effect call log, reduced to its shape: reserve / commit / settle <outcome>. */
 function quotaLog(f: Fixture): string[] {
@@ -270,11 +270,11 @@ function asSwitchError(error: unknown, code: LLMDispatchError['code']): LLMDispa
   return typed
 }
 
-// ——— the matrix ———
+// --- the matrix ---
 
 describe('completeness: the switch-built case list against the review-time inventory', () => {
   it('enumerates both unions in full and routes every row to exactly one block', () => {
-    // These two cannot fail at runtime — their type annotations are the actual gate, and
+    // These two cannot fail at runtime: their type annotations are the actual gate, and
     // a union change fails `tsc`, not vitest. Kept as documentation of that mechanism.
     expect(outcomesExhaustive).toBe(true)
     expect(kindsExhaustive).toBe(true)
@@ -444,7 +444,7 @@ describe('the aborted row: caller-signal timing at the composition level', () =>
 
   it("an adapter-reported 'aborted' with no caller signal re-classifies timeout, still fallback-eligible", async () => {
     // The row's other half (spec §5b): the adapter saw the core's own timeout, not the
-    // caller's abort, so the timeout row's columns govern — including its eligibility.
+    // caller's abort, so the timeout row's columns govern, including its eligibility.
     const f = fixture(TABLE)
     f.p1.nextReject(new ProviderError('aborted'))
     const result = await f.ai.run('echo', ARGS)

@@ -2,8 +2,8 @@
  * The real runtime behind the core's clock-and-timer seam, built from `globalThis`.
  *
  * The globals are read at call time, not import time, and `.unref()` is called only where the
- * returned handle actually has one — Node handles do, browser and edge runtimes hand back
- * numbers — so the same build runs anywhere `setTimeout` exists.
+ * returned handle actually has one: Node handles do, browser and edge runtimes hand back
+ * numbers, so the same build runs anywhere `setTimeout` exists.
  *
  * @module
  */

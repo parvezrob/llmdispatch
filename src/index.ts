@@ -1,5 +1,5 @@
 /**
- * Root entry point — `import { … } from 'llmdispatch'`.
+ * Root entry point. `import { … } from 'llmdispatch'`.
  *
  * The only module that assembles the pieces: the factory that turns providers, operations
  * and stores into a working switch, the built-in adapters, the in-memory stores, the errors,
@@ -56,8 +56,8 @@ export { defineOperation, defineOperations } from './core/create-switch'
  * Builds a configured switch: providers, operations and stores in; `run` plus the admin
  * surface out (spec §6).
  *
- * Construction is pure wiring — no store is called, no provider is prepared, no network is
- * touched — plus the §6 validation of every range and name, so a misconfiguration fails
+ * Construction is pure wiring: no store is called, no provider is prepared, no network is
+ * touched, plus the §6 validation of every range and name, so a misconfiguration fails
  * here, loudly, rather than on the first request.
  *
  * @param config Who can be called, what the app does, and where config and counters live.

@@ -34,7 +34,7 @@ describe('parsing and the format matrix', () => {
     expect(result.data).toEqual({ answer: 'fenced' })
   })
 
-  it('leaves an interior fence alone — only a whole-response fence is wrapping', async () => {
+  it('leaves an interior fence alone, only a whole-response fence is wrapping', async () => {
     const operations = {
       echo: {
         input: ECHO_INPUT,
@@ -155,7 +155,7 @@ describe('termination before content', () => {
   }
 
   // §6: `text: string` belongs to every variant of the union, so a terminated response whose
-  // body fails the shape is malformed_response — retryable and fallback-eligible.
+  // body fails the shape is malformed_response: retryable and fallback-eligible.
   const badBodies: { name: string; make: (kind: string) => unknown }[] = [
     { name: 'no text at all', make: (kind) => ({ kind, usage: null }) },
     { name: 'a non-string text', make: (kind) => ({ kind, text: 42, usage: null }) },

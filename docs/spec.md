@@ -1,4 +1,4 @@
-# llmdispatch v0.1 — Normative Specification
+# llmdispatch v0.1 Normative Specification
 
 This document is the exact contract for llmdispatch v0.1. The [README](../README.md) is the
 introduction; when they disagree, this spec wins. §8 defines the adopter-facing conformance
@@ -6,7 +6,7 @@ suite; the core's own behavior (state machine, matrices, sanitization, type infe
 enforced by the package's internal test suite, including compile-time positive and negative
 type fixtures (which include the exact README quickstart shape).
 
-Status: **pre-release contract for v0.1** — the design is final; the implementation is under
+Status: **pre-release contract for v0.1**. The design is final; the implementation is under
 active development and not yet on npm. Semver: while on 0.x, breaking changes to anything
 here bump the minor version.
 
@@ -22,7 +22,7 @@ resolver (`input.parseAsync`, API-key resolvers, `prepare()`, `prompt`, `output.
 `quality`) is **raced against the signal** (`raceWithAbort`): on abort the core stops
 waiting, the losing promise's eventual rejection is suppressed, and the run ends `ABORTED`.
 The only exception: an in-flight `reserve`/`commit` call is awaited to its
-(deadline-bounded) result first — those have side effects — then the run ends `ABORTED`
+(deadline-bounded) result first (those have side effects), then the run ends `ABORTED`
 without dispatching. Quota effect of an abort: whatever state was reached stands (nothing /
 pending-expires / committed counts). An abort arriving **after** a successful attempt does
 not change the outcome: the run returns its result; settlement records `succeeded`.
@@ -33,30 +33,30 @@ not change the outcome: the run returns its result; settlement records `succeede
 | 1 | Operation lookup (JS callers can pass unknown names) | `INVALID_INPUT` | none |
 | 2 | Input parse: `input.parseAsync(args.input)`. `ZodError` = validation failure; a **non-Zod exception from user transform code passes through unwrapped** (pre-quota user bug) | `INVALID_INPUT` | none |
 | 3 | Subject check for a **declared** quota: an operation whose definition declares `quota` requires non-empty `subjectId` | `MISSING_SUBJECT` | none |
-| 4 | Config resolution (§2) — primary **and** fallback route — then, if the effective route enables a quota the definition does not declare, the same subject check | `INVALID_CONFIG` / `CONFIG_STORE_UNAVAILABLE` / `MISSING_SUBJECT` | none |
+| 4 | Config resolution (§2) for the primary **and** fallback route, then, if the effective route enables a quota the definition does not declare, the same subject check | `INVALID_CONFIG` / `CONFIG_STORE_UNAVAILABLE` / `MISSING_SUBJECT` | none |
 | 5 | Readiness for **both** routes (§5a): registration + `prepare()` per unique provider | `INVALID_CONFIG` (`detectedAt:'local'`; `retryable` per §5a) | none |
 | 6 | Prompt build: `prompt(parsedInput)` (raced with abort). A non-string return is a user bug: descriptive `TypeError` passes through unwrapped | user exception unwrapped | none |
 | 7 | Quota reserve (§4), performed iff the run has an **effective** quota (§2) | `QUOTA_EXCEEDED` / `USAGE_STORE_UNAVAILABLE` | pending reservation (envelope held) |
 | 8 | Quota commit (§4 recovery table; same condition as 7; signal checked before each recovery I/O) | `QUOTA_EXCEEDED` (denied re-reserve) / `USAGE_STORE_UNAVAILABLE` | committed on success; §4 table otherwise |
 | 9 | Primary attempt: final signal check → dispatch via prepared dispatcher → output pipeline (§3) | classified per §5 | committed |
-| 10 | Fallback decision (§5) and, if eligible and configured, the fallback attempt (same sub-stages, fresh provider timeout) | terminal code per §5 | same slot — never a second reservation |
+| 10 | Fallback decision (§5) and, if eligible and configured, the fallback attempt (same sub-stages, fresh provider timeout) | terminal code per §5 | same slot, never a second reservation |
 | 11 | **Finalization (try/finally, before every post-commit return or throw):** settle (§4), then return/throw | settlement never changes the outcome | accounting only |
 
 Fixed rules:
 
-- Quota work happens after config and readiness — local misconfiguration of either route
+- Quota work happens after config and readiness, so local misconfiguration of either route
   never consumes quota.
 - **Subject-check precedence.** Stage 3 covers only a *declared* quota, so that check stays
   ahead of all I/O. A quota that only the effective route enables is unknown until the route
   resolves, so its check runs immediately after stage 4: for such an operation a config
   failure or a malformed/unresolvable route (stage 4 reads the store, up to 5 s) is reported
-  **before** `MISSING_SUBJECT`. The stage numbering is unchanged — this is a sub-step of 4.
+  **before** `MISSING_SUBJECT`. The stage numbering is unchanged: this is a sub-step of 4.
 - `INVALID_CONFIG` also arises **post-dispatch** (provider rejects credentials/model;
   `detectedAt:'provider'`). The slot stays committed.
 - Unwrapped user exceptions (stages 2/6 pre-quota; `output_schema_error`/`quality_error`
-  post-dispatch) propagate as the user's raw error, carrying no `attempts` field —
+  post-dispatch) propagate as the user's raw error, carrying no `attempts` field;
   post-dispatch ones are settled first with their attempt records.
-- Crash between stages 8 and 9 leaves a committed slot with no provider call — the
+- Crash between stages 8 and 9 leaves a committed slot with no provider call, the
   deliberate conservative window.
 
 ## 2. Config resolution (stage 4)
@@ -65,14 +65,14 @@ Per-operation resolution matrix:
 
 | Cache state | Store read | Row | Result | Cached? |
 |---|---|---|---|---|
-| fresh (age < TTL; `configTtlMs: 0` disables reuse entirely) | not attempted | — | cached effective route | already |
+| fresh (age < TTL; `configTtlMs: 0` disables reuse entirely) | not attempted | n/a | cached effective route | already |
 | stale/absent | success | valid row | row is effective | yes |
-| stale/absent | success | malformed row | `INVALID_CONFIG` (isolated to this operation) | not cached — re-read next run |
+| stale/absent | success | malformed row | `INVALID_CONFIG` (isolated to this operation) | not cached, re-read next run |
 | stale/absent | success | no row | `defaultRoute` if declared (negative-cached as effective), else `INVALID_CONFIG` | yes |
-| stale/absent | failure/timeout | unknown | `CONFIG_STORE_UNAVAILABLE` — **`defaultRoute` is never an outage fallback** | no |
+| stale/absent | failure/timeout | unknown | `CONFIG_STORE_UNAVAILABLE`. **`defaultRoute` is never an outage fallback** | no |
 
 - The `getAll()` return itself is validated first: a non-record (null, array, primitive)
-  → `CONFIG_STORE_UNAVAILABLE` (fail-closed — a malformed container must never read as
+  → `CONFIG_STORE_UNAVAILABLE` (fail-closed: a malformed container must never read as
   "no rows" and activate defaults). Rows are then validated strictly (unknown fields →
   malformed). A shape-valid row referencing an unregistered provider is malformed for
   resolution (`INVALID_CONFIG`, isolated), as is a row whose `quota` fails its §6 validation
@@ -81,18 +81,18 @@ Per-operation resolution matrix:
 - **Effective quota.** The effective quota is the effective route's `quota` if the route
   carries one, else the operation's declared `quota` (§6); the effective route is the stored
   row when one resolves, else `defaultRoute`. Explicitly: a stored row **without** `quota`
-  does **not** inherit `defaultRoute.quota` — it falls back to the declared quota, and the
+  does **not** inherit `defaultRoute.quota`. It falls back to the declared quota, and the
   operation runs with no quota at all if the definition declares none. A stored `quota` on an
   operation that declares none *enables* a quota (the row is valid, and the subject
   requirement then applies, checked after stage 4 per §1). `resetConfig` deletes the row, so
   `defaultRoute` and its `quota` apply again. A run's effective quota is fixed at stage 4 (§4).
 - **Cache coherence:** generation counter; every mutation outcome (success, timeout,
-  rejection — any outcome whose non-application is not positively known) bumps the
+  rejection, meaning any outcome whose non-application is not positively known) bumps the
   generation and invalidates locally. A read begun under an older generation cannot
   overwrite a newer entry. **Mutation ordering:** the core serializes config mutations
   per operation within a process (one in flight, FIFO); the mutex is RELEASED at the
   caller deadline (ConfigStore has no cancellation contract), so a timed-out write may
-  still land late and overwrite a subsequent write — in-process as well as cross-process.
+  still land late and overwrite a subsequent write, in-process as well as cross-process.
   This is the documented last-write-wins/unknown-ack limitation; the deferred CAS/revision
   mechanism (v0.2, settled) is the full fix. Custom ConfigStores must give the writing client
   read-your-writes.
@@ -107,7 +107,7 @@ Per-operation resolution matrix:
 
 - `getConfig()` returns per operation `{ stored: OperationRoute | null | 'malformed',
   effective: OperationRoute | null }` (readiness not probed).
-- `setConfig` replace-only, validated (shape, registered provider IDs, §6 ranges — including
+- `setConfig` replace-only, validated (shape, registered provider IDs, §6 ranges, including
   `quota.perDay`). Cache TTL default 5000ms (`configTtlMs`, 0–300 000; `0` = read every run).
 - `getQuota` resolves the operation's config before reading usage, because the limit it
   reports is the **effective** limit and may live on the route. Full precedence: unknown
@@ -120,8 +120,8 @@ Per-operation resolution matrix:
 
 ## 3. Output pipeline (attempt sub-stages)
 
-1. Each operation declares `format`: **`'json'`** (default — top-level JSON **object**),
-   **`'json-any'`** (arbitrary JSON — native provider JSON modes never enabled), or
+1. Each operation declares `format`: **`'json'`** (the default: a top-level JSON **object**),
+   **`'json-any'`** (arbitrary JSON; native provider JSON modes never enabled), or
    **`'text'`**. No schema introspection: text-shaped output schemas MUST set `'text'`.
 2. The adapter receives `responseFormat: { type: 'text' } | { type: 'json'; topLevel:
    'object' | 'any' }` and enables native generic JSON mode only per its §5c capability
@@ -148,25 +148,25 @@ Per-operation resolution matrix:
 ## 4. Quota lifecycle and UsageStore contract
 
 One **run** = one slot, shared with its fallback attempt. The **store's clock owns the UTC
-day**. `reserve()` returns the store-created immutable **`ReservationEnvelope`** —
+day**. `reserve()` returns the store-created immutable **`ReservationEnvelope`**:
 `{ reservationId, key, day }` with `day` as `YYYY-MM-DD` (UTC, chosen by the store; years
-0001–9999 — year 0000 is invalid, because PostgreSQL has no year zero where JavaScript
-would accept it, and substitutability requires the shared bound) — which
+0001–9999; year 0000 is invalid, because PostgreSQL has no year zero where JavaScript
+would accept it, and substitutability requires the shared bound), which
 the core validates (`key` must equal the requested key; `day` must match the domain) and
 carries verbatim through commit recovery and settlement. A re-reservation **replaces** the
 active envelope.
 
-- **reserve** — the `limit` passed is the run's **effective limit** (§2). The store atomically
+- **reserve**: the `limit` passed is the run's **effective limit** (§2). The store atomically
   counts committed + unexpired pending slots for the store's current UTC day (`used`) and
   admits iff `used < limit`: insert pending reservation, lease
   `expiresAt = min(now + leaseMs, resetsAt)` (a lease never crosses the day boundary).
   A denial's `used` is authoritative for that `reserve`'s own snapshot-and-lock point: it is
   never lower than live usage, and it exceeds live usage only by rows that lapsed or appeared
   while that `reserve` waited for the counter.
-  **`limit === 0`:** the core **still calls `reserve`** and never short-circuits — `used` and
+  **`limit === 0`:** the core **still calls `reserve`** and never short-circuits, since `used` and
   `resetsAt` must be store-authoritative. An available store returns the complete denial
-  `{ ok: false, used, resetsAt }` — `used` being the day's authoritative count, which may be
-  non-zero — **without inserting a reservation**, and the run ends `QUOTA_EXCEEDED`; a
+  `{ ok: false, used, resetsAt }`, with `used` being the day's authoritative count, which may be
+  non-zero, **without inserting a reservation**, and the run ends `QUOTA_EXCEEDED`; a
   transport error or timeout still maps to `USAGE_STORE_UNAVAILABLE`, so a zero limit during
   a store outage refuses as an outage, not as a quota denial. `getQuota` at zero
   returns `limit: 0`, `remaining: 0`, and that same authoritative `used`. How quickly a
@@ -181,14 +181,14 @@ active envelope.
   | `'committed'` | dispatch |
   | `'expired'` | re-reserve **once** (new envelope): `{ok:true}` → commit the new id (`'expired'`/`'missing'` again → `USAGE_STORE_UNAVAILABLE`); `{ok:false}` → `QUOTA_EXCEEDED` with its `resetsAt` |
   | `'missing'` | `USAGE_STORE_UNAVAILABLE` |
-  | transport error/timeout | retry same id ×3 (250/500/1000ms) → `USAGE_STORE_UNAVAILABLE` ("possibly committed" — conservative) |
+  | transport error/timeout | retry same id ×3 (250/500/1000ms) → `USAGE_STORE_UNAVAILABLE` ("possibly committed", conservative) |
 
-- **settle(envelope, outcome, attempts)** — idempotent, atomic per reservation: exact
+- **settle(envelope, outcome, attempts)**: idempotent, atomic per reservation: exact
   duplicate → no-op; conflicting payload after settlement → ignored (first write wins);
   pending/expired/**unknown** reservation → record attempts against the envelope's
   key/day without changing slot accounting. Attempt order = dispatch order.
 - **Settlement execution (v0.1, non-durable):** initial `settle` awaited (10s deadline)
-  in finalization — settlement failure never changes an otherwise successful outcome,
+  in finalization, and settlement failure never changes an otherwise successful outcome,
   though delivery may be delayed by up to that deadline; then up to 3 detached retries
   (1s/5s/25s, same per-attempt deadline); remaining failure →
   `onSettlementError(error, { reservation, outcome, attempts })` invoked through an
@@ -206,14 +206,14 @@ active envelope.
 edited between one run and the next:
 
 1. A run captures its effective limit at config resolution (stage 4). A later change never
-   alters that run's pending envelope, its commit recovery, or an in-flight re-reservation —
+   alters that run's pending envelope, its commit recovery, or an in-flight re-reservation;
    those complete against the captured limit.
 2. A limit lowered to at or below the day's current `used` denies **new** reservations
    (`QUOTA_EXCEEDED` with the store's `resetsAt`); already-committed slots stand.
 3. `getQuota` may therefore report `used > limit` with `remaining: 0`, since `remaining` is
    `max(0, limit - used)`.
-4. Removing the only quota — clearing `quota` from a stored row for an operation whose
-   definition declares none — makes new runs non-quota and `getQuota` return `INVALID_INPUT`;
+4. Removing the only quota, that is clearing `quota` from a stored row for an operation whose
+   definition declares none, makes new runs non-quota and `getQuota` return `INVALID_INPUT`;
    reservations already pending or committed keep their normal lifecycle (expiry, commit,
    settle, pruning) and their rows are untouched.
 5. Any change, including to 0, applies to new runs once it is cache-visible per §2, and never
@@ -227,13 +227,13 @@ Postgres adapter: single-statement atomic reserve/commit (row-level concurrency,
 explicit table-wide locks), lease and day boundary enforced in SQL, schema-qualified
 identifiers, default `leaseMs` 120 000 (5 000–600 000). Every method sends one command, so
 each call runs in a transaction of its own; the pool must run at READ COMMITTED
-(PostgreSQL's default) — under REPEATABLE READ or SERIALIZABLE, concurrent reserves abort
+(PostgreSQL's default). Under REPEATABLE READ or SERIALIZABLE, concurrent reserves abort
 with a serialization failure instead of one being denied: fail-closed, never
 over-admitting. Migrations are packaged (§6b), schema-aware, and never auto-run.
 
 **Persisted data (privacy boundary):** operation, `subjectId` (verbatim), UTC day,
 reservation state, timestamps, and the complete `AttemptRecord` fields per attempt
-(provider, model, outcome, status, token counts, `costUsd`, `durationMs`) — so settle
+(provider, model, outcome, status, token counts, `costUsd`, `durationMs`), so settle
 round-trip/duplicate detection is defined over whole records.
 Never prompts, inputs, outputs, or raw errors. **Pruning:** prune **settled** rows ≥ 2 days
 past their day; committed-but-unsettled rows retained until 24h past their day, then
@@ -248,8 +248,8 @@ implementing exactly this.
   fetch-based and dependency-free by design.
 - **Stage 5 (per run, before quota):** both routes' providers must be registered. If a
   provider declares **`prepare()`** (§6), it is invoked (raced with abort) **once per
-  unique provider registration ID per run** — memoized, so a run whose primary and
-  fallback share a provider gets one snapshot — returning a run-scoped dispatcher used
+  unique provider registration ID per run**, memoized, so a run whose primary and
+  fallback share a provider gets one snapshot, returning a run-scoped dispatcher used
   for that run's attempts (nothing stored on the shared provider; concurrent runs are
   isolated). A malformed return (no `complete` function) → `INVALID_CONFIG` (local).
   Built-in factories implement `prepare()` to resolve their `apiKey` (empty/undefined →
@@ -260,7 +260,7 @@ implementing exactly this.
 - **Post-dispatch:** provider rejects credential/model → `auth`/`model_not_found` →
   `INVALID_CONFIG` (`detectedAt:'provider'`), slot committed. Neither classification is
   fallback-eligible unless `fallbackOnAuthOrModelNotFound` (§6) is on, and the flag governs
-  a **primary** attempt only — it never introduces a second fallback and does not touch the
+  a **primary** attempt only: it never introduces a second fallback and does not touch the
   local `INVALID_CONFIG` paths above. `detectedAt` is a property of the thrown
   `LLMDispatchError`, never of an `AttemptRecord` (§6), and `detectedAt:'provider'` is set only
   when the terminal code is `INVALID_CONFIG` from the final attempt: a primary rescued by its
@@ -273,12 +273,12 @@ implementing exactly this.
 | Classification | Fallback? | Terminal code if final | `retryable` |
 |---|---|---|---|
 | `transient` (network, 5xx, 408, overload) | ✅ | `PROVIDER_FAILED` | `true` |
-| `rate_limit` (429; billing-exhaustion via 429/402 included — cross-provider fallback is the remedy) | ✅ | `PROVIDER_FAILED` | `true` |
+| `rate_limit` (429; billing-exhaustion via 429/402 included; cross-provider fallback is the remedy) | ✅ | `PROVIDER_FAILED` | `true` |
 | `malformed_response` (unusable body/shape/unknown terminal state) | ✅ | `PROVIDER_FAILED` | `true` |
 | `timeout` (core-assigned) | ✅ | `PROVIDER_FAILED` | `true` |
-| `truncated` (`ProviderResponse.kind: 'truncated'` — max-token/length/context termination per §5c) | ✅ | `OUTPUT_REJECTED` | `true` |
+| `truncated` (`ProviderResponse.kind: 'truncated'`, max-token/length/context termination per §5c) | ✅ | `OUTPUT_REJECTED` | `true` |
 | `output_rejected` (JSON parse / object-shape / `ZodError` / quality `{ok:false}`) | ✅ | `OUTPUT_REJECTED` | `true` |
-| `refused` (`ProviderResponse.kind: 'refused'` — refusal/safety/policy block on a 200 per §5c) | ❌ | `PROVIDER_FAILED` | `false` |
+| `refused` (`ProviderResponse.kind: 'refused'`, refusal/safety/policy block on a 200 per §5c) | ❌ | `PROVIDER_FAILED` | `false` |
 | `auth` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
 | `model_not_found` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
 | `invalid_request` (content-dependent rejection, e.g. context overflow) | ❌ | `PROVIDER_FAILED` | `false` |
@@ -298,7 +298,7 @@ tables.
 - Built-in adapters make exactly one client-side HTTP request per attempt: `redirect:
   'error'` on every fetch (a 3xx → `transient`; no prompt/credential ever reaches a
   redirect target); no retries in llmdispatch's own HTTP layer. (Gateway hosts may retry
-  upstream internally — outside our boundary.)
+  upstream internally, outside our boundary.)
 - **ProviderError recognition is brand-based, never bare `instanceof`**: the class carries
   `Symbol.for('llmdispatch.ProviderError')` and exposes `ProviderError.is(value)`; the core
   classifies with `.is()` so a `ProviderError` crossing ESM/CJS entry points (dual-package
@@ -312,15 +312,15 @@ tables.
 
 All built-ins: `fetch` with `redirect: 'error'`, JSON bodies, per-attempt signal.
 **Optional request fields (`maxOutputTokens`, `temperature`) are omitted from the wire body
-when unset — never defaulted** (single exception: Anthropic `max_tokens` below). Every
+when unset, never defaulted** (single exception: Anthropic `max_tokens` below). Every
 mapping is fixed by recorded synthetic fixtures.
 **Universal status-family default (all built-ins, total by construction):** any status not
-explicitly mapped classifies by family — 401/403 → `auth` (except documented moderation
+explicitly mapped classifies by family: 401/403 → `auth` (except documented moderation
 envelopes → `refused`); 402/429 → `rate_limit`; 404 → `model_not_found`; 408 → `transient`;
 any other 4xx (incl. 409/413/422) → `invalid_request`; any 5xx (incl. 504/529) →
 `transient`; network/DNS/TLS failures → `transient`. Implementers never invent a mapping.
 
-**`openaiCompatible({ apiKey, baseUrl?, jsonMode?, tokenParam? })` — the universal transport.**
+**`openaiCompatible({ apiKey, baseUrl?, jsonMode?, tokenParam? })`, the universal transport.**
 Default `baseUrl` `https://api.openai.com/v1`; `POST {baseUrl}/chat/completions`;
 `Authorization: Bearer`. ([OpenAI API reference](https://platform.openai.com/docs/api-reference/chat))
 Request: `model`, `messages: [{role:'user', content: prompt}]`, `max_tokens`,
@@ -328,11 +328,11 @@ Request: `model`, `messages: [{role:'user', content: prompt}]`, `max_tokens`,
 AND the JSON capability applies. **JSON capability rule:** direct known-good hosts
 (api.openai.com, api.deepseek.com, api.groq.com, api.mistral.ai) get native `json_object`;
 **model-multiplexing gateways (openrouter.ai, api.together.xyz, api.fireworks.ai) and
-unknown hosts are prompt-only by default** — JSON-mode support there is per-MODEL, not
+unknown hosts are prompt-only by default**: JSON-mode support there is per-MODEL, not
 per-host, and an unsupported route would fail `invalid_request` without fallback; the
 factory's `jsonMode: 'native' | 'prompt-only'` overrides either way and is the documented
 knob when you know your models. (Ollama
-`http://localhost:11434/v1`: key accepted-but-unused; schema formats silently ignored —
+`http://localhost:11434/v1`: key accepted-but-unused; schema formats silently ignored,
 prompt-only. [Ollama compat](https://ollama.com/blog/openai-compatibility))
 Token parameter: `max_completion_tokens` for host api.openai.com (OpenAI deprecates
 `max_tokens` and rejects it on reasoning models), `max_tokens` for all other compat hosts;
@@ -346,7 +346,7 @@ missing/invalid base counters → `usage: null`** (never zero-defaulted).
 **Embedded HTTP-200 errors (OpenRouter):** before completion parsing, a body carrying
 `finish_reason: 'error'` or a top-level/choice-level `error` object classifies from its
 `error.metadata.error_type`/`code` vocabulary (moderation → `refused`; auth/credit/rate →
-`auth`/`rate_limit`; otherwise `transient`) — never treated as normal completion.
+`auth`/`rate_limit`; otherwise `transient`), never treated as normal completion.
 Errors ([OpenAI error codes](https://developers.openai.com/api/docs/guides/error-codes),
 [OpenRouter errors](https://openrouter.ai/docs/api_reference/errors-and-debugging)):
 401 → `auth`; **403: for OpenRouter envelopes carrying moderation metadata →
@@ -355,19 +355,19 @@ Errors ([OpenAI error codes](https://developers.openai.com/api/docs/guides/error
 400/413/422 → `invalid_request`; unparseable body → classify by status; unknown status →
 `transient` (a real HTTP outcome, unlike unclassified thrown values).
 
-**`anthropic({ apiKey })` — native Messages API.** `POST
+**`anthropic({ apiKey })`, native Messages API.** `POST
 https://api.anthropic.com/v1/messages`; **`x-api-key`** + required
 **`anthropic-version: 2023-06-01`**. ([Anthropic Messages](https://docs.anthropic.com/en/api/messages);
-the OpenAI-compat layer is not used — it ignores `response_format` and is documented as a
+the OpenAI-compat layer is not used: it ignores `response_format` and is documented as a
 testing tool: [Anthropic OpenAI SDK compat](https://docs.anthropic.com/en/api/openai-sdk))
-Request: `model`, `max_tokens` (**always sent** — required by Anthropic; default 4096 when
+Request: `model`, `max_tokens` (**always sent**, required by Anthropic; default 4096 when
 the route sets none), `messages: [{role:'user', content: prompt}]`, `temperature` (0–1;
 core-range values are clamped, documented). JSON is prompt-driven in v0.1.
 Response: first `text` block of `content[]`; `stop_reason` normalized to
 `ProviderResponse.kind`: `max_tokens` **and `model_context_window_exceeded`** →
 `'truncated'`; `refusal` → `'refused'`; `end_turn`/`stop_sequence` → `'complete'`; other →
 throw `ProviderError('malformed_response')`. Usage: base counters `input_tokens` and
-`output_tokens` are REQUIRED — missing/invalid → `usage: null`; the additive optional
+`output_tokens` are REQUIRED; missing/invalid → `usage: null`; the additive optional
 cache categories (`cache_creation_input_tokens`, `cache_read_input_tokens`) default 0 and
 are summed into `inputTokens`. ([Anthropic usage/caching](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching),
 [stop reasons](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons))
@@ -375,14 +375,14 @@ Errors (envelope `{type:'error', error:{type,message}}`): `authentication_error`
 `auth`; `not_found_error` → `model_not_found`; `rate_limit_error`/429 → `rate_limit`;
 `overloaded_error`/529/5xx → `transient`; `invalid_request_error`/400 → `invalid_request`.
 
-**`gemini({ apiKey })` — native generateContent.** `POST
+**`gemini({ apiKey })`, native generateContent.** `POST
 https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`;
 `x-goog-api-key` header. Pinned to `v1beta` deliberately: it is the channel Google's
 Gemini API docs default to and where JSON-output fields live; verified by recorded
 fixtures and the release live-check gate ([Gemini API](https://ai.google.dev/api/generate-content),
 [API versions](https://ai.google.dev/gemini-api/docs/api-versions)). The OpenAI-compat
 endpoint is not used: it is officially beta, and only the native API documents explicit
-thought-token accounting (`thoughtsTokenCount`) and full termination metadata — both of
+thought-token accounting (`thoughtsTokenCount`) and full termination metadata, both of
 which this design depends on ([Gemini OpenAI compat](https://ai.google.dev/gemini-api/docs/openai),
 [native usage fields](https://ai.google.dev/api/generate-content); the compat-usage
 discrepancy observed in the research is recorded as an empirical fixture-verification item,
@@ -398,7 +398,7 @@ WITHOUT block metadata → throw `ProviderError('malformed_response')`; `finishR
 `'complete'`; other → throw `ProviderError('malformed_response')`. Usage: base counter
 `promptTokenCount` REQUIRED (missing/invalid → `usage: null`); `outputTokens =
 candidatesTokenCount + thoughtsTokenCount` where `candidatesTokenCount` is required and
-`thoughtsTokenCount` is additive-optional (default 0; thinking tokens are billed output —
+`thoughtsTokenCount` is additive-optional (default 0; thinking tokens are billed output,
 [thinking docs](https://ai.google.dev/gemini-api/docs/thinking)).
 Errors (`{error:{code,status,message}}`): 401/403 → `auth`; 404 → `model_not_found`;
 429/`RESOURCE_EXHAUSTED` → `rate_limit`; 500/503 → `transient`; 400/`INVALID_ARGUMENT` →
@@ -409,13 +409,13 @@ Errors (`{error:{code,status,message}}`): 401/403 → `auth`; 404 → `model_not
 ```ts
 import { z } from 'zod'
 
-// ——— entry point ———
+// --- entry point ---
 export declare function createSwitch<Ops extends OperationsMap>(
   config: CreateSwitchConfig<Ops>
 ): Switch<Ops>
 
 // Inference builders. defineOperation correlates each operation's schemas with its
-// callbacks; **every entry in defineOperations MUST be wrapped in defineOperation** —
+// callbacks; **every entry in defineOperations MUST be wrapped in defineOperation**;
 // defineOperations is an identity collector and does not itself restore inference.
 // The README quickstart uses exactly this shape; negative compile fixtures assert that
 // invalid `prompt` input and `quality.data` accesses FAIL to compile in that shape.
@@ -460,7 +460,7 @@ export interface Logger {                                // invoked through caug
   error(message: string, data?: unknown): void | Promise<void>
 }
 
-// ——— operations ———
+// --- operations ---
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
@@ -473,7 +473,7 @@ export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType
 }
 export type QualityVerdict = { ok: true } | { ok: false; reason?: string }
 
-// ——— routing / views ———
+// --- routing / views ---
 export interface OperationRoute {
   provider: string                                       // non-empty registered provider ID
   model: string                                          // non-empty
@@ -491,7 +491,7 @@ export interface OperationConfigView {
 }
 export interface QuotaView { limit: number; used: number; remaining: number; resetsAt: string } // limit = the effective limit (route override, else declared); remaining = max(0, limit - used); getQuota requires non-empty subjectId
 
-// ——— run results ———
+// --- run results ---
 export interface RunResult<Out> {
   data: Out
   route: { provider: string; model: string }
@@ -518,7 +518,7 @@ export interface AttemptRecord {
 export interface TokenUsage { inputTokens: number; outputTokens: number }  // non-negative SAFE integers
 export interface ModelPrice { inputPerM: number; outputPerM: number }      // finite, ≥ 0
 
-// ——— providers ———
+// --- providers ---
 export interface Provider {
   prepare?(): PreparedProvider | Promise<PreparedProvider>  // §5a; memoized per run per provider ID
   complete(req: ProviderRequest): Promise<ProviderResponse> // used directly when prepare absent
@@ -563,7 +563,7 @@ export declare function openaiCompatible(opts: {
 export declare function gemini(opts: { apiKey: ApiKeyResolver }): Provider
 export type ApiKeyResolver = () => string | undefined | Promise<string | undefined>
 
-// ——— stores ———
+// --- stores ---
 export interface ConfigStore {
   getAll(): Promise<Record<string, unknown>>
   set(operation: string, route: OperationRoute): Promise<void>
@@ -587,7 +587,7 @@ export declare function postgresStores(opts: {
   leaseMs?: number                                       // default 120_000; 5_000–600_000
 }): StorePair
 
-// ——— errors ———
+// --- errors ---
 export declare class LLMDispatchError extends Error {
   private constructor()                                  // instances come from the package; narrow on `code`
   readonly code: 'INVALID_INPUT' | 'MISSING_SUBJECT' | 'QUOTA_EXCEEDED'
@@ -600,7 +600,7 @@ export declare class LLMDispatchError extends Error {
   readonly attempts?: AttemptRecord[]
   // Sanitized, scoped to the package's own fields: they never carry prompts, model
   // output, or raw provider errors from a dispatched attempt. A pre-dispatch error may
-  // chain the underlying store or `prepare()` failure as `cause`, verbatim — the
+  // chain the underlying store or `prepare()` failure as `cause`, verbatim: the
   // adopter's own thrown error, or a provider adapter's readiness failure.
 }
 ```
@@ -613,9 +613,9 @@ non-string prompt returns → unwrapped
 `TypeError` (pre-quota); malformed quality verdicts → `quality_error`; malformed prepared
 dispatchers → `INVALID_CONFIG` (local).
 
-**String domain.** Every string that reaches a store — operation names, provider
+**String domain.** Every string that reaches a store (operation names, provider
 registration IDs, `OperationRoute`/`RouteTarget` `provider` and `model`, `subjectId`,
-`ReservationEnvelope.reservationId`, and `AttemptRecord.provider`/`model` — is well-formed
+`ReservationEnvelope.reservationId`, and `AttemptRecord.provider`/`model`) is well-formed
 Unicode (`String.prototype.isWellFormed()`), contains no U+0000, and is at most 1 000 bytes
 of UTF-8. The core checks this **before any store call**, at these boundaries: operation
 names, provider IDs and declared routes at `createSwitch` → `INVALID_CONFIG`; a route at
@@ -626,15 +626,15 @@ malformed store result → `USAGE_STORE_UNAVAILABLE`, checked before `commit`; t
 the attempt records are checked again before `settle`. A store additionally rejects
 out-of-domain values as defence in depth. The bound is part of the contract because a
 relational store cannot hold every JavaScript string: PostgreSQL `text` and `jsonb` reject
-U+0000, lone surrogates do not survive a round trip, and index entries are size-capped — so a
+U+0000, lone surrogates do not survive a round trip, and index entries are size-capped, so a
 store that had to narrow the domain itself would not be substitutable.
 
 ## 6a. Core-enforced store deadlines
 
 `ConfigStore.getAll` 5s; `set`/`delete` 10s (unknown-ack semantics per §2);
 `reserve`/`commit`/`snapshot` 10s; `settle` 10s per attempt including each detached retry.
-`getQuota` may spend both in sequence — a `getAll` that is not served from cache, then
-`snapshot` — so its worst case is 15s. Constants in v0.1.
+`getQuota` may spend both in sequence: a `getAll` that is not served from cache, then
+`snapshot`, so its worst case is 15s. Constants in v0.1.
 
 ## 6b. Packaged operational surfaces (exact declarations)
 
@@ -683,7 +683,7 @@ export declare function runProviderConformance(opts: {
   // 'success' is MANDATORY; each other scenario puts the adopter's backend into the named
   // condition and resolves when ready; the harness dispatches and asserts the resulting
   // ProviderResponse.kind or ProviderError classification. Absent optional scenarios are
-  // reported in `skipped` — a skipped scenario means that classification is UNVERIFIED.
+  // reported in `skipped`: a skipped scenario means that classification is UNVERIFIED.
   scenarios: { success: () => Promise<void> } & Partial<Record<
     'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient'
     | 'malformed_response' | 'truncated' | 'refused', () => Promise<void>>>
@@ -718,9 +718,9 @@ discounts, tiered pricing, and request fees are out of scope in v0.1.
 
 ## 8. Conformance suite (adopter-facing)
 
-Runners per §6b. Three of the cases below are new to this contract — two `UsageStore` cases
+Runners per §6b. Three of the cases below are new to this contract: two `UsageStore` cases
 (a `reserve` at limit 0, and a limit lowered below existing usage) and one `ConfigStore` case
-(a route carrying `quota`) — so a custom store can fail the suite without any change on its
+(a route carrying `quota`), so a custom store can fail the suite without any change on its
 side: a `UsageStore` that treats a non-positive `limit` as unlimited, or a `ConfigStore` that
 persists only a whitelist of route fields, needs updating. Coverage:
 
@@ -733,10 +733,10 @@ persists only a whitelist of route fields, needs updating. Coverage:
   denying without inserting a reservation (observed as: a following `reserve` at `limit: 1`
   on the same key is admitted with `used` 0), and a limit lowered below existing
   pending/committed usage denying new reservations while leaving those rows intact.
-  (Settle-FAILURE isolation — a rejecting store not affecting run outcomes — is core
+  (Settle-FAILURE isolation, a rejecting store not affecting run outcomes, is core
   behavior, tested internally.)
 - **ConfigStore:** set/get/delete round-trip fidelity, raw-value persistence via
-  `seedRaw` (the store must return exactly what was written — validation is the CORE's
+  `seedRaw` (the store must return exactly what was written; validation is the CORE's
   job and is tested internally), delete-removes-row, read-your-writes, and a route carrying
   `quota` returned verbatim like any other field.
 - **Provider:** mandatory success dispatch (correct `kind`/text/usage shape); honors

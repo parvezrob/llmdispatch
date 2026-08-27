@@ -43,7 +43,7 @@ graph TD
 ```
 
 Every arrow points down the same slope, so the graph has no cycles, and the layer that
-changes most often — the adapters — sits where nothing depends on it.
+changes most often, the adapters, sits where nothing depends on it.
 
 ## What each folder is for
 
@@ -52,7 +52,7 @@ importing nothing but Zod.
 
 **`errors/`** is the bottom layer of behaviour. Two public classes: `LLMDispatchError`, with a
 closed set of codes, the typed factories that construct it, and the literal `retryable` of
-the spec §5b classification row — the row, not the code, since `PROVIDER_FAILED` is retryable
+the spec §5b classification row: the row, not the code, since `PROVIDER_FAILED` is retryable
 for a `transient` failure and not for a `refused` one; and `ProviderError`, which an adapter
 throws to classify a failed call and which is recognised by a brand rather than by
 `instanceof`. Everything may depend on it; it depends on nothing but the public types.
@@ -63,8 +63,8 @@ all. It reaches storage and providers only through the interfaces they implement
 is why it never needs editing when either gains a member.
 
 **`providers/`** holds one adapter per provider API. Each one translates a request into
-that API's wire format, sends it with global `fetch`, and translates what comes back —
-including failures — into the shared shapes. An adapter reports; it does not decide
+that API's wire format, sends it with global `fetch`, and translates what comes back,
+including failures, into the shared shapes. An adapter reports; it does not decide
 whether to fall back or whether a quota allows the call.
 
 **`stores/`** holds one adapter per storage backend, implementing the config store and the
@@ -91,20 +91,20 @@ These are the ones `.dependency-cruiser.cjs` enforces:
 - `providers/` may import `providers/`, `errors/`, and the public types. `stores/` may
   import `stores/`, `errors/`, and the public types. Neither may reach the other, and
   neither may reach `core/`.
-- `conformance/` may import `conformance/`, `errors/`, and the public types — never a
+- `conformance/` may import `conformance/`, `errors/`, and the public types, never a
   concrete provider or store.
 - `errors/` may import only itself and the public types, and no Node built-in either:
   constructing an error must not touch the outside world.
 - The public types module imports nothing but `zod`. It is shapes, not behaviour.
 - `index.ts` is the one module allowed to import `core/` together with `providers/` and
-  `stores/`. `postgres.ts` reaches the packaged migrations and nothing else at all — the
+  `stores/`. `postgres.ts` reaches the packaged migrations and nothing else at all: the
   PostgreSQL stores themselves are exported from the root, as the specification declares
   them, so an application that has already migrated never loads the DDL. `conformance.ts`
   reaches the harnesses and nothing else at all. Both re-export what those folders already
   expose, so neither needs the error surface directly.
 - The only package `src/` may import is `zod`, which is a peer dependency. The published
   package has no runtime dependencies of its own.
-- No cycles, and no module that nothing imports — except the three entry modules, which
+- No cycles, and no module that nothing imports, except the three entry modules, which
   the manifest points at rather than another module.
 
 The public types live in one module and are re-exported from the entry points, so a shape
@@ -120,5 +120,5 @@ Adding a provider or a store is additive. It is a new folder under `providers/` 
 `core/` is not allowed to know the folder exists.
 
 Any implementation that passes the conformance harnesses is substitutable for a built-in
-one. That holds only if the harnesses and the core both go through the same interfaces —
+one. That holds only if the harnesses and the core both go through the same interfaces,
 which is exactly what the `conformance/` rule guarantees.

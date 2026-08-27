@@ -343,7 +343,7 @@ describe('settlement detachment and retries', () => {
     const run = observe(f.ai.run('echo', ARGS))
     await flushMicrotasks()
     // Ordering oracle: the run is settled and settle was called exactly once, and only the
-    // detached 1 s retry timer is pending — in unreferenced mode, on the runtime seam.
+    // detached 1 s retry timer is pending, in unreferenced mode, on the runtime seam.
     expect(run.state).toBe('resolved')
     expect(f.s.settle.calls.length).toBe(1)
     expect(f.runtime.pendingDelays('unreferenced')).toEqual([1000])
@@ -376,7 +376,7 @@ describe('settlement detachment and retries', () => {
     f.s.settle.nextReject(new Error('settle 1')) // only the initial attempt fails
     await f.ai.run('echo', ARGS)
     await f.runtime.advance(1000)
-    expect(f.s.settle.calls.length).toBe(2) // the 1 s retry ran — and succeeded
+    expect(f.s.settle.calls.length).toBe(2) // the 1 s retry ran, and succeeded
     await f.runtime.advance(5000)
     await f.runtime.advance(25_000)
     expect(f.s.settle.calls.length).toBe(2) // a chain that keeps going fails here
@@ -400,7 +400,7 @@ describe('settlement detachment and retries', () => {
     void gate
   })
 
-  it('invokes the hook exactly once, after all four attempts failed, with the exact record — and logs once', async () => {
+  it('invokes the hook exactly once, after all four attempts failed, with the exact record, and logs once', async () => {
     const hookCalls: { error: unknown; record: SettlementFailure }[] = []
     const loggerCalls: { message: string; data: unknown }[] = []
     const finalError = new Error('settle 4')
@@ -603,7 +603,7 @@ describe('changing a limit while runs are in flight (§4 rules 1–5)', () => {
     expect(f.s.reserve.calls.map((call) => call[1])).toEqual([5, 5])
   })
 
-  it('rule 4 (in flight): removing the ONLY quota mid-run — the pending envelope finishes, new runs are quota-less', async () => {
+  it('rule 4 (in flight): removing the ONLY quota mid-run: the pending envelope finishes, new runs are quota-less', async () => {
     // The definition declares no quota: the only quota is the stored route's, so removing
     // it removes quota governance entirely (§4 rule 4).
     const f = fixture() // no declared quota
@@ -651,7 +651,7 @@ describe('changing a limit while runs are in flight (§4 rules 1–5)', () => {
     )
     await ai.run('echo', ARGS)
     await ai.run('echo', ARGS) // two committed slots
-    // Rule 2: lowered to at or below used — here to 0 — denies new reservations …
+    // Rule 2: lowered to at or below used: here to 0: denies new reservations …
     await ai.setConfig('echo', { provider: 'p1', model: 'm1', quota: { perDay: 0 } })
     const denied = await expectCode(ai.run('echo', ARGS), 'QUOTA_EXCEEDED')
     expect(denied.resetsAt).toBeDefined()

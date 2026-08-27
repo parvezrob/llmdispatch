@@ -27,7 +27,7 @@ import type {
   UsageStore,
 } from '../../../src/types'
 
-// ——— promises ———
+// --- promises ---
 
 export interface Deferred<T> {
   promise: Promise<T>
@@ -47,13 +47,13 @@ export function deferred<T>(): Deferred<T> {
 
 /**
  * Drains the microtask queue completely: one real macrotask turn, before which the event
- * loop runs every queued microtask — however deep the promise chain — to exhaustion.
+ * loop runs every queued microtask: however deep the promise chain, to exhaustion.
  */
 export async function flushMicrotasks(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-/** One real macrotask turn — what Node needs before reporting an unhandled rejection. */
+/** One real macrotask turn: what Node needs before reporting an unhandled rejection. */
 export function macrotask(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
@@ -84,7 +84,7 @@ export function observe<T>(promise: Promise<T>): Observed<T> {
   return observed
 }
 
-// ——— unhandled rejections ———
+// --- unhandled rejections ---
 
 /** Collects unhandled rejections while installed; `stop()` removes the listener. */
 export function watchUnhandled(): { seen: unknown[]; stop: () => void } {
@@ -101,7 +101,7 @@ export function watchUnhandled(): { seen: unknown[]; stop: () => void } {
   }
 }
 
-// ——— fake runtime ———
+// --- fake runtime ---
 
 interface FakeTimer {
   id: number
@@ -162,7 +162,7 @@ export function fakeRuntime(start = 1_000_000): FakeRuntime {
   return runtime
 }
 
-// ——— scripted methods ———
+// --- scripted methods ---
 
 type Handler<A extends unknown[], T> = (...args: A) => T | Promise<T>
 
@@ -213,7 +213,7 @@ export function scripted<A extends unknown[], T>(
   return fn
 }
 
-// ——— scripted stores ———
+// --- scripted stores ---
 
 export const FIXED_DAY = '2026-08-26'
 export const RESETS_AT = '2026-08-27T00:00:00.000Z'
@@ -305,7 +305,7 @@ export function scriptedStores(): ScriptedStores {
   return { stores, log, getAll, set, del, reserve, commit, settle, snapshot }
 }
 
-// ——— scripted providers ———
+// --- scripted providers ---
 
 export interface ScriptedProvider {
   provider: Provider
@@ -368,7 +368,7 @@ export function scriptedProvider(): ScriptedProvider {
   }
 }
 
-// ——— the standard fixture ———
+// --- the standard fixture ---
 
 export const ECHO_INPUT = z.object({ text: z.string() })
 export const ECHO_OUTPUT = z.object({ answer: z.string() })

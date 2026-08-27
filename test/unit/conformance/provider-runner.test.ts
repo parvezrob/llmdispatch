@@ -46,7 +46,7 @@ function okResponse(): ProviderResponse {
 /**
  * A `Provider` whose one behaviour is swapped out per scenario, like `okResponse` above.
  *
- * Honors an already-aborted signal on its own, the way a conforming adapter must — so every
+ * Honors an already-aborted signal on its own, the way a conforming adapter must, so every
  * test here exercises exactly the dimension it names, not the mandatory signal-honour check
  * too. `nonAbortingProvider` below is the one deliberate exception.
  */
@@ -155,7 +155,7 @@ describe('runner behavior', () => {
       controls: { observeRequest: (req) => seen.push(req) },
     })
     expect(result.passed).toBe(true)
-    // Mandatory success plus the already-aborted signal check — both go through dispatch.
+    // Mandatory success plus the already-aborted signal check, both go through dispatch.
     expect(seen.length).toBe(2)
     expect(seen.every((req) => req.model === 'observed')).toBe(true)
     expect(seen[1]!.signal.aborted).toBe(true)
@@ -165,7 +165,7 @@ describe('runner behavior', () => {
 describe('nonconforming fakes', () => {
   it('fails when the success scenario answers with the wrong ProviderResponse shape', async () => {
     const { provider, set } = scriptedProvider()
-    // Every dispatch resolves 'truncated' — never the 'complete' the success case requires.
+    // Every dispatch resolves 'truncated', never the 'complete' the success case requires.
     set(() => ({ kind: 'truncated', text: 'partial', usage: null }))
     const result = await runProviderConformance({
       provider,

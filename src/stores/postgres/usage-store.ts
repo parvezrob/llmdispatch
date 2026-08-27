@@ -63,7 +63,7 @@ function isOutcome(value: string): value is (typeof OUTCOMES)[number] {
  * Builds a PostgreSQL usage store.
  *
  * @param options `pool` runs the statements, `schema` is quoted, `leaseMs` is the lease, and
- * `now` overrides the store's clock — `null` leaves the instant to the database.
+ * `now` overrides the store's clock; `null` leaves the instant to the database.
  */
 export function createPostgresUsageStore(options: {
   pool: QueryablePool

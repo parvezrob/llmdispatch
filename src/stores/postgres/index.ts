@@ -1,7 +1,7 @@
 /**
  * The PostgreSQL store pair: routes and quota counters in a schema you own.
  *
- * Bring your own pool — the package has no driver dependency and never opens a connection of
+ * Bring your own pool: the package has no driver dependency and never opens a connection of
  * its own. Nothing here runs DDL either: apply `migrationSql()` from `llmdispatch/postgres`
  * first, and this pair will find its tables where the migration put them.
  *

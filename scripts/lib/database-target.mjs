@@ -26,7 +26,7 @@ function ipv4Octets(host) {
  * Whether a host is a literal address in `127.0.0.0/8`.
  *
  * Names are never accepted, `localhost` included: this check does not control what a name
- * resolves to. `::1` is not accepted either — the parser returns it bracketed as `[::1]`, and
+ * resolves to. `::1` is not accepted either: the parser returns it bracketed as `[::1]`, and
  * the driver passes that to `net.connect` as a name to resolve, which fails with ENOTFOUND.
  *
  * @param {string} host The host as the connection string gives it.

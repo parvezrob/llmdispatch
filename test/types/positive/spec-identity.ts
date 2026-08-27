@@ -18,7 +18,7 @@ import type * as SpecPostgres from '../spec-surface-postgres'
 import type * as Spec from '../spec-surface'
 
 // Two types are identical when the compiler resolves these two conditional types to the same
-// one, which it does only for types it considers the same declaration — not merely assignable.
+// one, which it does only for types it considers the same declaration, not merely assignable.
 type Identical<Left, Right> =
   (<T>(value: T) => T extends Left ? 1 : 2) extends <T>(value: T) => T extends Right ? 1 : 2
     ? true

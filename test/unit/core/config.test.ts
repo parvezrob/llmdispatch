@@ -116,7 +116,7 @@ describe('the §2 resolution matrix and the cache', () => {
       rows = 0
     }
     // A Map or a class instance has no enumerable own rows: reading it as empty would
-    // activate defaults during an outage-shaped answer — the exact §2 hazard.
+    // activate defaults during an outage-shaped answer: the exact §2 hazard.
     for (const container of [null, [], 42, 'rows', new Map(), new Date(0), new RowsLike()]) {
       const { ai } = fixture()
       const f = fixture()
@@ -146,7 +146,7 @@ describe('the §2 resolution matrix and the cache', () => {
     gate.resolve({})
     await flushMicrotasks()
     expect(run.state).toBe('resolved')
-    await runtime.advance(4000) // now 4 s after completion — stale only if stamped at start
+    await runtime.advance(4000) // now 4 s after completion: stale only if stamped at start
     await ai.run('echo', INPUT)
     expect(getAllCount(s)).toBe(1)
     await runtime.advance(1500) // 5.5 s after completion: genuinely stale
@@ -240,7 +240,7 @@ describe('generation coherence', () => {
     f.s.getAll.always(() => ({ echo: { provider: 'p1', model: 'm-new' } }))
     await f.ai.run('echo', INPUT)
     const reads = getAllCount(f.s)
-    gate.resolve({}) // the old read finds no row — it must not install the default
+    gate.resolve({}) // the old read finds no row: it must not install the default
     await flushMicrotasks()
     expect(oldRun.state).toBe('resolved')
     await f.ai.run('echo', INPUT)

@@ -1,5 +1,5 @@
 /**
- * The abort race and the deadline race — the two ways the core stops waiting.
+ * The abort race and the deadline race: the two ways the core stops waiting.
  *
  * Both are built on `Promise.race`, which keeps a reaction attached to the losing side, so a
  * user callback or store call that fails after the run has moved on never surfaces as an
@@ -103,7 +103,7 @@ export function callWithDeadline<T>(
  * Waits out a backoff delay unless the signal fires first.
  *
  * Used between commit retries: the §1 rule checks the signal before every quota-recovery
- * I/O, and ending the wait early just reports the abort sooner — the check still guards the
+ * I/O, and ending the wait early just reports the abort sooner, and the check still guards the
  * I/O itself. The timer is referenced (an in-flight run may not let the process exit) and is
  * cancelled if the abort wins; the listener is removed if the delay elapses.
  */

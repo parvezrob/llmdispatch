@@ -36,7 +36,7 @@ function parseBody(init: RequestInit): unknown {
   }
 }
 
-/** Builds a `Response` whose body is JSON — or `null` for an empty body. */
+/** Builds a `Response` whose body is JSON, or `null` for an empty body. */
 export function jsonResponse(status: number, body: unknown): Response {
   const text = body === null ? '' : JSON.stringify(body)
   return new Response(text, { status, headers: { 'content-type': 'application/json' } })

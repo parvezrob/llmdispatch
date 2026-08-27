@@ -2,7 +2,7 @@
  * Reads a JSON object out of what a model returned for the live check's JSON call.
  *
  * On adapters with no native JSON mode the call is a prompt, so the object may arrive in a
- * code fence or wrapped in prose; both are tolerated. An empty object is not — it parses and
+ * code fence or wrapped in prose; both are tolerated. An empty object is not: it parses and
  * proves nothing.
  *
  * Copied into the scratch project alongside `live-check.mjs`, and kept separate from it so it

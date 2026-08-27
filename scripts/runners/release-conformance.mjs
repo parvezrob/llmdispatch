@@ -9,7 +9,7 @@
  * installed PostgreSQL stores, and run the provider suite against a fixture backend served
  * from this process.
  *
- * The schema is named by the caller, which also drops it — this process can be killed and so
+ * The schema is named by the caller, which also drops it: this process can be killed and so
  * cannot be relied on to clean up after itself.
  *
  * Usage: node release-conformance.mjs <schema>
@@ -56,7 +56,7 @@ async function importInstalledPackage() {
  *
  * The provider suite puts the backend into a named condition and then dispatches; this server
  * is that backend. Every classification row the built-in adapter documents is covered here, so
- * the suite reports nothing as unverified — a release must not ship on a partial answer.
+ * the suite reports nothing as unverified: a release must not ship on a partial answer.
  */
 function renderScenario(template, scenario) {
   const body = structuredClone(template)
@@ -148,7 +148,7 @@ ON CONFLICT (operation) DO UPDATE SET route = EXCLUDED.route`,
 
 /**
  * Runs both store suites against the installed stores, reached only through the public
- * factory and a pool of this check's own — the shape an adopter has.
+ * factory and a pool of this check's own: the shape an adopter has.
  */
 async function runStoreSuites(pool, schema) {
   const controls = controlStatements(schema)

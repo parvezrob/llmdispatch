@@ -1,9 +1,9 @@
 /**
- * Conformance entry point — `import { … } from 'llmdispatch/conformance'`.
+ * Conformance entry point. `import { … } from 'llmdispatch/conformance'`.
  *
  * For anyone writing their own usage store, config store or provider adapter: the harnesses
  * check an implementation against the behaviour the rest of the package relies on, so a store
- * or adapter that passes is substitutable for a built-in one. They need no test framework —
+ * or adapter that passes is substitutable for a built-in one. They need no test framework;
  * each one resolves with a plain result you can assert on however you like.
  *
  * The exact surface is specified in `docs/spec.md` §6b and §8.

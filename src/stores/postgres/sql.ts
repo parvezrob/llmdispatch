@@ -1,7 +1,7 @@
 /**
  * Every statement the PostgreSQL stores send, built once per schema.
  *
- * Each one is a single command, so the pool runs it in a transaction of its own — which is
+ * Each one is a single command, so the pool runs it in a transaction of its own, which is
  * what makes a reserve atomic without the store ever pinning a connection (spec §4). Values
  * are always bound; the only thing spliced into the text is the validated schema identifier.
  *

@@ -1,7 +1,7 @@
 /**
  * The in-memory store pair: everything a switch needs to run without a database.
  *
- * State lives in the process, so it is for development, tests and single-process tools —
+ * State lives in the process, so it is for development, tests and single-process tools,
  * two processes do not share a quota, and nothing survives a restart.
  *
  * @module

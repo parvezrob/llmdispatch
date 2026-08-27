@@ -1,5 +1,5 @@
 # Hosts this repository is allowed to link to. One host per line; `#` starts a comment.
-# A link to anything else is a finding — add the host here, in a reviewed change, first.
+# A link to anything else is a finding: add the host here, in a reviewed change, first.
 
 # This project and the tooling around it
 github.com

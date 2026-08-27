@@ -1,5 +1,5 @@
 /**
- * PostgreSQL entry point — `import { … } from 'llmdispatch/postgres'`.
+ * PostgreSQL entry point. `import { … } from 'llmdispatch/postgres'`.
  *
  * The packaged migrations: `MIGRATIONS` is every published version with its template hash, and
  * `migrationSql()` renders them for your schema. The stores themselves are exported from the

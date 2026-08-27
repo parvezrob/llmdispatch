@@ -96,7 +96,7 @@ export function temperatureProblem(value: unknown): string | null {
   return numberProblem(value, { integer: false, min: 0, max: 2 })
 }
 
-/** A price per million tokens: finite and non-negative — a count bound does not apply. */
+/** A price per million tokens: finite and non-negative; a count bound does not apply. */
 export function priceProblem(value: unknown): string | null {
   return numberProblem(value, { integer: false, min: 0 })
 }
@@ -133,7 +133,7 @@ export type Validated<T> = { ok: true; value: T } | { ok: false; problem: string
 /**
  * Copies a validated route so nothing outside the switch can mutate the original.
  *
- * Used wherever a route the switch holds — a declared `defaultRoute`, a cached row — is
+ * Used wherever a route the switch holds (a declared `defaultRoute`, a cached row) is
  * handed to the adopter.
  */
 export function cloneRoute(route: OperationRoute): OperationRoute {
@@ -172,7 +172,7 @@ function unknownField(
 /**
  * Validates a `RouteTarget` strictly and answers a plain copy.
  *
- * Every property is read exactly once, and the copy holds those readings — the value a later
+ * Every property is read exactly once, and the copy holds those readings: the value a later
  * consumer sees is the value that was checked.
  */
 export function validateRouteTarget(
@@ -210,8 +210,8 @@ export function validateRouteTarget(
 /**
  * Validates an `OperationRoute` strictly and answers a plain copy.
  *
- * The same validator serves all three seats — declared routes at `createSwitch`, the route
- * handed to `setConfig`, and rows read back from the config store — so a row a store returns
+ * The same validator serves all three seats: declared routes at `createSwitch`, the route
+ * handed to `setConfig`, and rows read back from the config store, so a row a store returns
  * is held to exactly the shape an admin could have written (spec §2, §6).
  */
 export function validateRoute(

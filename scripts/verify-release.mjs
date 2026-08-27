@@ -5,7 +5,7 @@
  * The tarball is installed into a throwaway project, the installed bytes are checked against
  * it, and the check runs from inside that project: it applies the packaged migration to a real
  * PostgreSQL in a schema of its own and runs all three conformance suites. A skipped case
- * fails the run as a failing one does — a release must not ship on an unverified
+ * fails the run as a failing one does: a release must not ship on an unverified
  * classification. The suites `import` the package, so they exercise its ESM build; the
  * CommonJS build is covered by the consumer fixtures.
  *
@@ -14,7 +14,7 @@
  * is reported and makes the run non-zero.
  *
  * Usage: node scripts/verify-release.mjs <path-to-tgz>
- * Needs `DATABASE_URL` in exactly one shape: postgres://user:password@127.0.0.1:port/database —
+ * Needs `DATABASE_URL` in exactly one shape: postgres://user:password@127.0.0.1:port/database,
  * an address in 127.0.0.0/8, an explicit port, and no query string or fragment.
  *
  * A database for the run, thrown away with the container:
@@ -103,7 +103,7 @@ async function release() {
       owned.leftover = true
       process.stderr.write(
         `the schema ${owned.schema} could not be dropped. If the run reached the database, ` +
-          `it is still there — remove it with: DROP SCHEMA IF EXISTS "${owned.schema}" CASCADE\n`,
+          `it is still there: remove it with: DROP SCHEMA IF EXISTS "${owned.schema}" CASCADE\n`,
       )
     } finally {
       await pool.end().catch(() => undefined)
@@ -139,7 +139,7 @@ function cleanUpOnSignal() {
 
 /**
  * Drops every `PG*` name from this process's environment, so its pools connect on the
- * connection string alone — as the children already do under their allowlist. The driver reads
+ * connection string alone, as the children already do under their allowlist. The driver reads
  * these as defaults, so an ambient `PGSSLMODE` or `PGPORT` could otherwise make the clean-up
  * connect differently from the run it is cleaning up after.
  */
@@ -229,7 +229,7 @@ async function main() {
   }
   process.stdout.write(
     'the installed tarball applied its packaged migration to PostgreSQL and passed all ' +
-      `three conformance suites with nothing skipped — from sha256 ${before}\n`,
+      `three conformance suites with nothing skipped, from sha256 ${before}\n`,
   )
   return 0
 }
