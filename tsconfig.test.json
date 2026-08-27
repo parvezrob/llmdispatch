@@ -9,7 +9,16 @@
     // files with type comments; everything else strict still applies.
     "checkJs": true,
     "noImplicitAny": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // The runners import the package by its published name. Left to the manifest that
+    // resolves into `dist/`, which makes this typecheck depend on a build having happened
+    // first — it has not in CI, where typecheck runs before build. Pointed at the sources
+    // instead, which are what `dist/` is generated from.
+    "paths": {
+      "llmswitch": ["./src/index.ts"],
+      "llmswitch/postgres": ["./src/postgres.ts"],
+      "llmswitch/conformance": ["./src/conformance.ts"]
+    }
   },
   "include": ["test", "scripts", "*.config.ts", "eslint.config.js"],
   // `test/types` holds the compile fixtures, half of which are meant to fail. They carry
@@ -20,6 +29,6 @@
   // `scripts/runners` is checked with everything else. Those files are copied into a throwaway
   // project before they run, so the guard they import sits at a path that exists only there;
   // `scripts/runners/subpath-resolution.d.mts` declares it, and the package they import by its
-  // published name resolves through this repository's own manifest.
+  // published name is mapped to `src/` by `paths` above.
   "exclude": ["test/consumers", "test/types"]
 }
