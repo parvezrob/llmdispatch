@@ -78,13 +78,13 @@ The fallback needs its own API key. Delete the `fallback` line and the second pr
 A prompt can return an array of content parts instead of a string, so an operation can send a PDF or an image alongside its text:
 
 ```ts
-prompt: ({ note, invoice }) => [
+prompt: ({ note, invoice }) => [                      // invoice: buffer.toString('base64')
   { type: 'text', text: `Answer using the attached invoice.\n\n${note}` },
   { type: 'file', mediaType: 'application/pdf', data: invoice, filename: 'invoice.pdf' },
 ]
 ```
 
-`data` is base64. The media types are `application/pdf`, `image/jpeg`, `image/png`, `image/webp` and `image/gif`, and one request may carry up to 15,000,000 base64 characters of file data, roughly 11 MB decoded. Over that the call fails before it reaches a provider or spends quota.
+`data` is a base64 string, not a `Buffer`. The media types are `application/pdf`, `image/jpeg` (not `image/jpg`, which is rejected), `image/png`, `image/webp` and `image/gif`, and one request may carry up to 15,000,000 base64 characters of file data, roughly 11 MB decoded. Over that the call fails before it reaches a provider or spends quota. Unknown fields on a part are dropped rather than rejected, so spell it `filename`.
 
 Returning a string still works exactly as before. There is no capability model: route an operation that sends a file to a model that cannot read one and the call fails with that provider's own error, rather than being quietly sent somewhere else.
 
