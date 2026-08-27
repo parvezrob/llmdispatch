@@ -631,7 +631,7 @@ pre-quota, per the normalization rules below); malformed quality verdicts →
 string normalizes to exactly one `TextPart`; an array is copied part by part into records
 the run owns, and both the array and every part are frozen, so a retained caller array or a
 mutating provider cannot change what a later attempt dispatches. The resulting
-`ProviderRequest.parts` is non-empty.
+`ProviderRequest.parts` is non-empty and carries **at most 256 parts**.
 
 Every part is checked before the reservation of stage 7:
 
@@ -643,8 +643,10 @@ Every part is checked before the reservation of stage 7:
 - `FilePart.data` is standard-alphabet base64 (`A–Z a–z 0–9 + /`): non-empty, no
   whitespace, no data-URL prefix, length a multiple of 4, and `=` only as one or two
   trailing padding characters. Canonicality beyond that is not checked.
-- `FilePart.filename` is optional, at most 128 characters, and carries no control
-  characters and no `/` or `\`.
+- `FilePart.filename` is optional and, when present, non-empty, at most 128 characters,
+  and carries no control characters and no `/` or `\`. Non-empty because an adapter that
+  fills the wire field from it would otherwise send an empty name where its own default
+  belongs.
 - **The file payload across all `FilePart.data` of one request is at most 15 000 000 base64
   characters** (about 11.25 MB decoded), which is also the ceiling for a single part, since
   one part may spend the whole allowance. The cap bounds file payload only; it is this
@@ -652,13 +654,14 @@ Every part is checked before the reservation of stage 7:
   Tighter provider limits — per-image byte caps, page counts, total request size — surface
   as that provider's own error and classify by §5b.
 
-A structural violation throws a descriptive `TypeError`; the payload cap throws a
-descriptive `RangeError`. Both are user bugs, and both pass through unwrapped with no
-`LLMDispatchError` code, no quota effect and no attempt record. A violation attributable to
-one part names that part's index and the rule it broke; a return that is not a string or an
-array at all, or an empty array, has no part to name and says so instead. No message ever
-names part data or a filename: those are payload, held to the same rule as prompt text and
-model output — no message, log line or package-owned error field carries them (§4, §6).
+A structural violation throws a descriptive `TypeError`; either cap — the part count or the
+file payload — throws a descriptive `RangeError`. Both are user bugs, and both pass through
+unwrapped with no `LLMDispatchError` code, no quota effect and no attempt record. A
+violation attributable to one part names that part's index and the rule it broke; a
+request-level one — a return that is not a string or an array, an empty array, or too many
+parts — has no part to name and reports the request instead. No message ever names part data
+or a filename: those are payload, held to the same rule as prompt text and model output — no
+message, log line or package-owned error field carries them (§4, §6).
 
 **String domain.** Every string that reaches a store (operation names, provider
 registration IDs, `OperationRoute`/`RouteTarget` `provider` and `model`, `subjectId`,
