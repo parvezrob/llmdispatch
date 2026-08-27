@@ -88,6 +88,7 @@
     "licenses": "sh scripts/check-licenses.sh",
     "audit:tarball": "node scripts/audit-tarball.mjs",
     "test:consumers": "node scripts/test-consumers.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
     "scan": "node scripts/scan-denylist.mjs",
     "docs:providers": "node scripts/build-provider-reference.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run depcruise && npm run build && node scripts/check-types-fixtures.mjs --target package && node scripts/check-spec-surface.mjs && npm run publint && npm run attw && npm run api:check && npm run size && node scripts/build-provider-reference.mjs --check && node scripts/check-docs-links.mjs && npm run test:coverage"
