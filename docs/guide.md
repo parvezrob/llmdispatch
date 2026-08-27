@@ -14,9 +14,11 @@ review: {
     { type: 'file', mediaType: 'application/pdf', data: invoice, filename: 'invoice.pdf' },
   ],
 }
+
+await ai.run('review', { input: { question, invoice: buffer.toString('base64') }, subjectId })
 ```
 
-The media types are `application/pdf`, `image/jpeg`, `image/png`, `image/webp` and `image/gif`. `filename` is optional and only some providers send it on. Parts arrive at the provider in the order you return them, one wire entry each, and each adapter maps them to its own shape (spec §5c). A prompt that returns a plain string is unchanged: it becomes a single text part and the adapters send the same body they always sent.
+The media types are `application/pdf`, `image/jpeg`, `image/png`, `image/webp` and `image/gif`; it is `image/jpeg`, because `image/jpg` is not a media type and is rejected. `data` is a base64 **string**, never a `Buffer` — convert at the edge, as above. `filename` is optional and only some providers send it on, and unknown fields on a part are dropped during normalization rather than rejected, so a misspelled `fileName` is silently ignored. Parts arrive at the provider in the order you return them, one wire entry each, and each adapter maps them to its own shape (spec §5c). A prompt that returns a plain string is unchanged: it becomes a single text part and the adapters send the same body they always sent.
 
 Parts are checked and frozen **before a quota slot is reserved**, so a bad part costs nothing. A malformed part — an unknown media type, base64 with whitespace or a data-URL prefix, an oversized filename — raises a `TypeError`, and more than **15,000,000 base64 characters of file data in one request** (about 11 MB decoded) raises a `RangeError`. Both are your bugs rather than llmdispatch failures, so they pass through unwrapped with no error code and no attempt record, and neither message ever quotes your file's bytes or its filename (spec §6).
 
