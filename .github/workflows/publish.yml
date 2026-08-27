@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       audit_only:
-        description: Produce the audited tarball and stop, leaving no publish to approve
+        description: Produce the audited tarball and stop, leaving nothing to approve or stage
         required: false
         default: false
         type: boolean
@@ -51,10 +51,15 @@ jobs:
       - name: Pack the package
         id: pack
         run: echo "tgz=$(npm pack --json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8"))[0].filename')" >> "$GITHUB_OUTPUT"
-      - name: Record the tarball hash
+      # Two digests: SHA-256 is what the staged bytes are checked against by hand,
+      # SHA-512 is what a provenance attestation names its subject with.
+      - name: Record the tarball hashes
         env:
           TGZ: ${{ steps.pack.outputs.tgz }}
-        run: sha256sum "$TGZ" | tee tarball.sha256
+        run: |
+          set -euo pipefail
+          sha256sum "$TGZ" | tee tarball.sha256
+          sha512sum "$TGZ" | tee tarball.sha512
       - name: Audit what the tarball contains
         env:
           TGZ: ${{ steps.pack.outputs.tgz }}
@@ -77,10 +82,12 @@ jobs:
           path: |
             ${{ steps.pack.outputs.tgz }}
             tarball.sha256
+            tarball.sha512
           if-no-files-found: error
 
-  # Publishes the artifact the audit job produced. The environment approval happens
-  # here: after the audit, immediately before the registry is changed.
+  # Stages the artifact the audit job produced. The environment approval happens
+  # here: after the audit, immediately before the registry is changed. Staging never
+  # makes a version installable — promoting it is a separate, 2FA-protected act.
   publish:
     needs: audit
     # An audit-only run never reaches this job, so no approval is left pending on it.
@@ -104,12 +111,16 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: Check the package manager is the one bundled with this Node
         run: '[ "$(npm --version)" = "11.17.0" ]'
-      # The hash is rechecked in the same step that publishes, so there is no window
-      # between verifying the bytes and sending them.
-      - name: Verify the audited bytes and publish them
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+      # The hash is rechecked in the same step that sends the bytes, so there is no
+      # window between verifying them and staging them. The file staged is the one the
+      # hash record names, not whatever tarball happens to be here; a record that is
+      # missing, ambiguous, or names an absent file fails the step.
+      - name: Verify the audited bytes and stage them
         run: |
           set -euo pipefail
+          [ "$(wc -l < tarball.sha256)" = "1" ]
+          tgz="$(awk '{ print $2 }' tarball.sha256)"
+          [ -n "$tgz" ]
+          [ -f "$tgz" ]
           sha256sum -c tarball.sha256
-          npm publish ./*.tgz --provenance --access public --ignore-scripts
+          npm stage publish "./$tgz" --provenance --access public --ignore-scripts
