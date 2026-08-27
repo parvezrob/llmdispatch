@@ -1,6 +1,6 @@
 {
   "name": "llmdispatch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Model-agnostic LLM routing. Pick the provider and model per operation, swap them at runtime, fall back on failure, and enforce per-user quotas in your own Postgres.",
   "keywords": [
     "llm",

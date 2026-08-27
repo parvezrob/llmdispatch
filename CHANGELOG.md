@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+### Patch Changes
+
+- Documentation only. The readme is shorter and leads on the package being model
+  agnostic, the full reference moved to `docs/guide.md`, and the prose across the
+  spec, runbook and code comments is plainer. No runtime code changed.
+
 ## 0.1.0
 
 ### Patch Changes
