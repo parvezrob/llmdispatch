@@ -9,7 +9,7 @@ import {
   memoryStores,
   ProviderError,
   type Provider,
-} from 'llmswitch'
+} from 'llmdispatch'
 import { z } from 'zod'
 
 const custom: Provider = {

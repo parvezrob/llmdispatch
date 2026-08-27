@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import { LLMSwitchError } from '../../../src/errors'
+import { LLMDispatchError } from '../../../src/errors'
 import { createSwitch } from '../../../src/index'
 import { openaiCompatible } from '../../../src/providers/openai-compatible'
 import { createMemoryStores } from '../../../src/stores/memory'
@@ -286,8 +286,8 @@ describe('seeded stochastic smoke', () => {
         expect(run.value?.attempts.map((a) => a.outcome)).toEqual([primary, 'succeeded'])
       } else {
         expect(run.state).toBe('rejected')
-        expect(run.error).toBeInstanceOf(LLMSwitchError)
-        const error = run.error as LLMSwitchError
+        expect(run.error).toBeInstanceOf(LLMDispatchError)
+        const error = run.error as LLMDispatchError
         expect(error.code).toBe('PROVIDER_FAILED')
         expect(error.retryable).toBe(true)
         expect(error.attempts?.map((a) => a.outcome)).toEqual([primary, 'transient'])

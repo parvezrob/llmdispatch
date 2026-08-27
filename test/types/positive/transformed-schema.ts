@@ -2,7 +2,7 @@
 // A schema that transforms, which is where the three sides of an operation are easiest to
 // get wrong: `run` takes what the caller writes (`z.input`), while `prompt`, `quality` and
 // `result.data` all see what the schema produced (`z.output`).
-import { createSwitch, defineOperation, defineOperations, memoryStores } from 'llmswitch'
+import { createSwitch, defineOperation, defineOperations, memoryStores } from 'llmdispatch'
 import { z } from 'zod'
 
 const ai = createSwitch({

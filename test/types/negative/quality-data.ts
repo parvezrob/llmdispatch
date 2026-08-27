@@ -1,7 +1,7 @@
 // @targets spec, package
 // The quality gate sees the output schema's type, so a field that schema does not declare
 // cannot be read from `data`.
-import { defineOperation, defineOperations } from 'llmswitch'
+import { defineOperation, defineOperations } from 'llmdispatch'
 import { z } from 'zod'
 
 export const operations = defineOperations({

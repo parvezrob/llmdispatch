@@ -12,7 +12,7 @@
 import type { ProviderErrorKind } from '../types'
 
 /** The recognition brand: one symbol per process, whichever copy or realm asks for it. */
-const brand: unique symbol = Symbol.for('llmswitch.ProviderError')
+const brand: unique symbol = Symbol.for('llmdispatch.ProviderError')
 
 /** The closed set from spec §6; `satisfies` makes a kind added to the union a compile error. */
 const kinds = {

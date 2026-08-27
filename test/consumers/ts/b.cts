@@ -1,14 +1,14 @@
 // A CommonJS module: TypeScript must reach the `require` declarations of every entry point.
-import root = require('llmswitch')
-import postgres = require('llmswitch/postgres')
-import conformance = require('llmswitch/conformance')
+import root = require('llmdispatch')
+import postgres = require('llmdispatch/postgres')
+import conformance = require('llmdispatch/conformance')
 import pg = require('pg')
 
 export const reached = [root, postgres, conformance].length
 
 // The same closed set, reached through the `require` declarations rather than the `import`
 // ones: a consumer whose types resolved to the wrong half would not compile this.
-export function httpStatus(error: root.LLMSwitchError): number {
+export function httpStatus(error: root.LLMDispatchError): number {
   switch (error.code) {
     case 'INVALID_INPUT':
       return 400
@@ -36,7 +36,7 @@ export function httpStatus(error: root.LLMSwitchError): number {
 // `resetsAt` is optional on the class as a whole rather than tied to a code — the error is
 // not a discriminated union — so it is still `string | undefined` after this narrowing.
 export function retryAfter(error: unknown): string | null {
-  if (error instanceof root.LLMSwitchError && error.code === 'QUOTA_EXCEEDED') {
+  if (error instanceof root.LLMDispatchError && error.code === 'QUOTA_EXCEEDED') {
     return error.resetsAt ?? null
   }
   return null
@@ -58,4 +58,4 @@ export async function reserveOne(): Promise<string | null> {
 // The same pool, through the `require` declarations.
 export const production: root.StorePair = root.postgresStores({ pool: new pg.Pool() })
 
-export const migration: string = postgres.migrationSql({ schema: 'llmswitch' }).sql
+export const migration: string = postgres.migrationSql({ schema: 'llmdispatch' }).sql

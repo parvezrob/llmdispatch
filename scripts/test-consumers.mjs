@@ -32,11 +32,11 @@ const TYPESCRIPT = 'typescript@5.9.3'
 /** Only the TypeScript fixture needs a driver: it is there to prove a real pool compiles. */
 const DRIVER = ['pg@8.23.0', '@types/pg@8.23.1', '@types/node@20.19.43']
 
-const SUBPATHS = ['llmswitch', 'llmswitch/postgres', 'llmswitch/conformance']
+const SUBPATHS = ['llmdispatch', 'llmdispatch/postgres', 'llmdispatch/conformance']
 const DECLARATIONS = {
-  index: 'llmswitch',
-  postgres: 'llmswitch/postgres',
-  conformance: 'llmswitch/conformance',
+  index: 'llmdispatch',
+  postgres: 'llmdispatch/postgres',
+  conformance: 'llmdispatch/conformance',
 }
 
 /** Enough for any plausible run; more than this is a runaway, and a runaway is a failure. */
@@ -98,7 +98,7 @@ function checkResolutions(trace, problems) {
   ]
   for (const { file, extension } of cases) {
     for (const [entry, specifier] of Object.entries(DECLARATIONS)) {
-      const expected = `node_modules/llmswitch/dist/${entry}${extension}`
+      const expected = `node_modules/llmdispatch/dist/${entry}${extension}`
       const hit = resolutions.some(
         (r) => r.specifier === specifier && r.from.endsWith(file) && r.to.endsWith(expected),
       )
@@ -186,7 +186,7 @@ function main() {
     problems.length === 0
       ? `all fixtures reached ${String(SUBPATHS.length)} entry points, recognised a ProviderError ` +
           'across the ESM and CommonJS builds in both directions, rejected the values that only ' +
-          'look like one, narrowed LLMSwitchError by code, and round-tripped a reservation ' +
+          'look like one, narrowed LLMDispatchError by code, and round-tripped a reservation ' +
           'through the in-memory stores, and rendered the same packaged migration from both ' +
           `builds — from sha256 ${before}\n`
       : `${String(problems.length)} problem(s)\n`,

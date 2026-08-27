@@ -110,7 +110,7 @@ staging.
    the workflow run. Then confirm it against the registry, and confirm it is the only one:
 
    ```bash
-   npm stage list llmswitch
+   npm stage list llmdispatch
    ```
 
    Exactly one stage for the version being released. If there is another — an abandoned
@@ -129,14 +129,14 @@ staging.
 7. Download it with `npm stage download <stage-id>`. This is the step with no web equivalent,
    and the reason for the CLI floors above; the Staged Packages tab is a fallback for reading
    the stage identifier and for the approval, never for this. The file arrives named for the
-   stage, as `llmswitch-<version>-<stage-id>.tgz`, so it does not collide with the artifact
+   stage, as `llmdispatch-<version>-<stage-id>.tgz`, so it does not collide with the artifact
    you unpacked in step 4.
 8. Verify those exact bytes. Because the download carries the stage identifier in its name,
    `sha256sum -c tarball.sha256` would check the artifact sitting beside it and pass while
    telling you nothing. Compare values instead:
 
    ```bash
-   sha256sum llmswitch-<version>-<stage-id>.tgz
+   sha256sum llmdispatch-<version>-<stage-id>.tgz
    cut -d' ' -f1 tarball.sha256
    ```
 
@@ -169,7 +169,7 @@ staging.
     expected="$(cut -d' ' -f1 tarball.sha512)"
     mkdir release-check && cd release-check
     npm init -y > /dev/null
-    npm install llmswitch@<version> --userconfig "$PWD/npm-scratch" \
+    npm install llmdispatch@<version> --userconfig "$PWD/npm-scratch" \
       --registry=https://registry.npmjs.org/
     npm audit signatures --json --include-attestations --userconfig "$PWD/npm-scratch" \
       --registry=https://registry.npmjs.org/ > signatures.json
@@ -182,14 +182,14 @@ staging.
     that has no attestation at all.
 
     What lands in `signatures.json` is `invalid`, `missing`, and a `verified` list. There must
-    be an entry there for `llmswitch`; no entry is itself the failure. Its attestations are
+    be an entry there for `llmdispatch`; no entry is itself the failure. Its attestations are
     Sigstore bundles, so the readable part is base64 inside each one and has to be decoded:
 
     ```bash
     node -e "
     const report = require('./signatures.json')
-    const entry = (report.verified || []).find((p) => p.name === 'llmswitch')
-    if (!entry) throw new Error('no verified attestation for llmswitch')
+    const entry = (report.verified || []).find((p) => p.name === 'llmdispatch')
+    if (!entry) throw new Error('no verified attestation for llmdispatch')
     for (const { predicateType, bundle } of entry.attestationBundles) {
       const payload = bundle.dsseEnvelope.payload
       const statement = JSON.parse(Buffer.from(payload, 'base64').toString())
@@ -211,7 +211,7 @@ staging.
     Then, separately, check the bytes on offer to installers:
 
     ```bash
-    npm view llmswitch@<version> dist.integrity --registry=https://registry.npmjs.org/
+    npm view llmdispatch@<version> dist.integrity --registry=https://registry.npmjs.org/
     ```
 
     That prints `sha512-` and the registry's digest for the tarball in base64; decode it with
@@ -222,20 +222,20 @@ staging.
 
     A missing attestation, a missing entry, or a digest that does not match is an incident on
     a version that is already installable. Deprecate it while you investigate —
-    `npm deprecate llmswitch@<version> "under investigation"` — rather than leaving it
+    `npm deprecate llmdispatch@<version> "under investigation"` — rather than leaving it
     recommended to everyone, and do not go on to step 11.
 
 11. Settle the dist-tags. Approval already applied `latest`, so the only question left is
     whether a stale tag is pointing somewhere it should not. Read them first:
 
     ```bash
-    npm dist-tag ls llmswitch
+    npm dist-tag ls llmdispatch
     ```
 
     In practice only the bootstrap leaves anything to do here, because the release candidate
     is what puts `next` on the package. If `next` is present, either move it —
-    `npm dist-tag add llmswitch@<version> next` — or remove it —
-    `npm dist-tag rm llmswitch next` — and read the tags back. If it is absent, there is
+    `npm dist-tag add llmdispatch@<version> next` — or remove it —
+    `npm dist-tag rm llmdispatch next` — and read the tags back. If it is absent, there is
     nothing to move and nothing to add. Then close the session.
 
 Consult `npm stage --help` for exact subcommand syntax at the time you run it: staged
@@ -361,20 +361,21 @@ npm will only let a trusted publisher be configured on a package that already ex
 very first version cannot go through the workflow. This section exists once. Follow it in
 order — several steps are ordered for a reason, noted where it matters.
 
-1. **Recheck the name.** Immediately before publishing, confirm `llmswitch` is still
-   unclaimed:
+1. **Recheck the name.** The name is already held by a `0.0.0` placeholder published from
+   this project, so the check is ownership, not absence. Immediately before publishing:
 
    ```bash
-   npm view llmswitch --registry=https://registry.npmjs.org/
+   npm view llmdispatch versions maintainers --registry=https://registry.npmjs.org/
    ```
 
-   It must fail with `E404`. The registry is named explicitly because a mirror or a corporate
-   proxy will happily return `E404` for a name that is taken on the public registry. If the
-   name has been claimed, **stop**. Moving to a scoped name is not a rename — the import
-   specifier is the package's public contract, and it appears in the README, the type
-   fixtures, the consumer tests, the examples and their lockfiles, and the verification
-   harnesses. That is a migration with every release gate re-run, and it needs planning on
-   its own.
+   It must show exactly the placeholder `0.0.0` and the maintainer account this document's
+   sessions sign in as. The registry is named explicitly because a mirror or a corporate
+   proxy can answer differently from the public registry. Anything else — extra versions, an
+   unfamiliar maintainer — means the name is not in the expected state: **stop** and find out
+   why before publishing. Moving to a different name is not a rename — the import specifier
+   is the package's public contract, and it appears in the README, the type fixtures, the
+   consumer tests, the examples and their lockfiles, and the verification harnesses. That is
+   a migration with every release gate re-run, and it needs planning on its own.
 
 2. **Build a release candidate.** Set the version to `0.1.0-rc.0` — this one bump is an
    exception to the changesets rule above, because the RC is not a stable release: edit
@@ -390,7 +391,7 @@ order — several steps are ordered for a reason, noted where it matters.
    session, as that exact tarball:
 
    ```bash
-   npm publish ./llmswitch-0.1.0-rc.0.tgz --tag=next --access=public --ignore-scripts
+   npm publish ./llmdispatch-0.1.0-rc.0.tgz --tag=next --access=public --ignore-scripts
    ```
 
    You must be presented with a 2FA challenge. If none appears, **stop** and find out why
@@ -411,7 +412,7 @@ order — several steps are ordered for a reason, noted where it matters.
    | Field             | Value               |
    | ----------------- | ------------------- |
    | GitHub owner      | `parvezrob`         |
-   | Repository        | `llmswitch`         |
+   | Repository        | `llmdispatch`       |
    | Workflow filename | `publish.yml`       |
    | Environment       | `release`           |
    | Allowed action    | `npm stage publish` |
@@ -459,9 +460,9 @@ order — several steps are ordered for a reason, noted where it matters.
 
 11. **Clean up the `next` tag**, as step 11 of that flow. Approving the stage applied `latest`
     to `0.1.0`; `next` is still on the RC until you move it —
-    `npm dist-tag add llmswitch@0.1.0 next` — or remove it —
-    `npm dist-tag rm llmswitch next`. Read the result back with
-    `npm dist-tag ls llmswitch` and check both tags say what you intended. These commands run
+    `npm dist-tag add llmdispatch@0.1.0 next` — or remove it —
+    `npm dist-tag rm llmdispatch next`. Read the result back with
+    `npm dist-tag ls llmdispatch` and check both tags say what you intended. These commands run
     in the same authenticated session as the approval, which is what pins the registry for
     them; a configured mirror would otherwise take them silently.
 

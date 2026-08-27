@@ -1,7 +1,7 @@
 // @targets spec, package
 // `run` accepts the input schema's `z.input`, so a wrongly typed field is caught at the
 // call site rather than by the parse at stage 2.
-import { createSwitch, defineOperation, defineOperations, memoryStores } from 'llmswitch'
+import { createSwitch, defineOperation, defineOperations, memoryStores } from 'llmdispatch'
 import { z } from 'zod'
 
 const ai = createSwitch({

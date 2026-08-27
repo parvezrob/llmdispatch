@@ -3,7 +3,7 @@
 
 import type { AttemptRecord, ConfigStore, Provider, ProviderRequest, ReservationEnvelope, UsageStore } from './spec-surface'
 
-// subpath: llmswitch/conformance
+// subpath: llmdispatch/conformance
 export interface ConformanceResult { passed: boolean; failures: string[]; skipped: string[] }
 export declare function runUsageStoreConformance(opts: {
   // create returns the store under test plus REQUIRED test controls:

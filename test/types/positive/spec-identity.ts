@@ -9,9 +9,9 @@
 // members are.
 import type { z } from 'zod'
 
-import type * as Conformance from 'llmswitch/conformance'
-import type * as Postgres from 'llmswitch/postgres'
-import type * as Package from 'llmswitch'
+import type * as Conformance from 'llmdispatch/conformance'
+import type * as Postgres from 'llmdispatch/postgres'
+import type * as Package from 'llmdispatch'
 
 import type * as SpecConformance from '../spec-surface-conformance'
 import type * as SpecPostgres from '../spec-surface-postgres'
@@ -71,7 +71,7 @@ export type SectionSix = [
 ]
 
 export type SectionSixValues = [
-  Holds<Identical<Members<Package.LLMSwitchError>, Members<Spec.LLMSwitchError>>>,
+  Holds<Identical<Members<Package.LLMDispatchError>, Members<Spec.LLMDispatchError>>>,
   Holds<Identical<Members<Package.ProviderError>, Members<Spec.ProviderError>>>,
   Holds<Identical<Members<typeof Package.ProviderError>, Members<typeof Spec.ProviderError>>>,
   Holds<

@@ -1,7 +1,7 @@
 /**
  * The packaged migrations (spec §6b).
  *
- * llmswitch never runs DDL: it hands you the SQL and its hash, and you apply it with whatever
+ * llmdispatch never runs DDL: it hands you the SQL and its hash, and you apply it with whatever
  * tool you already use. The hash a version records is the hash of its template — the schema
  * placeholder still in place — so two adopters using different schema names still agree on
  * which version 1 they applied.
@@ -20,9 +20,9 @@ export const MIGRATIONS: readonly {
   /**
    * Renders this migration for one schema.
    *
-   * @param opts `schema` defaults to `llmswitch` and is validated, then quoted.
+   * @param opts `schema` defaults to `llmdispatch` and is validated, then quoted.
    * @returns The SQL to apply, and the hash of exactly those bytes.
-   * @throws `RangeError` when the schema is not a name llmswitch may own.
+   * @throws `RangeError` when the schema is not a name llmdispatch may own.
    */
   render(opts?: { schema?: string }): { sql: string; sha256: string }
 }[] = Object.freeze([Object.freeze({ version: 1, templateSha256, render })])
@@ -31,8 +31,8 @@ export const MIGRATIONS: readonly {
  * Every migration rendered for one schema and concatenated in version order, with the sha256
  * of exactly the bytes it hands back.
  *
- * @param opts `schema` defaults to `llmswitch` and is validated, then quoted.
- * @throws `RangeError` when the schema is not a name llmswitch may own.
+ * @param opts `schema` defaults to `llmdispatch` and is validated, then quoted.
+ * @throws `RangeError` when the schema is not a name llmdispatch may own.
  */
 export function migrationSql(opts?: { schema?: string }): { sql: string; sha256: string } {
   const sql = MIGRATIONS.map((migration) => migration.render(opts).sql).join('\n')

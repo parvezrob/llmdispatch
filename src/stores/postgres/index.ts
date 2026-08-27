@@ -2,7 +2,7 @@
  * The PostgreSQL store pair: routes and quota counters in a schema you own.
  *
  * Bring your own pool — the package has no driver dependency and never opens a connection of
- * its own. Nothing here runs DDL either: apply `migrationSql()` from `llmswitch/postgres`
+ * its own. Nothing here runs DDL either: apply `migrationSql()` from `llmdispatch/postgres`
  * first, and this pair will find its tables where the migration put them.
  *
  * @module
@@ -29,8 +29,8 @@ export interface PostgresStoreOptions {
  * Builds a PostgreSQL store pair with its test controls.
  *
  * @param options `pool` runs every statement; `schema`, `leaseMs` and `now` default to
- * `llmswitch`, 120 000 ms and the database's own clock.
- * @throws `RangeError` when `schema` is not a name llmswitch may own, or `leaseMs` is outside
+ * `llmdispatch`, 120 000 ms and the database's own clock.
+ * @throws `RangeError` when `schema` is not a name llmdispatch may own, or `leaseMs` is outside
  * 5 000–600 000.
  */
 export function createPostgresStores(options: PostgresStoreOptions): InternalStores {
@@ -68,8 +68,8 @@ export function createPostgresStores(options: PostgresStoreOptions): InternalSto
  *
  * @param opts `pool` is your own driver pool, which must run at `READ COMMITTED`
  * (PostgreSQL's default; a stricter level makes concurrent reserves abort rather than deny);
- * `schema` defaults to `llmswitch` and `leaseMs` to 120 000.
- * @throws `RangeError` when `schema` is not a name llmswitch may own, or `leaseMs` is outside
+ * `schema` defaults to `llmdispatch` and `leaseMs` to 120 000.
+ * @throws `RangeError` when `schema` is not a name llmdispatch may own, or `leaseMs` is outside
  * 5 000–600 000.
  */
 export function postgresStores(opts: {

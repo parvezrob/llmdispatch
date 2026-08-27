@@ -1,14 +1,14 @@
 /**
  * Sanitization: sentinel strings seeded into prompt text, input,
  * provider error messages and model output must never appear in any core-constructed field
- * of any `LLMSwitchError` — message, own enumerable properties, attempts, or the cause
+ * of any `LLMDispatchError` — message, own enumerable properties, attempts, or the cause
  * chain — while an adopter's own thrown value passes into `cause` verbatim, which is the
  * documented scope boundary, not a leak. Logger payloads are swept too.
  */
 
 import { describe, expect, it } from 'vitest'
 
-import { LLMSwitchError, ProviderError } from '../../../src/errors'
+import { LLMDispatchError, ProviderError } from '../../../src/errors'
 import type { OperationsMap } from '../../../src/types'
 import { createSwitchCore } from '../../../src/core/create-switch'
 import {
@@ -45,7 +45,7 @@ function reachableStrings(value: unknown, seen = new Set<object>()): string[] {
 }
 
 /** The same walk, excluding everything below `cause` — the core-constructed fields only. */
-function coreConstructedStrings(error: LLMSwitchError): string[] {
+function coreConstructedStrings(error: LLMDispatchError): string[] {
   const found: string[] = [error.message]
   for (const [key, entry] of Object.entries(error)) {
     if (key === 'cause') continue
@@ -97,7 +97,7 @@ function sentinelFixture(options: { quota?: { perDay: number } } = {}) {
 const ARGS = { input: { text: INPUT_SENTINEL }, subjectId: 'u' }
 
 describe('the sentinel sweep over the whole error matrix', () => {
-  /** Each scenario produces one LLMSwitchError under sentinel-laden dispatch content. */
+  /** Each scenario produces one LLMDispatchError under sentinel-laden dispatch content. */
   const scenarios: {
     name: string
     postDispatch: boolean
@@ -188,8 +188,8 @@ describe('the sentinel sweep over the whole error matrix', () => {
       } catch (error) {
         caught = error
       }
-      expect(caught).toBeInstanceOf(LLMSwitchError)
-      const error = caught as LLMSwitchError
+      expect(caught).toBeInstanceOf(LLMDispatchError)
+      const error = caught as LLMDispatchError
       // Core-constructed fields: no dispatch content, ever.
       expectNoSentinels(coreConstructedStrings(error), DISPATCH_SENTINELS)
       // The full chain, cause included: still no dispatch content with core-safe doubles —
@@ -240,7 +240,7 @@ describe('the sentinel sweep over the whole error matrix', () => {
     } catch (error) {
       caught = error
     }
-    const error = caught as LLMSwitchError
+    const error = caught as LLMDispatchError
     expect(error.code).toBe('INVALID_CONFIG')
     expect(error.retryable).toBe(true)
     expect(error.cause).toBe(prepareFailure) // verbatim — prepare ran before the prompt
@@ -257,7 +257,7 @@ describe('the sentinel sweep over the whole error matrix', () => {
     } catch (error) {
       caught = error
     }
-    const error = caught as LLMSwitchError
+    const error = caught as LLMDispatchError
     expect(error.code).toBe('USAGE_STORE_UNAVAILABLE')
     expect(error.cause).toBe(adopterFailure) // exactly what the adopter threw, verbatim
     // …and nowhere else: the core injected nothing.

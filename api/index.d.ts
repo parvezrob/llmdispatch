@@ -1,8 +1,8 @@
 import { C as RunResult, D as TokenUsage, E as Switch, O as UsageStore, S as RouteTarget, T as StorePair, _ as ProviderResponse, b as QuotaView, c as ModelPrice, d as OperationRoute, f as OperationsMap, g as ProviderRequest, h as ProviderErrorKind, i as ConfigStore, l as OperationConfigView, m as Provider, n as AttemptOutcome, o as CreateSwitchConfig, p as PreparedProvider, r as AttemptRecord, s as Logger, t as ApiKeyResolver, u as OperationDefinition, v as QualityVerdict, w as SettlementFailure, x as ReservationEnvelope, y as QuotaKey } from "./types.js";
 import { z } from "zod";
-//#region src/errors/llmswitch-error.d.ts
+//#region src/errors/llmdispatch-error.d.ts
 /** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
-declare class LLMSwitchError extends Error {
+declare class LLMDispatchError extends Error {
   private constructor();
   /** What went wrong, as a closed set (spec §5b). */
   readonly code: 'INVALID_INPUT' | 'MISSING_SUBJECT' | 'QUOTA_EXCEEDED' | 'USAGE_STORE_UNAVAILABLE' | 'CONFIG_STORE_UNAVAILABLE' | 'INVALID_CONFIG' | 'ABORTED' | 'PROVIDER_FAILED' | 'OUTPUT_REJECTED';
@@ -87,8 +87,8 @@ declare function memoryStores(): StorePair;
  *
  * @param opts `pool` is your own driver pool, which must run at `READ COMMITTED`
  * (PostgreSQL's default; a stricter level makes concurrent reserves abort rather than deny);
- * `schema` defaults to `llmswitch` and `leaseMs` to 120 000.
- * @throws `RangeError` when `schema` is not a name llmswitch may own, or `leaseMs` is outside
+ * `schema` defaults to `llmdispatch` and `leaseMs` to 120 000.
+ * @throws `RangeError` when `schema` is not a name llmdispatch may own, or `leaseMs` is outside
  * 5 000–600 000.
  */
 declare function postgresStores(opts: {
@@ -134,7 +134,7 @@ declare function defineOperations<Ops extends OperationsMap>(operations: Ops): O
  * here, loudly, rather than on the first request.
  *
  * @param config Who can be called, what the app does, and where config and counters live.
- * @throws `LLMSwitchError` with code `INVALID_CONFIG` naming the field that failed.
+ * @throws `LLMDispatchError` with code `INVALID_CONFIG` naming the field that failed.
  * @example
  * ```ts
  * const ai = createSwitch({ providers, operations, stores: memoryStores() })
@@ -143,5 +143,5 @@ declare function defineOperations<Ops extends OperationsMap>(operations: Ops): O
  */
 declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
 //#endregion
-export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMSwitchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, memoryStores, openaiCompatible, postgresStores };
+export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type CreateSwitchConfig, LLMDispatchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, memoryStores, openaiCompatible, postgresStores };
 //# sourceMappingURL=index.d.ts.map

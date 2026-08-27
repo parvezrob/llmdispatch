@@ -1,5 +1,5 @@
 import express from 'express'
-import { LLMSwitchError } from 'llmswitch'
+import { LLMDispatchError } from 'llmdispatch'
 
 import { SummarizeBody, ai } from './switch.js'
 
@@ -57,7 +57,7 @@ app.post('/summarize', async (request, response) => {
       usedFallback: result.usedFallback,
     })
   } catch (error) {
-    if (error instanceof LLMSwitchError) {
+    if (error instanceof LLMDispatchError) {
       response.status(STATUS_BY_CODE[error.code] ?? 500).json({ error: error.code })
       return
     }

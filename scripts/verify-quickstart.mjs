@@ -5,11 +5,11 @@
  * Extraction is the strict one the fixture checker also applies: the `## Quickstart`
  * section must contain exactly one `bash` install fence followed by one `ts` code fence.
  * The install is the documented command with only the unpublished registry argument
- * `llmswitch` replaced by the tarball path; the code fence is written byte-for-byte to its
+ * `llmdispatch` replaced by the tarball path; the code fence is written byte-for-byte to its
  * own file — never edited, wrapped or rewritten — and executed by a two-line harness that
  * imports it. The child environment is the shared allowlist, which carries no provider key
  * and no `NODE_OPTIONS`, so the run cannot become live billed traffic and nothing preloaded
- * can put a key back: without a key, the documented outcome is an `LLMSwitchError`
+ * can put a key back: without a key, the documented outcome is an `LLMDispatchError`
  * with code `INVALID_CONFIG` from the unresolvable key, and that exact rejection is the
  * pass condition. Anything else — a ReferenceError, a different code, a run that resolves —
  * means the printed quickstart is wrong.
@@ -36,17 +36,17 @@ const USAGE = 'usage: verify-quickstart.mjs [path-to-tarball]\n'
 
 /**
  * The harness: import the printed file, require the documented rejection — a real
- * `LLMSwitchError` from the installed package, `INVALID_CONFIG`, detected locally (the
+ * `LLMDispatchError` from the installed package, `INVALID_CONFIG`, detected locally (the
  * unresolvable key), never a dispatched provider rejection.
  */
-const HARNESS = `import { LLMSwitchError } from 'llmswitch'
+const HARNESS = `import { LLMDispatchError } from 'llmdispatch'
 try {
   await import('./quickstart.ts')
   console.error('the quickstart ran to completion without an API key — expected INVALID_CONFIG')
   process.exit(1)
 } catch (error) {
   if (
-    error instanceof LLMSwitchError &&
+    error instanceof LLMDispatchError &&
     error.code === 'INVALID_CONFIG' &&
     error.detectedAt === 'local'
   ) {
@@ -71,9 +71,9 @@ function main() {
     for (const problem of problems) process.stderr.write(`${problem}\n`)
     return 1
   }
-  if (quickstart.install !== 'npm install llmswitch zod') {
+  if (quickstart.install !== 'npm install llmdispatch zod') {
     process.stderr.write(
-      `README.md ## Quickstart: the install fence reads '${quickstart.install}', not the documented 'npm install llmswitch zod' this script derives from\n`,
+      `README.md ## Quickstart: the install fence reads '${quickstart.install}', not the documented 'npm install llmdispatch zod' this script derives from\n`,
     )
     return 1
   }
@@ -93,7 +93,7 @@ function main() {
     }
   }
 
-  const directory = mkdtempSync(join(tmpdir(), 'llmswitch-quickstart-'))
+  const directory = mkdtempSync(join(tmpdir(), 'llmdispatch-quickstart-'))
   // A home of its own, so npm's cache and any config a tool writes for itself go away
   // with the run rather than reaching into the machine's real one.
   const home = join(directory, 'home')
@@ -122,7 +122,7 @@ function main() {
     // no user npmrc is in reach.
     const install = quickstart.install
       .split(' ')
-      .map((word) => (word === 'llmswitch' ? tarball : word))
+      .map((word) => (word === 'llmdispatch' ? tarball : word))
     step = 'installing the documented packages'
     execFileSync('npm', install.slice(1), {
       cwd: directory,

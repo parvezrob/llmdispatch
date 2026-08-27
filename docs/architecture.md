@@ -12,9 +12,9 @@ the pieces are arranged so it can keep doing it.
 ```mermaid
 graph TD
   subgraph entries["entry points (what the manifest exports)"]
-    root["index.ts<br/><i>llmswitch</i>"]
-    pg["postgres.ts<br/><i>llmswitch/postgres</i>"]
-    conf["conformance.ts<br/><i>llmswitch/conformance</i>"]
+    root["index.ts<br/><i>llmdispatch</i>"]
+    pg["postgres.ts<br/><i>llmdispatch/postgres</i>"]
+    conf["conformance.ts<br/><i>llmdispatch/conformance</i>"]
   end
 
   core["core/<br/>decisions, no I/O"]
@@ -50,7 +50,7 @@ changes most often — the adapters — sits where nothing depends on it.
 **`types.ts`** is the floor: every shape the package publishes, declared once from spec §6,
 importing nothing but Zod.
 
-**`errors/`** is the bottom layer of behaviour. Two public classes: `LLMSwitchError`, with a
+**`errors/`** is the bottom layer of behaviour. Two public classes: `LLMDispatchError`, with a
 closed set of codes, the typed factories that construct it, and the literal `retryable` of
 the spec §5b classification row — the row, not the code, since `PROVIDER_FAILED` is retryable
 for a `transient` failure and not for a `refused` one; and `ProviderError`, which an adapter

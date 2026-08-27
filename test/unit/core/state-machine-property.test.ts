@@ -10,7 +10,7 @@ import { getEventListeners } from 'node:events'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 
-import { LLMSwitchError, ProviderError } from '../../../src/errors'
+import { LLMDispatchError, ProviderError } from '../../../src/errors'
 import type { ProviderResponse } from '../../../src/types'
 import { fixture, flushMicrotasks, grantFor, observe } from './helpers'
 
@@ -29,19 +29,20 @@ type AttemptScript =
   | 'unclassified'
 
 /** The §5b terminal columns, keyed by a recorded attempt outcome. */
-const OUTCOME_MEANING: Record<string, { code: LLMSwitchError['code']; retryable: boolean }> = {
-  output_rejected: { code: 'OUTPUT_REJECTED', retryable: true },
-  truncated: { code: 'OUTPUT_REJECTED', retryable: true },
-  refused: { code: 'PROVIDER_FAILED', retryable: false },
-  transient: { code: 'PROVIDER_FAILED', retryable: true },
-  rate_limit: { code: 'PROVIDER_FAILED', retryable: true },
-  malformed_response: { code: 'PROVIDER_FAILED', retryable: true },
-  timeout: { code: 'PROVIDER_FAILED', retryable: true },
-  auth: { code: 'INVALID_CONFIG', retryable: false },
-  model_not_found: { code: 'INVALID_CONFIG', retryable: false },
-  invalid_request: { code: 'PROVIDER_FAILED', retryable: false },
-  provider_unclassified: { code: 'PROVIDER_FAILED', retryable: false },
-}
+const OUTCOME_MEANING: Record<string, { code: LLMDispatchError['code']; retryable: boolean }> =
+  {
+    output_rejected: { code: 'OUTPUT_REJECTED', retryable: true },
+    truncated: { code: 'OUTPUT_REJECTED', retryable: true },
+    refused: { code: 'PROVIDER_FAILED', retryable: false },
+    transient: { code: 'PROVIDER_FAILED', retryable: true },
+    rate_limit: { code: 'PROVIDER_FAILED', retryable: true },
+    malformed_response: { code: 'PROVIDER_FAILED', retryable: true },
+    timeout: { code: 'PROVIDER_FAILED', retryable: true },
+    auth: { code: 'INVALID_CONFIG', retryable: false },
+    model_not_found: { code: 'INVALID_CONFIG', retryable: false },
+    invalid_request: { code: 'PROVIDER_FAILED', retryable: false },
+    provider_unclassified: { code: 'PROVIDER_FAILED', retryable: false },
+  }
 
 interface Scenario {
   reserve: 'grant' | 'deny' | 'reject'
@@ -183,8 +184,8 @@ async function runScenario(scenario: Scenario): Promise<void> {
   expect(getEventListeners(controller.signal, 'abort').length).toBe(0)
 
   if (run.state === 'resolved') return
-  const error = run.error as LLMSwitchError
-  expect(error).toBeInstanceOf(LLMSwitchError)
+  const error = run.error as LLMDispatchError
+  expect(error).toBeInstanceOf(LLMDispatchError)
 
   // `retryable` is always the literal of the code/classification tables.
   const attemptDetermined = error.attempts !== undefined && error.code !== 'ABORTED'
@@ -277,7 +278,7 @@ describe('the run state machine, property-tested', () => {
     const run = observe(f.ai.run('echo', ARGS, { signal: controller.signal }))
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    const error = run.error as LLMSwitchError
+    const error = run.error as LLMDispatchError
     expect(error.code).toBe('ABORTED') // the abort rule wins over the fallback decision
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['transient'])
     expect(f.p2.requests.length).toBe(0) // the fallback never dispatched
@@ -300,7 +301,7 @@ describe('the run state machine, property-tested', () => {
     const run = observe(f.ai.run('echo', ARGS, { signal: controller.signal }))
     await flushMicrotasks()
     expect(run.state).toBe('rejected')
-    const error = run.error as LLMSwitchError
+    const error = run.error as LLMDispatchError
     expect(error.code).toBe('ABORTED') // only abort after a successful attempt is outcome-immune
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['invalid_request'])
     expect(f.s.settle.calls[0]![1]).toBe('failed')

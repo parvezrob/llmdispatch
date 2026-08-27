@@ -1,5 +1,5 @@
 ---
-'llmswitch': patch
+'llmdispatch': patch
 ---
 
 Docs: the README's Contributing section now points at the security policy — security

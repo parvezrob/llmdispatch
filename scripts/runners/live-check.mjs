@@ -110,8 +110,8 @@ async function main() {
       return 1
     }
   }
-  const llmswitch = await import('llmswitch')
-  const { ProviderError } = llmswitch
+  const llmdispatch = await import('llmdispatch')
+  const { ProviderError } = llmdispatch
 
   const keyName = KEYS[provider]
   const apiKey = process.env[keyName] ?? ''
@@ -122,15 +122,15 @@ async function main() {
   }
 
   const build = {
-    anthropic: () => llmswitch.anthropic({ apiKey: () => Promise.resolve(apiKey) }),
-    gemini: () => llmswitch.gemini({ apiKey: () => Promise.resolve(apiKey) }),
+    anthropic: () => llmdispatch.anthropic({ apiKey: () => Promise.resolve(apiKey) }),
+    gemini: () => llmdispatch.gemini({ apiKey: () => Promise.resolve(apiKey) }),
     'openai-compatible': () => {
       const options = { apiKey: () => Promise.resolve(apiKey) }
       // In release mode the parent refuses to pass an override at all, so this is the
       // adapter's own default endpoint; locally an override may travel and is honoured.
       const baseUrl = process.env.OPENAI_BASE_URL ?? ''
       if (!release && baseUrl !== '') options.baseUrl = baseUrl
-      return llmswitch.openaiCompatible(options)
+      return llmdispatch.openaiCompatible(options)
     },
   }
   const prepared = await build[provider]().prepare()

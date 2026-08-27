@@ -68,7 +68,7 @@ promises will not compile. `check-types-fixtures.mjs` compiles each in a program
 - `test/types/scaffold.d.ts` declares the values the README examples use without introducing
   them, so those examples compile as printed.
 
-**Errors.** Two public classes. `LLMSwitchError` has a closed set of codes and a `retryable`
+**Errors.** Two public classes. `LLMDispatchError` has a closed set of codes and a `retryable`
 flag copied from the classification row in spec §5b rather than worked out on the spot. The
 flag belongs to the row and not to the code — `PROVIDER_FAILED` is retryable for a
 `transient` failure and not for a `refused` one — which is why `src/errors` has one factory
@@ -83,11 +83,11 @@ continuous integration, where a missing database is a failure rather than a quie
 version they are written against is the one CI runs:
 
 ```bash
-docker run -d --name llmswitch-pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
+docker run -d --name llmdispatch-pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
   postgres:14@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
-until docker exec llmswitch-pg pg_isready -U postgres; do sleep 1; done
+until docker exec llmdispatch-pg pg_isready -U postgres; do sleep 1; done
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres npm run test:integration
-docker rm -f llmswitch-pg
+docker rm -f llmdispatch-pg
 ```
 
 `src/core` and `src/errors` are held at 90%

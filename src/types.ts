@@ -21,7 +21,7 @@ export interface Switch<Ops extends OperationsMap> {
   /**
    * Runs one operation end to end and resolves with its validated result.
    *
-   * @throws `LLMSwitchError` with the code the final classification maps to (spec §5b).
+   * @throws `LLMDispatchError` with the code the final classification maps to (spec §5b).
    */
   run<K extends keyof Ops & string>(
     operation: K,
@@ -261,7 +261,7 @@ export interface UsageStore {
 
 // ——— packaged operational surfaces (spec §6b) ———
 //
-// The shapes `llmswitch/postgres` and `llmswitch/conformance` publish are declared below this
+// The shapes `llmdispatch/postgres` and `llmdispatch/conformance` publish are declared below this
 // line and re-exported by those entry points alone, so the root surface stays exactly §6.
 
 /** What a conformance run reports. `passed` is true exactly when `failures` is empty. */

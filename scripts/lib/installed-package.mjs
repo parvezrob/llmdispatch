@@ -96,7 +96,7 @@ export function unpackReference(tarballPath, workspace) {
  * same-named package fetched from the registry, which is the one thing it must not do.
  */
 export function checkInstalledIsTheTarball(project, reference, name, problems) {
-  const installed = join(project, 'node_modules', 'llmswitch')
+  const installed = join(project, 'node_modules', 'llmdispatch')
   if (!existsSync(installed)) {
     problems.push(`${name}: the package was not installed`)
     return

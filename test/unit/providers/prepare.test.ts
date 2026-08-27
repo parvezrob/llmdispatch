@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import { LLMSwitchError, ProviderError } from '../../../src/errors'
+import { LLMDispatchError, ProviderError } from '../../../src/errors'
 import { openaiCompatible } from '../../../src/providers/openai-compatible'
 import { memoryStores } from '../../../src/stores/memory'
 import type {
@@ -80,7 +80,7 @@ describe('a resolver that throws', () => {
     })
     await expect(run(provider, stores)).rejects.toSatisfy(
       (error: unknown) =>
-        error instanceof LLMSwitchError &&
+        error instanceof LLMDispatchError &&
         error.code === 'INVALID_CONFIG' &&
         error.retryable &&
         error.cause === thrown,
@@ -93,7 +93,7 @@ describe('a resolver that throws', () => {
     const provider = openaiCompatible({ apiKey: () => Promise.reject(thrown) })
     await expect(run(provider, stores)).rejects.toSatisfy(
       (error: unknown) =>
-        error instanceof LLMSwitchError &&
+        error instanceof LLMDispatchError &&
         error.code === 'INVALID_CONFIG' &&
         !error.retryable &&
         error.cause === thrown,

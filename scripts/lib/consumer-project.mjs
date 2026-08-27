@@ -3,7 +3,7 @@
  * there.
  *
  * Projects are always created outside the repository: one under the working tree would find
- * the repository's own `node_modules` on the way up, and its resolution of `llmswitch` would
+ * the repository's own `node_modules` on the way up, and its resolution of `llmdispatch` would
  * stop being evidence about the tarball.
  *
  * @module
@@ -158,13 +158,13 @@ export function createConsumerProject(opts) {
   mkdirSync(directory, { recursive: true })
   mkdirSync(home, { recursive: true })
 
-  // Named for what it is and never `llmswitch`: a project carrying the package's own name
+  // Named for what it is and never `llmdispatch`: a project carrying the package's own name
   // would resolve the subpaths to itself, which is the one thing the guard exists to catch.
   writeFileSync(
     join(directory, 'package.json'),
     `${JSON.stringify(
       {
-        name: `llmswitch-${opts.name}`,
+        name: `llmdispatch-${opts.name}`,
         version: '0.0.0',
         private: true,
         type: 'module',

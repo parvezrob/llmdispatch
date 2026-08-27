@@ -1,7 +1,7 @@
 // @targets spec, package
 // The response union is discriminated, so an adapter that invents a termination kind or
 // mistypes the payload is rejected rather than classified.
-import type { ProviderResponse } from 'llmswitch'
+import type { ProviderResponse } from 'llmdispatch'
 
 // @expect TS2322
 export const unknownKind: ProviderResponse = { kind: 'partial', text: '', usage: null }

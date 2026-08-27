@@ -1,5 +1,5 @@
 /**
- * Root entry point — `import { … } from 'llmswitch'`.
+ * Root entry point — `import { … } from 'llmdispatch'`.
  *
  * The only module that assembles the pieces: the factory that turns providers, operations
  * and stores into a working switch, the built-in adapters, the in-memory stores, the errors,
@@ -44,7 +44,7 @@ import { createSwitchCore } from './core/create-switch'
 import { createGlobalRuntime } from './runtime'
 import type { CreateSwitchConfig, OperationsMap, Switch } from './types'
 
-export { LLMSwitchError, ProviderError } from './errors'
+export { LLMDispatchError, ProviderError } from './errors'
 export { anthropic } from './providers/anthropic'
 export { openaiCompatible } from './providers/openai-compatible'
 export { gemini } from './providers/gemini'
@@ -61,7 +61,7 @@ export { defineOperation, defineOperations } from './core/create-switch'
  * here, loudly, rather than on the first request.
  *
  * @param config Who can be called, what the app does, and where config and counters live.
- * @throws `LLMSwitchError` with code `INVALID_CONFIG` naming the field that failed.
+ * @throws `LLMDispatchError` with code `INVALID_CONFIG` naming the field that failed.
  * @example
  * ```ts
  * const ai = createSwitch({ providers, operations, stores: memoryStores() })

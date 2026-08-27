@@ -1,9 +1,9 @@
 // Reaches every advertised entry point the way a CommonJS application does, then checks the
 // same recognition claim from this side: this build's error is recognised by the ESM build,
 // and the ESM build's error by this one.
-const conformance = require('llmswitch/conformance')
-const postgres = require('llmswitch/postgres')
-const root = require('llmswitch')
+const conformance = require('llmdispatch/conformance')
+const postgres = require('llmdispatch/postgres')
+const root = require('llmdispatch')
 
 for (const [name, entry] of Object.entries({ root, postgres, conformance })) {
   if (typeof entry !== 'object' || entry === null) {
@@ -18,7 +18,7 @@ function check(claim, held) {
 
 async function main() {
   // `import()` from CommonJS resolves the `import` condition, so this is the other build.
-  const esm = await import('llmswitch')
+  const esm = await import('llmdispatch')
 
   const fromCjs = new root.ProviderError('rate_limit', { status: 429 })
   const fromEsm = new esm.ProviderError('auth', { status: 401 })
@@ -51,7 +51,7 @@ async function main() {
     check(`${String(value)} was mistaken for a provider error`, !root.ProviderError.is(value))
   }
 
-  const brand = Symbol.for('llmswitch.ProviderError')
+  const brand = Symbol.for('llmdispatch.ProviderError')
   check(
     'an object carrying the brand with an unknown kind was accepted',
     !root.ProviderError.is({ [brand]: true, kind: 'overloaded', message: 'x' }),

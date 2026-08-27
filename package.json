@@ -1,5 +1,5 @@
 {
-  "name": "llmswitch",
+  "name": "llmdispatch",
   "version": "0.1.0-rc.0",
   "description": "Per-operation routing across LLM providers with fallback and daily quotas",
   "keywords": [
@@ -11,11 +11,11 @@
     "fallback",
     "quota"
   ],
-  "homepage": "https://github.com/parvezrob/llmswitch",
-  "bugs": "https://github.com/parvezrob/llmswitch/issues",
+  "homepage": "https://github.com/parvezrob/llmdispatch",
+  "bugs": "https://github.com/parvezrob/llmdispatch/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/parvezrob/llmswitch.git"
+    "url": "git+https://github.com/parvezrob/llmdispatch.git"
   },
   "license": "MIT",
   "type": "module",

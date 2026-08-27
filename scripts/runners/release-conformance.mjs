@@ -43,9 +43,9 @@ let installed = null
 /** Imports all three subpaths. Only ever called after `assertInstalledPackageResolves`. */
 async function importInstalledPackage() {
   return {
-    package: await import('llmswitch'),
-    postgres: await import('llmswitch/postgres'),
-    conformance: await import('llmswitch/conformance'),
+    package: await import('llmdispatch'),
+    postgres: await import('llmdispatch/postgres'),
+    conformance: await import('llmdispatch/conformance'),
   }
 }
 

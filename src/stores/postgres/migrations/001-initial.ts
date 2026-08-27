@@ -118,7 +118,7 @@ INSERT INTO __SCHEMA__.usage_reservations (reservation_id, operation, subject_id
 INSERT INTO __SCHEMA__.usage_settlements (reservation_id, operation, subject_id, day, outcome, attempts, settled_at)
   SELECT 'x', '', '', '2000-01-01', 'failed', '[]'::jsonb, now() WHERE false ON CONFLICT (reservation_id) DO NOTHING;
 
--- Pruning. Run it on your own schedule; llmswitch never deletes anything itself. Batched so
+-- Pruning. Run it on your own schedule; llmdispatch never deletes anything itself. Batched so
 -- that a busy day never becomes one huge transaction, and SKIP LOCKED so that two pruners
 -- never wait on each other. Repeat each statement until it reports 0 rows.
 --   DELETE FROM __SCHEMA__.usage_settlements WHERE ctid IN (
@@ -165,9 +165,9 @@ export function sha256(text: string): string {
 /**
  * Renders the migration for one schema.
  *
- * @param opts `schema` defaults to `llmswitch` and is validated, then quoted.
+ * @param opts `schema` defaults to `llmdispatch` and is validated, then quoted.
  * @returns The SQL to apply, and the hash of exactly those bytes.
- * @throws `RangeError` when the schema is not a name llmswitch may own.
+ * @throws `RangeError` when the schema is not a name llmdispatch may own.
  */
 export function render(opts?: { schema?: string }): { sql: string; sha256: string } {
   const schema = quotedSchema(opts?.schema ?? DEFAULT_SCHEMA)

@@ -22,7 +22,7 @@ import {
   providerFailed,
   ProviderError,
 } from '../errors'
-import type { LLMSwitchError } from '../errors'
+import type { LLMDispatchError } from '../errors'
 import type { ProviderFailureKind } from '../errors/factories'
 import type {
   AttemptRecord,
@@ -108,7 +108,7 @@ function terminalFor(
   operation: string,
   kind: Exclude<AttemptFailureKind, 'output_schema_error' | 'quality_error'>,
   attempts: AttemptRecord[],
-): LLMSwitchError {
+): LLMDispatchError {
   switch (kind) {
     case 'transient':
     case 'rate_limit':
@@ -133,7 +133,7 @@ function terminalFor(
 /**
  * Runs one operation end to end (spec §1).
  *
- * @throws `LLMSwitchError` per the stage table and §5b, or the user's own exception raw
+ * @throws `LLMDispatchError` per the stage table and §5b, or the user's own exception raw
  *   (stages 2 and 6 pre-quota; `output_schema_error`/`quality_error` post-dispatch, settled
  *   first).
  */
@@ -341,7 +341,7 @@ async function runAttempts(
   shared: AttemptShared,
 ): Promise<RunResult<unknown>> {
   const { signal, attempts } = shared
-  const abortedWithAttempts = (): LLMSwitchError => aborted(operation, copyAttempts(attempts))
+  const abortedWithAttempts = (): LLMDispatchError => aborted(operation, copyAttempts(attempts))
   // A helper, not an inline read: the checks repeat, and TypeScript would otherwise narrow
   // `signal.aborted` to `false` after the first throw even though it changes over time.
   const callerAborted = (): boolean => signal?.aborted === true
