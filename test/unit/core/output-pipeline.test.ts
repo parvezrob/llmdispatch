@@ -309,7 +309,7 @@ describe('request forwarding', () => {
     const f = fixture({ operations })
     await f.ai.run('echo', INPUT)
     const request = f.p1.requests[0]!
-    expect(request.prompt).toBe('PROMPT:hi')
+    expect(request.parts).toEqual([{ type: 'text', text: 'PROMPT:hi' }])
     expect(request.model).toBe('the-model')
     expect(request.responseFormat).toEqual({ type: 'json', topLevel: 'object' })
     expect(request.maxOutputTokens).toBe(512)

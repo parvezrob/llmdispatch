@@ -26,6 +26,12 @@ import type { CreateSwitchConfig, OperationsMap } from '../../../src/types'
 
 const INPUT = { input: { text: 'hi' } }
 
+/** The text of a request a string-returning prompt callback normalized to one part. */
+function soleText(request: ProviderRequest): string {
+  const first = request.parts[0]
+  return first?.type === 'text' ? first.text : ''
+}
+
 describe('stage 0: pre-aborted signal', () => {
   it('ends ABORTED before anything else, with no store call and no attempts', async () => {
     const { ai, s } = fixture()
@@ -344,8 +350,8 @@ describe('stage 5: readiness', () => {
     gates[1]!.resolve(undefined)
     gates[0]!.resolve(undefined)
     await Promise.all([runA, runB])
-    expect(dispatchers[0]!.requests.map((r) => r.prompt)).toEqual(['PROMPT:a'])
-    expect(dispatchers[1]!.requests.map((r) => r.prompt)).toEqual(['PROMPT:b'])
+    expect(dispatchers[0]!.requests.map(soleText)).toEqual(['PROMPT:a'])
+    expect(dispatchers[1]!.requests.map(soleText)).toEqual(['PROMPT:b'])
   })
 })
 

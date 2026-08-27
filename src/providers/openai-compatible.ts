@@ -12,6 +12,7 @@ import type {
   ProviderRequest,
   ProviderResponse,
 } from '../types'
+import { readSoleTextPart } from './parts'
 import {
   buildUsage,
   classifyByStatusFamily,
@@ -95,10 +96,11 @@ async function completeOpenAI(
   tokenParam: 'max_tokens' | 'max_completion_tokens' | undefined,
   req: ProviderRequest,
 ): Promise<ProviderResponse> {
+  const promptText = readSoleTextPart(req.parts)
   const host = hostOf(baseUrl)
   const body: Record<string, unknown> = {
     model: req.model,
-    messages: [{ role: 'user', content: req.prompt }],
+    messages: [{ role: 'user', content: promptText }],
   }
 
   if (req.maxOutputTokens !== undefined) {

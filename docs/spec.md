@@ -1,13 +1,12 @@
-# llmdispatch v0.1 Normative Specification
+# llmdispatch v0.2 Normative Specification
 
-This document is the exact contract for llmdispatch v0.1. The [README](../README.md) is the
+This document is the exact contract for llmdispatch v0.2. The [README](../README.md) is the
 introduction; when they disagree, this spec wins. §8 defines the adopter-facing conformance
 suite; the core's own behavior (state machine, matrices, sanitization, type inference) is
 enforced by the package's internal test suite, including compile-time positive and negative
 type fixtures (which include the exact README quickstart shape).
 
-Status: **pre-release contract for v0.1**. The design is final; the implementation is under
-active development and not yet on npm. Semver: while on 0.x, breaking changes to anything
+Status: **normative contract for v0.2**. Semver: while on 0.x, breaking changes to anything
 here bump the minor version.
 
 ---
@@ -35,7 +34,7 @@ not change the outcome: the run returns its result; settlement records `succeede
 | 3 | Subject check for a **declared** quota: an operation whose definition declares `quota` requires non-empty `subjectId` | `MISSING_SUBJECT` | none |
 | 4 | Config resolution (§2) for the primary **and** fallback route, then, if the effective route enables a quota the definition does not declare, the same subject check | `INVALID_CONFIG` / `CONFIG_STORE_UNAVAILABLE` / `MISSING_SUBJECT` | none |
 | 5 | Readiness for **both** routes (§5a): registration + `prepare()` per unique provider | `INVALID_CONFIG` (`detectedAt:'local'`; `retryable` per §5a) | none |
-| 6 | Prompt build: `prompt(parsedInput)` (raced with abort). A non-string return is a user bug: descriptive `TypeError` passes through unwrapped | user exception unwrapped | none |
+| 6 | Prompt build: `prompt(parsedInput)` (raced with abort), then normalization to `ContentPart[]` (§6 normalization and caps). A return that is neither a string nor a well-formed parts array is a user bug: descriptive `TypeError`, or `RangeError` for the payload cap, passes through unwrapped | user exception unwrapped | none |
 | 7 | Quota reserve (§4), performed iff the run has an **effective** quota (§2) | `QUOTA_EXCEEDED` / `USAGE_STORE_UNAVAILABLE` | pending reservation (envelope held) |
 | 8 | Quota commit (§4 recovery table; same condition as 7; signal checked before each recovery I/O) | `QUOTA_EXCEEDED` (denied re-reserve) / `USAGE_STORE_UNAVAILABLE` | committed on success; §4 table otherwise |
 | 9 | Primary attempt: final signal check → dispatch via prepared dispatcher → output pipeline (§3) | classified per §5 | committed |
@@ -461,10 +460,24 @@ export interface Logger {                                // invoked through caug
 }
 
 // --- operations ---
+// What a request is made of. A prompt callback returning a string normalizes to one
+// TextPart; the parts a callback returns are copied, frozen, and validated before stage 7.
+export interface TextPart {
+  readonly type: 'text'
+  readonly text: string                                  // any string, '' included
+}
+export interface FilePart {
+  readonly type: 'file'
+  readonly mediaType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
+  readonly data: string                                  // base64, standard alphabet, no data-URL prefix
+  readonly filename?: string                             // <= 128 chars, no control characters, no path separator
+}
+export type ContentPart = TextPart | FilePart
+
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
-  prompt: (input: z.output<In>) => string | Promise<string>
+  prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
   format?: 'json' | 'json-any' | 'text'                  // default 'json' (§3)
   quality?: (ctx: { input: z.output<In>; data: z.output<Out> }) => QualityVerdict | Promise<QualityVerdict>
   quota?: { perDay: number }                             // safe integer, 0–1_000_000 (0 = halted)
@@ -527,7 +540,7 @@ export interface PreparedProvider {
   complete(req: ProviderRequest): Promise<ProviderResponse>
 }
 export interface ProviderRequest {
-  prompt: string
+  parts: readonly ContentPart[]                          // normalized, non-empty, frozen
   model: string
   responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
   maxOutputTokens?: number
@@ -609,9 +622,43 @@ Runtime validation: all ranges enforced at `createSwitch`/`setConfig` with a thr
 naming the field; all counts are non-negative **safe** integers (`Number.isSafeInteger`);
 pricing finite ≥ 0; provider responses failing the `ProviderResponse` union shape
 (unknown `kind`, non-string `text`) → `malformed_response`; invalid usage → `null`;
-non-string prompt returns → unwrapped
-`TypeError` (pre-quota); malformed quality verdicts → `quality_error`; malformed prepared
-dispatchers → `INVALID_CONFIG` (local).
+prompt returns that are neither a string nor well-formed
+parts → unwrapped `TypeError`, and file payload over the cap → unwrapped `RangeError` (both
+pre-quota, per the normalization rules below); malformed quality verdicts →
+`quality_error`; malformed prepared dispatchers → `INVALID_CONFIG` (local).
+
+**Normalization and caps (stage 6).** `prompt` returns a string or a `ContentPart` array. A
+string normalizes to exactly one `TextPart`; an array is copied part by part into records
+the run owns, and both the array and every part are frozen, so a retained caller array or a
+mutating provider cannot change what a later attempt dispatches. The resulting
+`ProviderRequest.parts` is non-empty.
+
+Every part is checked before the reservation of stage 7:
+
+- `type` is `'text'` or `'file'`. A `TextPart` carries any string, `''` included; text
+  length is not bounded, exactly as a prompt string was not.
+- `FilePart.mediaType` is one of `application/pdf`, `image/jpeg`, `image/png`,
+  `image/webp`, `image/gif`. Whether the bytes match the declared type is the provider's
+  judgement, not this package's.
+- `FilePart.data` is standard-alphabet base64 (`A–Z a–z 0–9 + /`): non-empty, no
+  whitespace, no data-URL prefix, length a multiple of 4, and `=` only as one or two
+  trailing padding characters. Canonicality beyond that is not checked.
+- `FilePart.filename` is optional, at most 128 characters, and carries no control
+  characters and no `/` or `\`.
+- **The file payload across all `FilePart.data` of one request is at most 15 000 000 base64
+  characters** (about 11.25 MB decoded), which is also the ceiling for a single part, since
+  one part may spend the whole allowance. The cap bounds file payload only; it is this
+  package's safety ceiling rather than a promise that a request fits any given provider.
+  Tighter provider limits — per-image byte caps, page counts, total request size — surface
+  as that provider's own error and classify by §5b.
+
+A structural violation throws a descriptive `TypeError`; the payload cap throws a
+descriptive `RangeError`. Both are user bugs, and both pass through unwrapped with no
+`LLMDispatchError` code, no quota effect and no attempt record. A violation attributable to
+one part names that part's index and the rule it broke; a return that is not a string or an
+array at all, or an empty array, has no part to name and says so instead. No message ever
+names part data or a filename: those are payload, held to the same rule as prompt text and
+model output — no message, log line or package-owned error field carries them (§4, §6).
 
 **String domain.** Every string that reaches a store (operation names, provider
 registration IDs, `OperationRoute`/`RouteTarget` `provider` and `model`, `subjectId`,
@@ -678,7 +725,7 @@ export declare function runConfigStoreConformance(opts: {
 }): Promise<ConformanceResult>
 export declare function runProviderConformance(opts: {
   provider: Provider
-  // Produces a dispatchable request for the provider's backend (model, prompt).
+  // Produces a dispatchable request for the provider's backend (model, parts).
   requestFactory: () => ProviderRequest
   // 'success' is MANDATORY; each other scenario puts the adopter's backend into the named
   // condition and resolves when ready; the harness dispatches and asserts the resulting

@@ -5,7 +5,12 @@
 
 import { vi } from 'vitest'
 
-import type { PreparedProvider, Provider, ProviderRequest } from '../../../src/types'
+import type {
+  ContentPart,
+  PreparedProvider,
+  Provider,
+  ProviderRequest,
+} from '../../../src/types'
 
 /** Present in prompts and never allowed to reach a thrown `ProviderError` message. */
 export const SENTINEL = 'PROMPT_SENTINEL_BODY_XYZ'
@@ -90,10 +95,15 @@ export function captureRequests(handler: FetchHandler = () => jsonResponse(200, 
   return { requests, fetch }
 }
 
+/** The parts of a text-only request: what every adapter still serializes the plain way. */
+export function textParts(text: string): readonly ContentPart[] {
+  return [{ type: 'text', text }]
+}
+
 /** One `ProviderRequest`, with a fresh signal, overridable field by field. */
 export function baseRequest(overrides: Partial<ProviderRequest> = {}): ProviderRequest {
   return {
-    prompt: 'hello',
+    parts: textParts('hello'),
     model: 'test-model',
     responseFormat: { type: 'text' },
     signal: new AbortController().signal,

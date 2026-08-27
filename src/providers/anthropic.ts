@@ -12,6 +12,7 @@ import type {
   ProviderRequest,
   ProviderResponse,
 } from '../types'
+import { readSoleTextPart } from './parts'
 import {
   buildUsage,
   fetchJson,
@@ -49,10 +50,11 @@ async function completeAnthropic(
   apiKey: string,
   req: ProviderRequest,
 ): Promise<ProviderResponse> {
+  const promptText = readSoleTextPart(req.parts)
   const body: Record<string, unknown> = {
     model: req.model,
     max_tokens: req.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
-    messages: [{ role: 'user', content: req.prompt }],
+    messages: [{ role: 'user', content: promptText }],
   }
   if (req.temperature !== undefined) {
     body.temperature = Math.min(1, Math.max(0, req.temperature))

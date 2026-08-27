@@ -8,6 +8,7 @@ import {
   installFetch,
   jsonResponse,
   SENTINEL,
+  textParts,
   withPrepared,
 } from './helpers'
 
@@ -57,7 +58,7 @@ describe('request shape', () => {
   it('sends model and messages always, and omits maxOutputTokens/temperature when unset', async () => {
     const { requests } = captureRequests(() => jsonResponse(200, OK_BODY))
     const run = await complete({ apiKey: KEY })
-    await run(baseRequest({ model: 'gpt-x', prompt: 'say hi' }))
+    await run(baseRequest({ model: 'gpt-x', parts: textParts('say hi') }))
     const body = requests[0]!.body as Record<string, unknown>
     expect(body.model).toBe('gpt-x')
     expect(body.messages).toEqual([{ role: 'user', content: 'say hi' }])
@@ -352,7 +353,7 @@ describe('error classification', () => {
     installFetch(() => jsonResponse(400, { error: { message: `bad request: ${SENTINEL}` } }))
     const run = await complete({ apiKey: KEY })
     try {
-      await run(baseRequest({ prompt: SENTINEL }))
+      await run(baseRequest({ parts: textParts(SENTINEL) }))
       expect.unreachable('expected a rejection')
     } catch (error) {
       expect((error as Error).message).not.toContain(SENTINEL)

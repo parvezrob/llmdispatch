@@ -8,9 +8,16 @@ import {
   defineOperations,
   memoryStores,
   ProviderError,
+  type ContentPart,
   type Provider,
 } from 'llmdispatch'
 import { z } from 'zod'
+
+/** The one text part a string-returning prompt callback normalizes to. */
+function textOf(parts: readonly ContentPart[]): string {
+  const first = parts[0]
+  return first?.type === 'text' ? first.text : ''
+}
 
 const custom: Provider = {
   prepare() {
@@ -18,7 +25,7 @@ const custom: Provider = {
       complete: (req) =>
         Promise.resolve({
           kind: 'complete' as const,
-          text: `{"length": ${String(req.prompt.length)}}`,
+          text: `{"length": ${String(textOf(req.parts).length)}}`,
           usage: null,
         }),
     }

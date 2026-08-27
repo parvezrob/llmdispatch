@@ -26,6 +26,7 @@ import type { LLMDispatchError } from '../errors'
 import type { ProviderFailureKind } from '../errors/factories'
 import type {
   AttemptRecord,
+  ContentPart,
   Logger,
   OperationDefinition,
   OperationRoute,
@@ -44,6 +45,7 @@ import type { AttemptFailureKind } from './classify'
 import { classifyThrown, isFallbackEligible } from './classify'
 import type { ConfigService } from './config'
 import { isZodError, processOutput } from './output'
+import { normalizePromptParts } from './parts'
 import { commitWithRecovery, reserveSlot, settleDetached } from './quota'
 import type { QuotaContext } from './quota'
 import type { CoreRuntime } from './runtime'
@@ -185,7 +187,9 @@ export async function executeRun(
   const dispatchers = await prepareDispatchers(ctx, operation, route, signal)
   throwIfAborted()
 
-  // Stage 6: prompt build. A non-string return is the user's bug, as is anything thrown.
+  // Stage 6: prompt build. A return that is neither a string nor well-formed content parts
+  // is the user's bug, as is anything thrown. Normalization precedes stage 7, so a bad
+  // prompt never reserves a slot.
   let promptValue: unknown
   try {
     promptValue = await raceWithAbort(
@@ -196,12 +200,7 @@ export async function executeRun(
     if (error instanceof AbortRaceLost) throw aborted(operation)
     throw error
   }
-  if (typeof promptValue !== 'string') {
-    throw new TypeError(
-      `the prompt callback for operation "${operation}" must return a string; it returned a value of type ${typeof promptValue}`,
-    )
-  }
-  const prompt = promptValue
+  const parts = normalizePromptParts(promptValue, operation)
   throwIfAborted()
 
   // Stages 7 and 8: reserve and commit, only for an effective quota. Neither is raced with
@@ -230,7 +229,7 @@ export async function executeRun(
   let succeeded = false
   try {
     const result = await runAttempts(ctx, op, operation, route, dispatchers, {
-      prompt,
+      parts,
       parsedInput,
       signal,
       attempts,
@@ -325,7 +324,7 @@ type AttemptEnd =
 
 /** What every attempt shares: built once by stage 6 and earlier. */
 interface AttemptShared {
-  prompt: string
+  parts: readonly ContentPart[]
   parsedInput: unknown
   signal: AbortSignal | undefined
   attempts: AttemptRecord[]
@@ -520,7 +519,7 @@ async function executeAttempt(
   }
 
   const request: ProviderRequest = {
-    prompt: shared.prompt,
+    parts: shared.parts,
     model: target.model,
     responseFormat: responseFormatOf(op.definition.format),
     signal: controller.signal,

@@ -140,7 +140,7 @@ async function main() {
   const inFlight = new AbortController()
   abortOnSignal(inFlight)
   const request = (prompt, responseFormat) => ({
-    prompt,
+    parts: [{ type: 'text', text: prompt }],
     model,
     responseFormat,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
