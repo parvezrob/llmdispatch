@@ -25,12 +25,8 @@ function projectDirectory() {
 }
 
 /**
- * Every specifier the installed package publishes, read off its own `exports` map.
- *
- * Taken from the installed manifest rather than written down here: a list in this file would
- * go on passing after an entry point had been added or renamed, and a subpath nobody checked
- * is a subpath that could resolve anywhere. What the package says it publishes is what has to
- * come from the installed copy.
+ * Every specifier the installed package publishes, read off its own `exports` map rather than
+ * from a list here, so an added or renamed entry point is checked without being remembered.
  *
  * @param manifest The installed package's `package.json`, already parsed.
  * @returns The specifiers to resolve, in manifest order.
@@ -59,10 +55,7 @@ export function publishedSubpaths(manifest) {
 }
 
 /**
- * Confirms every subpath resolves inside this project's own copy of the package.
- *
- * Which subpaths those are comes from the installed manifest, so an entry point added to the
- * package is checked here without anyone remembering to add it.
+ * Confirms every published subpath resolves inside this project's own copy of the package.
  *
  * @returns Each subpath with the file it resolved to, in the order they were asked for.
  * @throws `Error` when the package is not installed here, when its manifest publishes nothing

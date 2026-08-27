@@ -1,21 +1,16 @@
 #!/usr/bin/env node
 /**
  * The release check itself, executed from inside the scratch project that installed the
- * tarball. It is copied there rather than run from the repository: see `subpath-resolution`
- * for why a runner left in the working tree would prove nothing.
+ * tarball. It is copied there rather than run from the repository, so what it resolves is the
+ * installed package (see `subpath-resolution`).
  *
- * What it does, in order: confirm every published subpath resolves to the installed package,
- * render the packaged migration for a schema of this run's own and apply it, run the two store
- * conformance suites against the installed PostgreSQL stores, and run the provider suite
- * against a fixture backend served from this process.
+ * In order: confirm every published subpath resolves to the installed package, apply the
+ * packaged migration to the given schema, run the two store conformance suites against the
+ * installed PostgreSQL stores, and run the provider suite against a fixture backend served
+ * from this process.
  *
- * The schema is named by whoever started this runner, and dropping it is that caller's job: a
- * process that is killed cannot clean up after itself, and this one can be killed. So this
- * runner never drops it, and the caller drops it on every path it has.
- *
- * The package is reached through `import`, so what runs here is its ESM build. The CommonJS
- * build is covered elsewhere: the workflow installs the same audited tarball into consumer
- * fixtures and reaches every entry point through `require` from there.
+ * The schema is named by the caller, which also drops it — this process can be killed and so
+ * cannot be relied on to clean up after itself.
  *
  * Usage: node release-conformance.mjs <schema>
  * Needs `DATABASE_URL`. Exit codes: 0 everything passed, 1 something did not.
@@ -159,12 +154,11 @@ async function runStoreSuites(pool, schema) {
   const controls = controlStatements(schema)
   let pinned = null
   const drifted = []
-  // The marker comes from the installed package rather than from a copy of the string kept
-  // here: the convention is only usable by an adopter if the package publishes what to look
-  // for, and a copy would go on matching after the package had changed it.
+  // From the installed package, not a copy: a copy would keep matching after the package had
+  // changed it.
   const marker = installed.postgres.USAGE_STORE_MARKER
-  // Strict on purpose: if the marker convention ever changed, this reports that rather than
-  // quietly running the whole usage suite against the database's own clock.
+  // Strict: an unrecognised marker is reported rather than silently running the usage suite
+  // against the database's own clock.
   const wrapper = {
     query(sql, params) {
       if (!sql.startsWith(marker)) return pool.query(sql, params)
@@ -226,12 +220,11 @@ async function runStoreSuites(pool, schema) {
 async function runProviderSuite(state, port) {
   const provider = installed.package.openaiCompatible({
     apiKey: () => Promise.resolve(FIXTURE_KEY),
-    // Concatenated rather than interpolated: the scanner reads a link token out of the line
-    // and an interpolation in the middle of one leaves it something it cannot parse, which it
-    // then has to treat as an unreviewed host.
+    // Concatenated, not interpolated: an interpolation mid-link leaves the denylist scanner a
+    // token it cannot parse.
     baseUrl: 'http://127.0.0.1:' + String(port) + '/v1',
-    // The fixture answers JSON on the success path, so the suite is told to hold the adapter
-    // to the native duty rather than skip it as unverified.
+    // The fixture answers JSON on the success path, so the adapter is held to the native duty
+    // rather than skipped as unverified.
     jsonMode: 'native',
   })
   const enter = (scenario) => () => {
@@ -242,9 +235,8 @@ async function runProviderSuite(state, port) {
     provider,
     requestFactory: () => ({
       prompt: 'reply with {"ok":true}',
-      // The model the fixture's own recorded response names: asking for anything else would
-      // have the backend answer with a body claiming to be a different model, and the check
-      // would be proving something nobody meant.
+      // The model the fixture's recorded response names; anything else and the backend would
+      // answer with a body claiming to be a different model.
       model: state.model,
       responseFormat: { type: 'text' },
       maxOutputTokens: 16,
@@ -273,17 +265,18 @@ function report(name, result, problems) {
   for (const skip of result.skipped) {
     problems.push(`${name}: '${skip}' was skipped, so it is unverified`)
   }
-  if (result.failures.length === 0 && result.skipped.length === 0) {
-    process.stdout.write(`${name}: passed, nothing skipped\n`)
+  if (result.failures.length > 0 || result.skipped.length > 0) return
+  // `passed` is the suite's verdict; empty lists are only this side's reading of it.
+  if (result.passed !== true) {
+    problems.push(`${name}: reported not passed without naming a failure`)
+    return
   }
+  process.stdout.write(`${name}: passed, nothing skipped\n`)
 }
 
 /**
- * Lets go of the database and the port when this process is asked to stop.
- *
- * An interrupted run must not sit on a connection to the schema its caller is about to drop,
- * and must not keep the listening socket. The schema itself is not touched here: the caller
- * owns it and drops it whichever way this process ended.
+ * Releases the pool and the listening socket when this process is asked to stop, so it is not
+ * holding a connection to the schema its caller is about to drop. The schema is the caller's.
  */
 function closeOnSignal(fixture, pool) {
   let stopping = false
@@ -294,8 +287,7 @@ function closeOnSignal(fixture, pool) {
       process.stderr.write(`the release check was stopped by ${signal}\n`)
       fixture.server.close()
       void pool.end().catch(() => undefined)
-      // A handler replaces the default disposition, so the exit has to be explicit; the code
-      // says the run proved nothing, which is what a stopped check did.
+      // A handler replaces the default disposition, so the exit must be explicit.
       process.exit(1)
     })
   }
@@ -333,9 +325,7 @@ async function main() {
   const template = JSON.parse(readFileSync(TEMPLATE, 'utf8'))
   const state = {
     template,
-    // The fixture answers with a recorded body, and that body names a model. Asking for any
-    // other one would have the backend contradict the request, so the model is read off the
-    // fixture rather than written down a second time.
+    // Read off the fixture rather than written down twice.
     model: template.model,
     scenario: 'success',
     unexpected: [],
@@ -363,8 +353,7 @@ async function main() {
       problems.push(`the fixture refused a provider call: ${unexpected}`)
     }
   } finally {
-    // The schema is left standing on purpose: the caller named it and drops it, on this path
-    // and on the ones where this process never reaches here at all.
+    // The schema is left standing: the caller named it and drops it.
     await pool.end().catch(() => undefined)
     await new Promise((done) => fixture.server.close(() => done(undefined)))
   }

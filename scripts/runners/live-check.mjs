@@ -76,19 +76,13 @@ function checkResponse(label, response, problems) {
   }
 }
 
-/**
- * Cancels the call in flight and stops when this process is asked to stop.
- *
- * The message names the signal and nothing else — the same rule as everywhere else in this
- * file, since a shutdown path is no place to start printing what a request contained.
- */
+/** Cancels the call in flight when this process is asked to stop. */
 function abortOnSignal(controller) {
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.on(signal, () => {
       process.stderr.write(`the live check was stopped by ${signal}\n`)
       controller.abort()
-      // A handler replaces the default disposition, so the exit has to be explicit; a stopped
-      // check verified nothing, which is a failure.
+      // A handler replaces the default disposition, so the exit must be explicit.
       process.exit(1)
     })
   }
@@ -142,8 +136,7 @@ async function main() {
   const prepared = await build[provider]().prepare()
 
   const problems = []
-  // One controller for the whole run, so an interrupt reaches the call in flight rather than
-  // leaving a provider answering a request nobody is waiting for any more.
+  // One controller for the whole run, so an interrupt reaches the call in flight.
   const inFlight = new AbortController()
   abortOnSignal(inFlight)
   const request = (prompt, responseFormat) => ({
@@ -179,14 +172,12 @@ async function main() {
   return problems.length === 0 ? 0 : 1
 }
 
-// Unconditionally: this file exists to be run. Deciding for itself whether it was the entry
-// point means comparing paths, and `import.meta.filename` has its symlinks resolved while
-// `process.argv[1]` does not — under a symlinked TMPDIR the two never match and the check
-// would quietly do nothing at all. What has to be importable lives in `./json-tolerance.mjs`.
+// Never gate this on an entry-point check: `import.meta.filename` is realpath-resolved and
+// `process.argv[1]` is not, so under a symlinked TMPDIR the runner would silently do nothing.
 try {
   process.exitCode = await main()
 } catch (error) {
-  // The catch-all path has no adapter to ask, so it says only what kind of failure it was.
+  // No adapter to ask here, so only the kind of failure is reported.
   process.stderr.write(
     `the live check could not run: ${error instanceof Error ? error.name : 'unknown failure'}\n`,
   )

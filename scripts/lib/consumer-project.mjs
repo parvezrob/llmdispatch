@@ -1,25 +1,21 @@
 /**
- * The scratch project a release check runs inside, and how a runner is executed there.
+ * The scratch project a release check installs a tarball into, and how a runner is executed
+ * there.
  *
- * Both release checks need the same three things and must not drift on any of them: a
- * throwaway directory outside the repository with the packed tarball installed into it, proof
- * that the installed bytes are that tarball's, and a runner that executes from inside the
- * project rather than from the working tree. What the runner then does — apply a migration,
- * call a provider — is the only part that differs.
- *
- * Nothing here is created inside the repository. A project under the working tree would find
+ * Projects are always created outside the repository: one under the working tree would find
  * the repository's own `node_modules` on the way up, and its resolution of `llmswitch` would
  * stop being evidence about the tarball.
  *
  * @module
  */
 
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 
 import { buildChildEnvironment } from './child-environment.mjs'
 import { checkInstalledIsTheTarball, unpackReference } from './installed-package.mjs'
+import { createSecretFilter } from './secret-filter.mjs'
 
 const ROOT = join(import.meta.dirname, '..', '..')
 /** The guard every runner needs, copied in beside it so it resolves from the project. */
@@ -31,36 +27,87 @@ const OUTPUT_LIMIT = 16 * 1024 * 1024
 const INSTALL_DEADLINE = 10 * 60_000
 
 /**
- * The exact version this repository has installed, as an install specifier.
+ * The lockfile entry a package at `fromPath` would reach by importing `name`, following Node
+ * resolution up the `node_modules` chain.
  *
- * The published package has no runtime dependencies, so a project that installs it still has
- * to be given the peer it declares and any driver the check needs. Those come from here rather
- * than from a second list, so a verification run exercises the same versions the package is
- * developed and tested against. A runner cannot read this itself: it runs in a project that
- * has no view of the repository's development dependencies.
- *
- * The version comes from the lockfile, not from the manifest's range. A range would have the
- * scratch project install whatever the registry serves that day, so two runs of the same check
- * on the same tarball could disagree and neither would be reproducible — which is most of what
- * a release check is for.
- *
- * @param name The package to look up.
- * @returns `name@version`, the one version this repository is developed against.
- * @throws `Error` when the repository does not declare it or the lockfile does not record it.
+ * @param lock The parsed `package-lock.json`.
+ * @param fromPath The lockfile key of the package doing the importing, `''` for the root.
+ * @param name The package being imported.
+ * @returns `{ path, entry }` for the entry that would be reached, or `null` when none is.
  */
-export function pinnedDevelopmentVersion(name) {
+function resolveFromLock(lock, fromPath, name) {
+  const segments = fromPath === '' ? [] : fromPath.split('/')
+  for (let depth = segments.length; depth >= 0; depth -= 1) {
+    const prefix = segments.slice(0, depth).join('/')
+    const path = prefix === '' ? `node_modules/${name}` : `${prefix}/node_modules/${name}`
+    const entry = lock.packages?.[path]
+    if (entry !== undefined) return { path, entry }
+  }
+  return null
+}
+
+/**
+ * Exact install specifiers for the named packages and their full transitive closure.
+ *
+ * Versions come from the lockfile, never from a manifest range, and the closure is pinned
+ * rather than the roots alone: pinning `pg` while its own dependencies resolve from the live
+ * registry would leave the check unreproducible. A name reached at two versions keeps the one
+ * found first, breadth-first from the roots.
+ *
+ * @param names The packages to pin, each of which the repository must declare.
+ * @returns `name@version` for every package in the closure, sorted, roots included.
+ * @throws `Error` when the repository does not declare one, when the lockfile does not record
+ * it, or when a required dependency cannot be resolved from it.
+ */
+export function pinnedDevelopmentClosure(names) {
   const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
-  if (typeof manifest.devDependencies?.[name] !== 'string') {
-    throw new Error(`the repository does not declare a development version of ${name}`)
-  }
   const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'))
-  const version = lock.packages?.[`node_modules/${name}`]?.version
-  if (typeof version !== 'string') {
-    throw new Error(
-      `package-lock.json records no installed version of ${name} — run \`npm install\``,
-    )
+
+  const pinned = new Map()
+  const queue = []
+  for (const name of names) {
+    if (typeof manifest.devDependencies?.[name] !== 'string') {
+      throw new Error(`the repository does not declare a development version of ${name}`)
+    }
+    const found = resolveFromLock(lock, '', name)
+    if (found === null || typeof found.entry.version !== 'string') {
+      throw new Error(
+        `package-lock.json records no installed version of ${name} — run \`npm install\``,
+      )
+    }
+    queue.push(found)
   }
-  return `${name}@${version}`
+
+  while (queue.length > 0) {
+    const next = queue.shift()
+    if (next === undefined) break
+    const { path, entry } = next
+    const name = path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length)
+    if (pinned.has(name)) continue
+    pinned.set(name, entry.version)
+
+    // Optional dependencies are followed only when the lockfile has them, as the install will
+    // do. Peer dependencies are left to npm.
+    for (const [dependency, optional] of [
+      [entry.dependencies, false],
+      [entry.optionalDependencies, true],
+    ]) {
+      for (const wanted of Object.keys(dependency ?? {})) {
+        if (pinned.has(wanted)) continue
+        const found = resolveFromLock(lock, path, wanted)
+        if (found === null || typeof found.entry.version !== 'string') {
+          if (optional) continue
+          throw new Error(
+            `package-lock.json does not resolve ${wanted}, required by ${name} — ` +
+              'run `npm install`',
+          )
+        }
+        queue.push(found)
+      }
+    }
+  }
+
+  return [...pinned].map(([name, version]) => `${name}@${version}`).sort()
 }
 
 /**
@@ -105,9 +152,12 @@ export function createConsumerProject(opts) {
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   )
-  if (install.status !== 0) {
+  if (install.status !== 0 || install.error !== undefined) {
+    // `error` is set when npm never started, overran the output limit or hit the deadline —
+    // cases that often produce no output at all.
+    const reason = install.error === undefined ? '' : `\n${install.error.message}`
     throw new Error(
-      `installing the tarball failed\n${install.stdout ?? ''}${install.stderr ?? ''}`,
+      `installing the tarball failed${reason}\n${install.stdout ?? ''}${install.stderr ?? ''}`,
     )
   }
 
@@ -124,42 +174,83 @@ export function createConsumerProject(opts) {
 /**
  * Runs a copied runner from inside the project, under the child environment allowlist.
  *
- * `process.execPath` rather than a shell: the runner must be the same Node this check is
- * running under, and no argument may ever be interpreted by anything.
- *
- * The runner's output goes straight to this process's own, as it is produced. A suite that
- * takes minutes should be watchable while it runs rather than arriving in one block at the
- * end, and a run that is killed at its deadline still leaves behind everything it had said up
- * to that point — which is exactly the output that says where it stopped. Runners are written
- * so that everything they print is safe to show: the live check redacts inside the process
- * that holds the credential, never in its parent.
+ * `process.execPath` rather than a shell, so the runner is the same Node and no argument is
+ * ever interpreted.
  *
  * @param project What `createConsumerProject` returned.
  * @param opts `script` is the runner's file name in the project; `args` are its arguments;
- *   `values` are further allowlisted environment names; `timeout` bounds the run.
- * @returns Whether it exited zero, and a note about how it ended when it did not.
+ *   `values` are further allowlisted environment names; `timeout` bounds the run; `redact`
+ *   are values to keep out of the child's output.
+ * @returns A promise for whether it exited zero, and a note about how it ended when it did not.
  */
 export function runInConsumerProject(project, opts) {
-  const result = spawnSync(
-    process.execPath,
-    [join(project.directory, opts.script), ...opts.args],
-    {
-      cwd: project.directory,
-      env: buildChildEnvironment(project.home, opts.values),
-      timeout: opts.timeout,
-      stdio: ['ignore', 'inherit', 'inherit'],
-    },
-  )
-  return describeRun(result)
+  return runChild({
+    command: process.execPath,
+    args: [join(project.directory, opts.script), ...opts.args],
+    cwd: project.directory,
+    env: buildChildEnvironment(project.home, opts.values),
+    timeout: opts.timeout,
+    redact: opts.redact ?? [],
+  })
 }
 
 /**
- * How a spawned check ended, in the two fields a caller needs.
+ * Spawns a child, streams its output through this process's, and waits for it to end.
  *
- * `error` covers the runner never starting and being stopped at its deadline; a signal covers
- * it being killed. Any of those means the run proved nothing, which is a failure, not a pass.
+ * Asynchronous because `spawnSync` blocks the event loop, which would leave signals sent to
+ * this process undispatched until the child had finished on its own. Output is streamed so a
+ * long or killed run is still watchable, and passes through `createSecretFilter` on the way.
  *
- * @param result What `spawnSync` returned.
+ * @param opts `command`, `args`, `cwd`, `env` and `timeout` are the spawn; `redact` are values
+ *   to remove from the child's output on the way through.
+ * @returns A promise for whether it exited zero, and a note about how it ended when it did not.
+ */
+export function runChild(opts) {
+  return new Promise((resolve) => {
+    const child = spawn(opts.command, opts.args, {
+      cwd: opts.cwd,
+      env: opts.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    const filters = [
+      { stream: child.stdout, filter: createSecretFilter(opts.redact, process.stdout) },
+      { stream: child.stderr, filter: createSecretFilter(opts.redact, process.stderr) },
+    ]
+    for (const { stream, filter } of filters) {
+      stream.on('data', (chunk) => {
+        filter.write(chunk)
+      })
+    }
+
+    // A child past its deadline has already failed, and may still hold a credential.
+    let expired = false
+    const deadline = setTimeout(() => {
+      expired = true
+      child.kill('SIGKILL')
+    }, opts.timeout)
+
+    let failure
+    child.on('error', (error) => {
+      failure = error
+    })
+    child.on('close', (status, signal) => {
+      clearTimeout(deadline)
+      for (const { filter } of filters) filter.end()
+      if (expired) {
+        resolve({ ok: false, note: `stopped after ${String(opts.timeout)}ms` })
+        return
+      }
+      resolve(describeRun({ error: failure, status, signal }))
+    })
+  })
+}
+
+/**
+ * How a spawned check ended. A spawn error or a killing signal means the run proved nothing,
+ * which is a failure rather than a pass.
+ *
+ * @param result The spawn's outcome: `error`, `status` and `signal`.
  * @returns Whether it exited zero, and a note about how it ended when it did not.
  */
 export function describeRun(result) {

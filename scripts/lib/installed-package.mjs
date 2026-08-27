@@ -14,13 +14,7 @@ export function hashFile(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex')
 }
 
-/**
- * Every path under `dir`, relative and sorted, so two trees hash the same way.
- *
- * Nothing is skipped. Skipping a directory on both sides would hide whatever is inside it from
- * the comparison, and this proof is the only thing standing between "the tarball was audited"
- * and "the audited bytes are what ran".
- */
+/** Every path under `dir`, relative, so two trees hash the same way. Nothing is skipped. */
 function listFiles(dir, prefix, found) {
   for (const entry of readdirSync(join(dir, prefix), { withFileTypes: true })) {
     const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`
@@ -68,18 +62,14 @@ const UNPACK_DEADLINE = 60_000
  * Unpacks the tarball once, so each project can be compared against the bytes that were
  * supposed to be installed rather than against whatever the registry happens to hold.
  *
- * @throws `Error` when the tarball ships a `node_modules`. Nothing is skipped when the trees
- * are hashed, so a published `node_modules` would be compared against whatever the package
- * manager put in the installed one and every project would fail with a message about swapped
- * bytes. A tarball like that is a packaging fault worth naming as itself — and one nobody
- * should be shipping either way.
+ * @throws `Error` when the tarball ships a `node_modules`. Trees are hashed whole, so one
+ * would be compared against whatever the package manager installed and fail as swapped bytes
+ * rather than as the packaging fault it is.
  */
 export function unpackReference(tarballPath, workspace) {
   const reference = join(workspace, 'reference')
   mkdirSync(reference, { recursive: true })
-  // Bounded and captured rather than inherited: the tarball is an input, and an input that
-  // makes `tar` sit there or write pages of its own to the terminal is a failure to report,
-  // not something to wait through.
+  // The tarball is untrusted input: bound the unpack and capture its output.
   execFileSync('tar', ['-xzf', tarballPath, '-C', reference], {
     stdio: 'pipe',
     timeout: UNPACK_DEADLINE,
@@ -96,8 +86,7 @@ export function unpackReference(tarballPath, workspace) {
     name: manifest.name,
     version: manifest.version,
     entryPoints: entryPoints(manifest),
-    // Everything the tarball ships, not `dist/` alone: the licence, the readme and the
-    // packaged documents are published bytes too, and a swap in any of them is a swap.
+    // Everything the tarball ships, not `dist/` alone.
     treeHash: hashTree(packageRoot),
   }
 }

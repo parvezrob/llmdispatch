@@ -16,8 +16,6 @@ describe('the live check reading a JSON answer', () => {
   })
 
   it('accepts an object a model wrapped in a code fence', () => {
-    // The JSON call is a prompt on the adapters with no native JSON mode, so this is what
-    // several models return however the prompt is worded.
     expect(problemsFor('```json\n{"ok": true}\n```')).toEqual([])
     expect(problemsFor('```\n{"ok": true}\n```')).toEqual([])
   })
@@ -46,6 +44,13 @@ describe('the live check reading a JSON answer', () => {
     expect(problemsFor('"ok"')).toEqual([
       'the JSON call: the output parsed, but not to a JSON object',
     ])
+  })
+
+  it('judges valid JSON as itself rather than looking inside it', () => {
+    expect(problemsFor('[{"ok":true}]')).toEqual([
+      'the JSON call: the output parsed, but not to a JSON object',
+    ])
+    expect(problemsFor('{"nested": {"ok": true}}')).toEqual([])
   })
 
   it('rejects output with no JSON in it at all', () => {

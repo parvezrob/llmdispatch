@@ -3,26 +3,15 @@
  * Verifies a packed tarball end to end, from outside the repository's own tree.
  *
  * The tarball is installed into a throwaway project, the installed bytes are checked against
- * it, and the check itself then runs from inside that project: it applies the packaged
- * migration to a real PostgreSQL in a schema of its own and runs all three conformance
- * harnesses — the two store suites against the installed PostgreSQL stores, the provider suite
- * against a fixture backend. There is no partial pass: a failing case and a skipped one both
- * end the run non-zero, because a release must not ship on an unverified classification.
+ * it, and the check runs from inside that project: it applies the packaged migration to a real
+ * PostgreSQL in a schema of its own and runs all three conformance suites. A skipped case
+ * fails the run as a failing one does — a release must not ship on an unverified
+ * classification. The suites `import` the package, so they exercise its ESM build; the
+ * CommonJS build is covered by the consumer fixtures.
  *
- * The suites import the package, so what they exercise is its ESM build. The CommonJS build is
- * not this check's subject: the workflow's consumer-fixture job installs the same audited
- * tarball into a `require`-shaped project and reaches every entry point from there.
- *
- * The database must be a throwaway on this machine. The migration creates and drops a schema,
- * and the store suites write and truncate; nothing about the run is safe to point at a
- * database anyone else is using, so the connection string is held to a literal IPv4 loopback
- * address with an explicit port, and refused if it carries a query or a fragment — several
- * parameters decide where a connection actually goes, and a fragment hides them from a parser
- * (see `lib/database-target.mjs`).
- *
- * The schema belongs to this process, not to the runner it starts. A runner that is killed
- * cannot tidy up after itself, so the schema is dropped from here on every path there is —
- * a pass, a failure, an exception, a deadline, or an interrupt.
+ * This process owns the schema and drops it on every exit path, including signals: the runner
+ * it starts can be killed and cannot be relied on to tidy up after itself. A drop that fails
+ * is reported and makes the run non-zero.
  *
  * Usage: node scripts/verify-release.mjs <path-to-tgz>
  * Needs `DATABASE_URL` in exactly one shape: postgres://user:password@127.0.0.1:port/database —
@@ -37,8 +26,8 @@
  *   npm run verify:release -- <path-to-tgz>
  *   docker rm -f llmswitch-verify-db
  *
- * The image is pinned by digest rather than by tag so two runs a month apart are the same
- * check. Exit codes: 0 verified, 1 a check failed, 2 wrong usage or a missing database.
+ * The image is pinned by digest so two runs a month apart are the same check.
+ * Exit codes: 0 verified, 1 a check failed, 2 wrong usage or a missing database.
  */
 
 import { randomBytes } from 'node:crypto'
@@ -50,7 +39,7 @@ import pg from 'pg'
 
 import {
   createConsumerProject,
-  pinnedDevelopmentVersion,
+  pinnedDevelopmentClosure,
   runInConsumerProject,
 } from './lib/consumer-project.mjs'
 import { describeUnusableDatabase } from './lib/database-target.mjs'
@@ -66,51 +55,47 @@ const CHECK_DEADLINE = 10 * 60_000
 const CLEANUP_DEADLINE = 30_000
 
 /**
- * What this run has created and is therefore responsible for removing.
+ * What this run created and must remove. `leftover` records a removal that failed, so the run
+ * cannot then report success.
  *
  * @type {{
  *   workspace: string | null
  *   schema: string | null
  *   databaseUrl: string | null
+ *   leftover: boolean
  * }}
  */
-const owned = { workspace: null, schema: null, databaseUrl: null }
+const owned = { workspace: null, schema: null, databaseUrl: null, leftover: false }
 
 /** The clean-up already under way, so a second caller waits for it instead of starting one. */
 let releasing = null
 
 /**
- * Drops the schema this run created and removes its workspace, once.
+ * Drops the schema and removes the workspace, once.
  *
- * Both are safe to attempt when they were never created, which is what makes this callable
- * from a signal handler as well as from the end of a run.
- *
- * It hands back a promise rather than setting a flag that says "already done", and that
- * matters: an interrupt arriving while the normal path is halfway through the drop has to
- * wait for that drop, not see a flag, decide there is nothing to do, and exit the process out
- * from under it.
+ * Returns the in-flight promise rather than a "done" flag so an interrupt arriving mid-drop
+ * waits for it instead of exiting the process out from under it.
  */
 function releaseWhatThisRunOwns() {
   releasing ??= release()
   return releasing
 }
 
-/**
- * The clean-up itself. Called once; everything else waits on the promise it returned.
- *
- * A schema that will not drop is named out loud, with the statement that removes it: it is the
- * one leftover a person has to deal with by hand, and a run that hid it would be leaving a
- * database dirty in silence.
- */
+/** The clean-up itself. Called once; everything else waits on the promise it returned. */
 async function release() {
   if (owned.schema !== null && owned.databaseUrl !== null) {
     const pool = new pg.Pool({
       connectionString: owned.databaseUrl,
       connectionTimeoutMillis: CLEANUP_DEADLINE,
+      // The connection timeout bounds reaching the server, not the statement: without these
+      // a drop waiting on a lock would hang the signal path.
+      statement_timeout: CLEANUP_DEADLINE,
+      query_timeout: CLEANUP_DEADLINE,
     })
     try {
       await pool.query(`DROP SCHEMA IF EXISTS "${owned.schema}" CASCADE`)
     } catch {
+      owned.leftover = true
       process.stderr.write(
         `the schema ${owned.schema} could not be dropped. If the run reached the database, ` +
           `it is still there — remove it with: DROP SCHEMA IF EXISTS "${owned.schema}" CASCADE\n`,
@@ -120,12 +105,11 @@ async function release() {
     }
   }
   if (owned.workspace !== null) {
-    // Caught for the same reason the drop above is: this runs from a signal handler and from
-    // the top-level catch, and it is the memoised promise everything else waits on. A throw
-    // here would reach nobody as a rejection and would take the messages above with it.
+    // A throw here would become an unhandled rejection through the memoised promise.
     try {
       rmSync(owned.workspace, { recursive: true, force: true })
     } catch {
+      owned.leftover = true
       process.stderr.write(`the directory ${owned.workspace} could not be removed\n`)
     }
   }
@@ -137,11 +121,22 @@ function cleanUpOnSignal() {
     process.on(signal, () => {
       process.stderr.write(`\nstopped by ${signal}; cleaning up\n`)
       void releaseWhatThisRunOwns().finally(() => {
-        // A handler replaces the default disposition, so the exit has to be explicit; the
-        // code says the run proved nothing, which is what a stopped check did.
+        // A handler replaces the default disposition, so the exit must be explicit.
         process.exit(1)
       })
     })
+  }
+}
+
+/**
+ * Drops every `PG*` name from this process's environment, so its pools connect on the
+ * connection string alone — as the children already do under their allowlist. The driver reads
+ * these as defaults, so an ambient `PGSSLMODE` or `PGPORT` could otherwise make the clean-up
+ * connect differently from the run it is cleaning up after.
+ */
+function forgetAmbientPostgresSettings() {
+  for (const name of Object.keys(process.env)) {
+    if (name.startsWith('PG')) Reflect.deleteProperty(process.env, name)
   }
 }
 
@@ -179,6 +174,7 @@ async function main() {
     process.stderr.write(`${unusable}\n`)
     return 2
   }
+  forgetAmbientPostgresSettings()
 
   const before = hashFile(tarball)
   cleanUpOnSignal()
@@ -189,23 +185,16 @@ async function main() {
       workspace: owned.workspace,
       name: 'consumer',
       tarballPath: tarball,
-      // The peer the package declares, and the driver it deliberately does not ship: a
-      // project that installs llmswitch has to bring both, so this one does too.
-      // `pg-connection-string` is pinned by name as well, though `pg` would bring it along
-      // anyway: it is what the guard above read the connection target out of, and the version
-      // that decided a string was safe should be the version that then connects with it.
-      packages: [
-        pinnedDevelopmentVersion('zod'),
-        pinnedDevelopmentVersion('pg'),
-        pinnedDevelopmentVersion('pg-connection-string'),
-      ],
+      // The declared peer, the driver the package does not ship, and the parser the guard
+      // above judged the connection string with — plus everything they require.
+      packages: pinnedDevelopmentClosure(['zod', 'pg', 'pg-connection-string']),
       files: [RUNNER, TEMPLATE],
     })
 
-    // A schema of this run's own, so a leftover from an interrupted run cannot be mistaken
-    // for what this one applied.
+    // A schema of this run's own, so a leftover from an interrupted run is never mistaken for
+    // what this one applied.
     owned.schema = `release_${randomBytes(4).toString('hex')}`
-    const check = runInConsumerProject(project, {
+    const check = await runInConsumerProject(project, {
       script: 'release-conformance.mjs',
       args: [owned.schema],
       values: { DATABASE_URL: databaseUrl },
@@ -219,6 +208,9 @@ async function main() {
   } finally {
     await releaseWhatThisRunOwns()
   }
+
+  // A run that could not remove what it created left a database dirty, whatever the suites said.
+  if (owned.leftover) return 1
 
   if (hashFile(tarball) !== before) {
     process.stdout.write('the tarball changed while it was being verified\n')
@@ -234,8 +226,7 @@ async function main() {
 try {
   process.exitCode = await main()
 } catch (error) {
-  // Nothing below main() is meant to throw, so this is the path where the check itself broke.
-  // It still has to clean up: an unhandled failure is exactly when a schema gets left behind.
+  // The check itself broke; it must still clean up.
   process.stderr.write(
     `the release check could not run: ${error instanceof Error ? error.message : 'unknown'}\n`,
   )
