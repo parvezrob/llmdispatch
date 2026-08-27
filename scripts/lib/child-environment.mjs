@@ -5,14 +5,23 @@
  * verification run proves, and a filter only removes the names someone thought of.
  */
 
-/** Every name a child may receive. Anything else is a mistake, not something to pass on. */
+/**
+ * Every name a child may receive. Anything else is a mistake, not something to pass on.
+ *
+ * The three provider keys are here so a live check can hand one child exactly one of them:
+ * the allowlist is what makes "only this provider's credential" a property of the code
+ * rather than of whoever remembered to unset the others.
+ */
 const ALLOWED = new Set([
   'PATH',
   'HOME',
   'CI',
   'NEXT_TELEMETRY_DISABLED',
+  'ANTHROPIC_API_KEY',
+  'GEMINI_API_KEY',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
+  'DATABASE_URL',
   'PORT',
   'HOST',
   'EXAMPLE_READY_TOKEN',

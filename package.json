@@ -88,6 +88,8 @@
     "licenses": "sh scripts/check-licenses.sh",
     "audit:tarball": "node scripts/audit-tarball.mjs",
     "test:consumers": "node scripts/test-consumers.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "live:providers": "node scripts/live-check-providers.mjs",
     "scan": "node scripts/scan-denylist.mjs",
     "docs:providers": "node scripts/build-provider-reference.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run depcruise && npm run build && node scripts/check-types-fixtures.mjs --target package && node scripts/check-spec-surface.mjs && npm run publint && npm run attw && npm run api:check && npm run size && node scripts/build-provider-reference.mjs --check && node scripts/check-docs-links.mjs && npm run test:coverage"
@@ -105,6 +107,7 @@
     "fast-check": "^4.9.0",
     "license-checker-rseidelsohn": "^5.0.1",
     "pg": "^8.23.0",
+    "pg-connection-string": "^2.14.0",
     "prettier": "^3.9.6",
     "publint": "^0.3.24",
     "tsdown": "^0.22.14",

@@ -648,6 +648,10 @@ export declare const MIGRATIONS: ReadonlyArray<{
 // All versions concatenated in order, idempotent, schema-rendered; sha256 covers the
 // exact aggregate sql bytes.
 export declare function migrationSql(opts?: { schema?: string }): { sql: string; sha256: string }
+// The comment every usage-protocol statement begins with. A harness that reaches the packaged
+// store only through an adopter-shaped pool recognises marked statements by it and substitutes
+// their trailing clock parameter (see the conformance note below).
+export declare const USAGE_STORE_MARKER: string
 
 // subpath: llmswitch/conformance
 export interface ConformanceResult { passed: boolean; failures: string[]; skipped: string[] }

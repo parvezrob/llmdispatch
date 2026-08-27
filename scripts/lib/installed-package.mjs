@@ -14,7 +14,7 @@ export function hashFile(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex')
 }
 
-/** Every path under `dir`, relative and sorted, so two trees hash the same way. */
+/** Every path under `dir`, relative, so two trees hash the same way. Nothing is skipped. */
 function listFiles(dir, prefix, found) {
   for (const entry of readdirSync(join(dir, prefix), { withFileTypes: true })) {
     const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`
@@ -55,21 +55,39 @@ function entryPoints(manifest) {
   return JSON.stringify(found)
 }
 
+/** A tarball is a few hundred kilobytes; anything slower than this is not unpacking. */
+const UNPACK_DEADLINE = 60_000
+
 /**
  * Unpacks the tarball once, so each project can be compared against the bytes that were
  * supposed to be installed rather than against whatever the registry happens to hold.
+ *
+ * @throws `Error` when the tarball ships a `node_modules`. Trees are hashed whole, so one
+ * would be compared against whatever the package manager installed and fail as swapped bytes
+ * rather than as the packaging fault it is.
  */
 export function unpackReference(tarballPath, workspace) {
   const reference = join(workspace, 'reference')
   mkdirSync(reference, { recursive: true })
-  execFileSync('tar', ['-xzf', tarballPath, '-C', reference], { stdio: 'inherit' })
+  // The tarball is untrusted input: bound the unpack and capture its output.
+  execFileSync('tar', ['-xzf', tarballPath, '-C', reference], {
+    stdio: 'pipe',
+    timeout: UNPACK_DEADLINE,
+  })
   const packageRoot = join(reference, 'package')
+  const bundled = listFiles(packageRoot, '', []).find(
+    (path) => path === 'node_modules' || path.startsWith('node_modules/'),
+  )
+  if (bundled !== undefined) {
+    throw new Error(`the tarball ships a node_modules directory (${bundled})`)
+  }
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
   return {
     name: manifest.name,
     version: manifest.version,
     entryPoints: entryPoints(manifest),
-    distHash: hashTree(join(packageRoot, 'dist')),
+    // Everything the tarball ships, not `dist/` alone.
+    treeHash: hashTree(packageRoot),
   }
 }
 
@@ -93,8 +111,7 @@ export function checkInstalledIsTheTarball(project, reference, name, problems) {
   if (entryPoints(manifest) !== reference.entryPoints) {
     problems.push(`${name}: the installed package points at different entry points`)
   }
-  const dist = join(installed, 'dist')
-  if (!existsSync(dist) || hashTree(dist) !== reference.distHash) {
-    problems.push(`${name}: the installed dist/ is not the one in the tarball`)
+  if (hashTree(installed) !== reference.treeHash) {
+    problems.push(`${name}: the installed files are not the ones in the tarball`)
   }
 }

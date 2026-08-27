@@ -20,7 +20,11 @@ describe('entry points', () => {
       'openaiCompatible',
       'postgresStores',
     ])
-    expect(Object.keys(postgres).sort()).toEqual(['MIGRATIONS', 'migrationSql'])
+    expect(Object.keys(postgres).sort()).toEqual([
+      'MIGRATIONS',
+      'USAGE_STORE_MARKER',
+      'migrationSql',
+    ])
     expect(Object.keys(conformance).sort()).toEqual([
       'runConfigStoreConformance',
       'runProviderConformance',
