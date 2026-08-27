@@ -4,7 +4,6 @@
 
 Works with any Node.js server framework — Next.js, Express, Fastify, or none at all. No proxy to deploy, no SaaS to sign up for. It's a library: `npm install`, wire it to your database, done.
 
-> 🚧 **Pre-release.** v0.1 is under active development — the package is not on npm yet. This README introduces the design; the exact, testable contracts live in **[docs/spec.md](./docs/spec.md)**. Watch the repo for the release.
 
 ## Why
 
