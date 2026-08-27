@@ -24,6 +24,7 @@ const ALLOWED_FILES = new Set([
   'package.json',
   'README.md',
   'LICENSE',
+  'docs/guide.md',
   'docs/providers.md',
   'docs/spec.md',
 ])
@@ -33,6 +34,7 @@ const REQUIRED_FILES = [
   'package.json',
   'README.md',
   'LICENSE',
+  'docs/guide.md',
   'docs/providers.md',
   'docs/spec.md',
 ]

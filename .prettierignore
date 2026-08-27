@@ -12,6 +12,7 @@ test/types/spec-surface*.d.ts
 # The published documents are edited as prose and kept byte-for-byte as written; the
 # provider reference is generated and byte-compared by its drift gate.
 README.md
+docs/guide.md
 docs/spec.md
 docs/providers.md
 LICENSE
