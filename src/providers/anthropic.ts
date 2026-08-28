@@ -22,12 +22,17 @@ import {
   classifyByStatusFamily,
 } from './transport'
 
-const ENDPOINT = 'https://api.anthropic.com/v1/messages'
+const DEFAULT_BASE = 'https://api.anthropic.com'
 const VERSION = '2023-06-01'
 const DEFAULT_MAX_TOKENS = 4096
 
+function normalizeBase(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '')
+}
+
 /** Builds an Anthropic Messages provider. Keys resolve in `prepare()`, not at construction. */
-export function anthropic(opts: { apiKey: ApiKeyResolver }): Provider {
+export function anthropic(opts: { apiKey: ApiKeyResolver; baseUrl?: string }): Provider {
+  const endpoint = `${normalizeBase(opts.baseUrl ?? DEFAULT_BASE)}/v1/messages`
   return {
     async prepare(): Promise<PreparedProvider> {
       const key = await opts.apiKey()
@@ -37,7 +42,7 @@ export function anthropic(opts: { apiKey: ApiKeyResolver }): Provider {
       const apiKey = key
       return {
         complete(req: ProviderRequest): Promise<ProviderResponse> {
-          return completeAnthropic(apiKey, req)
+          return completeAnthropic(apiKey, endpoint, req)
         },
       }
     },
@@ -63,6 +68,7 @@ function anthropicContent(parts: readonly ContentPart[]): string | unknown[] {
 
 async function completeAnthropic(
   apiKey: string,
+  endpoint: string,
   req: ProviderRequest,
 ): Promise<ProviderResponse> {
   const body: Record<string, unknown> = {
@@ -74,7 +80,7 @@ async function completeAnthropic(
     body.temperature = Math.min(1, Math.max(0, req.temperature))
   }
 
-  const http = await fetchJson(ENDPOINT, {
+  const http = await fetchJson(endpoint, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

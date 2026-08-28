@@ -161,7 +161,7 @@ export declare class ProviderError extends Error {
 }
 
 // built-in factories (fetch-based, zero dependencies; implement prepare(); wire contracts §5c)
-export declare function anthropic(opts: { apiKey: ApiKeyResolver }): Provider
+export declare function anthropic(opts: { apiKey: ApiKeyResolver; baseUrl?: string }): Provider
 export declare function openaiCompatible(opts: {
   apiKey: ApiKeyResolver
   baseUrl?: string

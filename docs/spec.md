@@ -365,9 +365,10 @@ Errors ([OpenAI error codes](https://developers.openai.com/api/docs/guides/error
 400/413/422 → `invalid_request`; unparseable body → classify by status; unknown status →
 `transient` (a real HTTP outcome, unlike unclassified thrown values).
 
-**`anthropic({ apiKey })`, native Messages API.** `POST
-https://api.anthropic.com/v1/messages`; **`x-api-key`** + required
-**`anthropic-version: 2023-06-01`**. ([Anthropic Messages](https://docs.anthropic.com/en/api/messages);
+**`anthropic({ apiKey, baseUrl? })`, native Messages API.** Default `baseUrl`
+`https://api.anthropic.com`; `POST {baseUrl}/v1/messages`; **`x-api-key`** + required
+**`anthropic-version: 2023-06-01`**. A non-default `baseUrl` promises this wire format,
+not any third-party host's fidelity to it. ([Anthropic Messages](https://docs.anthropic.com/en/api/messages);
 the OpenAI-compat layer is not used: it ignores `response_format` and is documented as a
 testing tool: [Anthropic OpenAI SDK compat](https://docs.anthropic.com/en/api/openai-sdk))
 Request: `model`, `max_tokens` (**always sent**, required by Anthropic; default 4096 when
@@ -592,7 +593,7 @@ export declare class ProviderError extends Error {
 }
 
 // built-in factories (fetch-based, zero dependencies; implement prepare(); wire contracts §5c)
-export declare function anthropic(opts: { apiKey: ApiKeyResolver }): Provider
+export declare function anthropic(opts: { apiKey: ApiKeyResolver; baseUrl?: string }): Provider
 export declare function openaiCompatible(opts: {
   apiKey: ApiKeyResolver
   baseUrl?: string
