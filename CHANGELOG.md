@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.0
+
+### Minor Changes
+
+- 70ef8be: `anthropic()` accepts a `baseUrl`, defaulting to `https://api.anthropic.com`, so Anthropic-format endpoints on other hosts are reachable the same way OpenAI-compatible ones already are.
+- 078078b: The provider conformance suite can now verify document and image handling.
+  `runProviderConformance` takes two further optional scenarios, `document` and `image`, plus
+  a `requests` map supplying the request each one dispatches. Both halves are needed: a
+  scenario without its request, or a request without its scenario, stays in `skipped` like
+  any other unverified case. A media scenario that does run has to dispatch a request
+  carrying a file part of that media class — `application/pdf` for `document`, an `image/*`
+  type for `image` — and come back complete, so a text-only request fails it rather than
+  passing it.
+- b7c7107: Requests can now carry documents and images alongside text. An operation's `prompt` may
+  return an array of content parts — `{ type: 'text', text }` and `{ type: 'file', mediaType,
+data, filename? }`, with `data` as base64 and `mediaType` one of `application/pdf`,
+  `image/jpeg`, `image/png`, `image/webp` or `image/gif` — instead of a string. Returning a
+  string still works and is unchanged: it normalizes to a single text part, so every existing
+  operation runs as it did. Parts are validated and frozen before a quota slot is reserved: a
+  malformed part raises a `TypeError`, and file payload over 15,000,000 base64 characters
+  raises a `RangeError`, neither of which ever names your file's bytes or filename.
+
+  **Breaking for custom `Provider` implementations.** `ProviderRequest.prompt: string` is
+  replaced by `ProviderRequest.parts: readonly ContentPart[]`. An adapter that read
+  `req.prompt` reads the text of the single text part instead. The built-in Anthropic,
+  OpenAI-compatible and Gemini adapters send exactly the body they sent before for a
+  text-only request.
+
 ## 0.1.1
 
 ### Patch Changes
