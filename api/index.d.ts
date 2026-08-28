@@ -50,6 +50,7 @@ declare class ProviderError extends Error {
 /** Builds an Anthropic Messages provider. Keys resolve in `prepare()`, not at construction. */
 declare function anthropic(opts: {
   apiKey: ApiKeyResolver;
+  baseUrl?: string;
 }): Provider;
 //#endregion
 //#region src/providers/openai-compatible.d.ts

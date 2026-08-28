@@ -29,11 +29,26 @@ const OK_BODY = {
 }
 
 describe('request shape', () => {
-  it('posts to the fixed Messages endpoint', async () => {
+  // A wrong baseUrl join or a missing trailing-slash strip sends every request to a 404.
+  it.each([
+    ['default baseUrl', undefined, 'https://api.anthropic.com/v1/messages'],
+    [
+      'custom baseUrl, no trailing slash',
+      'https://example.com/anthropic',
+      'https://example.com/anthropic/v1/messages',
+    ],
+    [
+      'custom baseUrl, trailing slash',
+      'https://example.com/anthropic/',
+      'https://example.com/anthropic/v1/messages',
+    ],
+  ])('posts to the Messages endpoint: %s', async (_label, baseUrl, expectedUrl) => {
     const { requests } = captureRequests(() => jsonResponse(200, OK_BODY))
-    const run = await complete()
+    const run = await withPrepared(
+      anthropic({ apiKey: KEY, ...(baseUrl === undefined ? {} : { baseUrl }) }),
+    )
     await run(baseRequest())
-    expect(requests[0]!.url).toBe('https://api.anthropic.com/v1/messages')
+    expect(requests[0]!.url).toBe(expectedUrl)
     expect(requests[0]!.method).toBe('POST')
   })
 
