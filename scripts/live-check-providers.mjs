@@ -44,13 +44,16 @@ const USAGE = 'usage: live-check-providers.mjs [--release <path-to-tgz>]\n'
 /**
  * The adapters, each with the credential it needs and the model it is checked on.
  *
- * The models are the smallest each provider offers, and the runner asks for a handful of
- * tokens: a full run should cost a fraction of a cent. Change them here when a provider
- * retires one: nowhere else names a model.
+ * The models are the smallest each provider offers that handle every checked modality,
+ * and the runner asks for a handful of tokens: a full run should cost a fraction of a
+ * cent. Change them here when a provider retires one: nowhere else names a model.
+ * gpt-4.1-nano and gpt-4.1-mini are out: OpenAI silently drops image parts for both
+ * (verified against the raw endpoint — the request carries the image, the reported
+ * prompt tokens show it never reached the model), so they cannot pass the image check.
  */
 const PROVIDERS = [
   { name: 'anthropic', key: 'ANTHROPIC_API_KEY', model: 'claude-haiku-4-5' },
-  { name: 'openai-compatible', key: 'OPENAI_API_KEY', model: 'gpt-4.1-nano' },
+  { name: 'openai-compatible', key: 'OPENAI_API_KEY', model: 'gpt-4o-mini' },
   { name: 'gemini', key: 'GEMINI_API_KEY', model: 'gemini-3.5-flash-lite' },
 ]
 
