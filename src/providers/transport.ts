@@ -124,3 +124,28 @@ export function buildUsage(
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+
+/** The raster types a generated image may come back as (spec §6). */
+export const GENERATED_IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+
+const BASE64_ALPHABET = /^[A-Za-z0-9+/]+$/
+const TRAILING_PADDING = /={1,2}$/
+
+/**
+ * Whether generated image data is base64 under the §6 grammar: non-empty, standard
+ * alphabet, a multiple of four characters, `=` only as one or two trailing characters.
+ * Stripping the padding first is what bounds it to the trailing position; the alphabet then
+ * rejects whitespace and a data-URL prefix along with everything else outside it.
+ *
+ * The request side keeps the same rule in `core/parts.ts`, which an adapter may not import
+ * (`.dependency-cruiser.cjs`); this is the one response-side copy, shared by the adapters so
+ * an image that cannot be decoded is `malformed_response` on every wire.
+ */
+export function isWireBase64(data: unknown): data is string {
+  if (typeof data !== 'string' || data === '' || data.length % 4 !== 0) return false
+  return BASE64_ALPHABET.test(data.replace(TRAILING_PADDING, ''))
+}

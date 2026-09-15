@@ -8,21 +8,31 @@ import { ProviderError } from '../errors'
 import type {
   ApiKeyResolver,
   ContentPart,
+  ImageOptions,
   PreparedProvider,
   Provider,
+  ProviderImage,
   ProviderRequest,
   ProviderResponse,
+  TokenUsage,
 } from '../types'
 import {
+  asTokenCount,
   buildUsage,
   classifyByStatusFamily,
   fetchJson,
+  GENERATED_IMAGE_MEDIA_TYPES,
   isRecord,
+  isWireBase64,
   throwForStatus,
 } from './transport'
 
 const HOST = 'https://generativelanguage.googleapis.com/v1beta'
 
+/**
+ * Every finish reason that means the model declined (§5c). The three `IMAGE_*` reasons only
+ * arise in image mode, and a text run that ever saw one would mean the same thing.
+ */
 const REFUSED_REASONS = new Set([
   'SAFETY',
   'RECITATION',
@@ -31,7 +41,15 @@ const REFUSED_REASONS = new Set([
   'SPII',
   'ESCALATION',
   'LANGUAGE',
+  'IMAGE_SAFETY',
+  'IMAGE_PROHIBITED_CONTENT',
+  'IMAGE_RECITATION',
 ])
+
+/** The one classification this adapter throws for a response it cannot read (§5c). */
+function malformed(status: number): never {
+  throw new ProviderError('malformed_response', { status })
+}
 
 /** Builds a Gemini generateContent provider. Keys resolve in `prepare()`. */
 export function gemini(opts: { apiKey: ApiKeyResolver }): Provider {
@@ -66,10 +84,13 @@ function geminiParts(parts: readonly ContentPart[]): unknown[] {
 }
 
 async function completeGemini(apiKey: string, req: ProviderRequest): Promise<ProviderResponse> {
-  // Transitional (spec §5c): this adapter maps no image wire, so an image request is
-  // rejected before any network call; the quota slot the run took is still consumed.
-  if (req.responseFormat.type === 'image') {
-    throw new ProviderError('invalid_request', { message: 'image output is not supported' })
+  const image = req.responseFormat.type === 'image' ? req.responseFormat : null
+  // No model in this image family produces an alpha channel (§5c), so the one knob the wire
+  // cannot express is rejected before any network call; the quota slot is still consumed.
+  if (image?.background === 'transparent') {
+    throw new ProviderError('invalid_request', {
+      message: 'transparent background is not supported',
+    })
   }
   const url = `${HOST}/models/${encodeURIComponent(req.model)}:generateContent`
   const generationConfig: Record<string, unknown> = {}
@@ -78,6 +99,7 @@ async function completeGemini(apiKey: string, req: ProviderRequest): Promise<Pro
   if (req.responseFormat.type === 'json' && req.responseFormat.topLevel === 'object') {
     generationConfig.responseMimeType = 'application/json'
   }
+  if (image !== null) addImageConfig(generationConfig, image)
 
   const body: Record<string, unknown> = {
     contents: [{ role: 'user', parts: geminiParts(req.parts) }],
@@ -100,55 +122,151 @@ async function completeGemini(apiKey: string, req: ProviderRequest): Promise<Pro
     throwGeminiError(http.status, http.body)
   }
 
-  if (!isRecord(http.body)) {
-    throw new ProviderError('malformed_response', { status: http.status })
-  }
+  if (!isRecord(http.body)) malformed(http.status)
 
-  const feedback = isRecord(http.body.promptFeedback) ? http.body.promptFeedback : null
-  if (feedback?.blockReason != null) {
-    return { kind: 'refused', text: '', usage: readGeminiUsage(http.body.usageMetadata) }
-  }
-
-  const candidates = http.body.candidates
-  if (!Array.isArray(candidates) || candidates.length === 0) {
-    throw new ProviderError('malformed_response', { status: http.status })
-  }
-  const first: unknown = candidates[0]
-  if (!isRecord(first)) {
-    throw new ProviderError('malformed_response', { status: http.status })
-  }
-  const candidate = first
-
-  const text = readGeminiText(candidate)
   const usage = readGeminiUsage(http.body.usageMetadata)
-  const finish = candidate.finishReason
+  const feedback = isRecord(http.body.promptFeedback) ? http.body.promptFeedback : null
+  if (feedback?.blockReason != null) return { kind: 'refused', text: '', usage }
+
+  const raw: unknown = http.body.candidates
+  if (!Array.isArray(raw) || raw.length === 0) malformed(http.status)
+  const candidates = raw as readonly unknown[]
+  if (image !== null) return readImageResponse(candidates, usage, http.status)
+
+  // Text and JSON mode read one candidate, as they always have: `candidateCount` is an
+  // image-mode field, so nothing else can ask for more than one.
+  const first: unknown = candidates[0]
+  if (!isRecord(first)) malformed(http.status)
+  const text = readGeminiText([first])
+  const finish = first.finishReason
 
   if (finish === 'MAX_TOKENS') return { kind: 'truncated', text, usage }
   if (typeof finish === 'string' && REFUSED_REASONS.has(finish)) {
     return { kind: 'refused', text, usage }
   }
   if (finish === 'STOP') return { kind: 'complete', text, usage }
-  throw new ProviderError('malformed_response', { status: http.status })
+  malformed(http.status)
 }
 
-function readGeminiText(candidate: Record<string, unknown>): string {
+/** The image-mode request fields (§5c): the modalities always, each knob only when set. */
+function addImageConfig(generationConfig: Record<string, unknown>, image: ImageOptions): void {
+  generationConfig.responseModalities = ['TEXT', 'IMAGE']
+  const imageConfig: Record<string, unknown> = {}
+  if (image.aspectRatio !== undefined) imageConfig.aspectRatio = image.aspectRatio
+  if (image.size !== undefined) imageConfig.imageSize = image.size
+  if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig
+  if (image.count !== undefined) generationConfig.candidateCount = image.count
+}
+
+/**
+ * Image mode (§5c): every candidate's finish reason is read before any content, under one
+ * precedence over all of them. A `STOP` candidate contributes its images and its text; a
+ * `NO_IMAGE` candidate contributes nothing, so an all-`NO_IMAGE` response is complete with
+ * no images and the core records the output rejection. With one candidate this is exactly
+ * the text-mode rule.
+ */
+function readImageResponse(
+  candidates: readonly unknown[],
+  usage: TokenUsage | null,
+  status: number,
+): ProviderResponse {
+  const records: Record<string, unknown>[] = []
+  let refused = false
+  let truncated = false
+  let unmappable = false
+  for (const candidate of candidates) {
+    // A candidate that is not a record states no terminal state to weigh, so it settles the
+    // response on its own rather than joining the precedence below.
+    if (!isRecord(candidate)) malformed(status)
+    records.push(candidate)
+    const finish = candidate.finishReason
+    if (typeof finish === 'string' && REFUSED_REASONS.has(finish)) refused = true
+    else if (finish === 'MAX_TOKENS') truncated = true
+    else if (finish !== 'STOP' && finish !== 'NO_IMAGE') unmappable = true
+  }
+  // A refusal or a truncation carries text only, so every candidate's text goes with it.
+  if (refused) return { kind: 'refused', text: readGeminiText(records), usage }
+  if (truncated) return { kind: 'truncated', text: readGeminiText(records), usage }
+  if (unmappable) malformed(status)
+  const contributing = records.filter((candidate) => candidate.finishReason === 'STOP')
+  const images = readGeminiImages(contributing, status)
+  return { kind: 'complete', text: readGeminiText(contributing), images, usage }
+}
+
+/**
+ * Every inline image part of the given candidates, in order, without dimensions: the core
+ * reads those from the image header (§3 point 4b). ProtoJSON prints the camelCase spelling
+ * on output and accepts the snake_case one, so both are read. Anything else on an inline
+ * part is a response this adapter cannot map.
+ */
+function readGeminiImages(
+  candidates: readonly Record<string, unknown>[],
+  status: number,
+): ProviderImage[] {
+  const images: ProviderImage[] = []
+  for (const candidate of candidates) {
+    for (const part of candidateParts(candidate)) {
+      if (!isRecord(part)) malformed(status)
+      const inline = part.inlineData === undefined ? part.inline_data : part.inlineData
+      if (inline === undefined) continue
+      if (!isRecord(inline)) malformed(status)
+      const mediaType = inline.mimeType === undefined ? inline.mime_type : inline.mimeType
+      const data: unknown = inline.data
+      if (typeof mediaType !== 'string' || !GENERATED_IMAGE_MEDIA_TYPES.has(mediaType)) {
+        malformed(status)
+      }
+      if (!isWireBase64(data)) malformed(status)
+      images.push({ mediaType: mediaType as ProviderImage['mediaType'], data })
+    }
+  }
+  return images
+}
+
+/** One candidate's `content.parts`, or none when it carries no readable content. */
+function candidateParts(candidate: Record<string, unknown>): readonly unknown[] {
   const content = isRecord(candidate.content) ? candidate.content : null
-  const parts = content !== null && Array.isArray(content.parts) ? content.parts : []
+  if (content === null || !Array.isArray(content.parts)) return []
+  return content.parts as readonly unknown[]
+}
+
+/** The text parts of the given candidates, in order, concatenated (§5c). */
+function readGeminiText(candidates: readonly Record<string, unknown>[]): string {
   const chunks: string[] = []
-  for (const part of parts) {
-    if (isRecord(part) && typeof part.text === 'string') chunks.push(part.text)
+  for (const candidate of candidates) {
+    for (const part of candidateParts(candidate)) {
+      if (isRecord(part) && typeof part.text === 'string') chunks.push(part.text)
+    }
   }
   return chunks.join('')
 }
 
-function readGeminiUsage(raw: unknown) {
+function readGeminiUsage(raw: unknown): TokenUsage | null {
   if (!isRecord(raw)) return null
-  return buildUsage(
+  const usage = buildUsage(
     raw.promptTokenCount,
     raw.candidatesTokenCount,
     [],
     [raw.thoughtsTokenCount],
   )
+  if (usage === null) return null
+  const imageOutputTokens = readImageTokens(raw.candidatesTokensDetails)
+  if (imageOutputTokens === null || imageOutputTokens > usage.outputTokens) return usage
+  return { ...usage, imageOutputTokens }
+}
+
+/**
+ * The image share of the output tokens (§5c): the first `candidatesTokensDetails` entry
+ * reporting the `IMAGE` modality. An entry that is not a count leaves the split absent, the
+ * way an absent entry does, so the core prices the attempt with no image rate rather than
+ * with a guessed one.
+ */
+function readImageTokens(details: unknown): number | null {
+  if (!Array.isArray(details)) return null
+  for (const entry of details as readonly unknown[]) {
+    if (!isRecord(entry) || entry.modality !== 'IMAGE') continue
+    return asTokenCount(entry.tokenCount)
+  }
+  return null
 }
 
 function throwGeminiError(status: number, body: unknown): never {
