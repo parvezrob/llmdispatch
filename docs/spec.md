@@ -149,10 +149,12 @@ Per-operation resolution matrix:
    (22.5 MB decoded), classifies `malformed_response`. Both are payload bounds on what came
    back, not restatements of the `image.count` knob, which is why the count ceiling sits well
    above it: one provider candidate may carry several images for a single requested one. The
-   per-image ceiling is a safety bound against a runaway payload, deliberately larger than
-   the request-side file cap, so that a 4K output, which the caller has already paid for,
-   fits comfortably at the output sizes the §5c adapters document. The frozen array is the
-   candidate → `output.parseAsync`. **Zero images is an output rejection**
+   per-image ceiling is a safety bound against a runaway payload, set well above the
+   request-side file cap; a generated image beyond it classifies `malformed_response`. Both
+   caps bound the grammar and header work the core does, not the download, which the
+   transport has already finished by the time they apply, so they are set independently of
+   any transfer limit. The frozen array is the candidate → `output.parseAsync`. **Zero images
+   is an output rejection**
    (fallback-eligible), the image analogue of a JSON parse failure. `images` is never read
    for a `text`/`json`/`json-any` operation.
 5. `JSON.parse` failure, object-shape failure, zero images, or `ZodError` → output rejection
@@ -487,7 +489,9 @@ part, a non-string `data`, `data` outside the §6 base64 grammar, a `parts[]` en
 not an object, an `inlineData`/`inline_data` value that is not an object, and a contributing
 candidate whose `content` is absent or whose `content.parts` is not an array: a candidate
 that said `STOP` and then stated no content is a shape failure, not an answer with nothing
-in it. Text: on a refusal or a truncation the text of every candidate is concatenated; on a
+in it. The adapter applies the two §3 point 4b caps before its own grammar check, so an
+oversized part costs a length read on this wire as well, not a scan the core would then
+repeat. Text: on a refusal or a truncation the text of every candidate is concatenated; on a
 complete response only the contributing candidates' text is.
 Usage: the base counters as above, plus, **in image mode only**, `imageOutputTokens` from
 the first `usageMetadata.candidatesTokensDetails` entry whose `modality` is `'IMAGE'`, when
