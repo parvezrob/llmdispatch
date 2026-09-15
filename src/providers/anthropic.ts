@@ -71,6 +71,11 @@ async function completeAnthropic(
   endpoint: string,
   req: ProviderRequest,
 ): Promise<ProviderResponse> {
+  // Transitional (spec §5c): this adapter maps no image wire, so an image request is
+  // rejected before any network call; the quota slot the run took is still consumed.
+  if (req.responseFormat.type === 'image') {
+    throw new ProviderError('invalid_request', { message: 'image output is not supported' })
+  }
   const body: Record<string, unknown> = {
     model: req.model,
     max_tokens: req.maxOutputTokens ?? DEFAULT_MAX_TOKENS,

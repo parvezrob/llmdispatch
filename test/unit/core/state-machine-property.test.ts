@@ -8,11 +8,15 @@
 
 import { getEventListeners } from 'node:events'
 import fc from 'fast-check'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+import { z } from 'zod'
 
 import { LLMDispatchError, ProviderError } from '../../../src/errors'
-import type { ProviderResponse } from '../../../src/types'
-import { fixture, flushMicrotasks, grantFor, observe } from './helpers'
+import { imageOutputSchema } from '../../../src/core/image-output'
+import type { AttemptRecord, ProviderResponse, TokenUsage } from '../../../src/types'
+import { providerImage } from './image-fixtures'
+import { fixture, flushMicrotasks, grantFor, observe, ECHO_OUTPUT } from './helpers'
 
 const ARGS = { input: { text: 'hi' }, subjectId: 'u' }
 
@@ -20,6 +24,7 @@ const ARGS = { input: { text: 'hi' }, subjectId: 'u' }
 type AttemptScript =
   | 'success'
   | 'bad-json'
+  | 'malformed-image'
   | 'truncated'
   | 'refused'
   | 'transient'
@@ -44,7 +49,14 @@ const OUTCOME_MEANING: Record<string, { code: LLMDispatchError['code']; retryabl
     provider_unclassified: { code: 'PROVIDER_FAILED', retryable: false },
   }
 
+/** The output format axis; each format runs with the schema that matches it. */
+type Format = 'json' | 'text' | 'image'
+
 interface Scenario {
+  format: Format
+  /** Whether usage-bearing attempts report the image split, and whether the price has a rate. */
+  split: 'none' | 'zero' | 'some'
+  rate: boolean
   reserve: 'grant' | 'deny' | 'reject'
   commits: ('committed' | 'expired' | 'missing' | 'reject')[]
   primary: AttemptScript
@@ -54,6 +66,9 @@ interface Scenario {
 }
 
 const scenarioArb: fc.Arbitrary<Scenario> = fc.record({
+  format: fc.constantFrom('json', 'text', 'image'),
+  split: fc.constantFrom('none', 'zero', 'some'),
+  rate: fc.boolean(),
   reserve: fc.constantFrom('grant', 'deny', 'reject'),
   commits: fc.array(fc.constantFrom('committed', 'expired', 'missing', 'reject'), {
     minLength: 1,
@@ -62,6 +77,7 @@ const scenarioArb: fc.Arbitrary<Scenario> = fc.record({
   primary: fc.constantFrom(
     'success',
     'bad-json',
+    'malformed-image',
     'truncated',
     'refused',
     'transient',
@@ -73,6 +89,7 @@ const scenarioArb: fc.Arbitrary<Scenario> = fc.record({
   fallback: fc.constantFrom(
     'success',
     'bad-json',
+    'malformed-image',
     'refused',
     'transient',
     'auth',
@@ -82,23 +99,43 @@ const scenarioArb: fc.Arbitrary<Scenario> = fc.record({
   abortAt: fc.constantFrom('never', 'reserve', 'commit', 'primary', 'fallback'),
 })
 
-function scriptAttempt(script: AttemptScript): () => ProviderResponse {
+/** The usage a usage-bearing attempt reports under the scenario's split axis. */
+function usageFor(scenario: Scenario): TokenUsage {
+  if (scenario.split === 'none') return { inputTokens: 1, outputTokens: 1 }
+  return {
+    inputTokens: 1,
+    outputTokens: 1,
+    imageOutputTokens: scenario.split === 'some' ? 1 : 0,
+  }
+}
+
+/**
+ * The same script name means the format's analogue: `bad-json` is unparseable JSON, plain
+ * text that the text schema accepts, or an empty image list; `malformed-image` is a stray
+ * `images` property that only the image format ever reads.
+ */
+function scriptAttempt(script: AttemptScript, scenario: Scenario): () => ProviderResponse {
+  const usage = usageFor(scenario)
+  const images = [
+    providerImage('image/png'),
+    providerImage('image/jpeg', 2, 3),
+    providerImage('image/webp', 4, 5),
+  ].slice(0, 1 + (scenario.commits.length % 3))
   return () => {
     switch (script) {
       case 'success':
+        return { kind: 'complete', text: '{"answer":"ok"}', usage, images }
+      case 'bad-json':
+        return { kind: 'complete', text: 'not json', usage, images: [] }
+      case 'malformed-image':
         return {
           kind: 'complete',
           text: '{"answer":"ok"}',
-          usage: { inputTokens: 1, outputTokens: 1 },
-        }
-      case 'bad-json':
-        return {
-          kind: 'complete',
-          text: 'not json',
-          usage: { inputTokens: 1, outputTokens: 1 },
+          usage,
+          images: [{ mediaType: 'image/png', data: 'AAAA' }],
         }
       case 'truncated':
-        return { kind: 'truncated', text: '', usage: { inputTokens: 1, outputTokens: 1 } }
+        return { kind: 'truncated', text: '', usage }
       case 'refused':
         return { kind: 'refused', text: '', usage: null }
       case 'transient':
@@ -115,9 +152,40 @@ function scriptAttempt(script: AttemptScript): () => ProviderResponse {
   }
 }
 
+const OUTPUT_FOR: Record<Format, z.ZodType> = {
+  json: ECHO_OUTPUT,
+  text: z.string(),
+  image: imageOutputSchema,
+}
+
+/** §7: whether an attempt's cost must be null under the split and rate axes. */
+function costMustBeNull(usage: TokenUsage | null, scenario: Scenario): boolean {
+  if (usage === null) return true
+  const split = usage.imageOutputTokens
+  // No split: only an image-format attempt with output tokens is unpriceable.
+  if (split === undefined) return scenario.format === 'image' && usage.outputTokens > 0
+  // A positive split needs an image rate; a zero split prices at the text rate.
+  return split > 0 && !scenario.rate
+}
+
+function checkCosts(attempts: readonly AttemptRecord[] | undefined, scenario: Scenario): void {
+  for (const attempt of attempts ?? []) {
+    expect(attempt.costUsd === null).toBe(costMustBeNull(attempt.usage, scenario))
+  }
+}
+
 async function runScenario(scenario: Scenario): Promise<void> {
-  const f = fixture({ quota: { perDay: 5 } })
+  const price = scenario.rate
+    ? { inputPerM: 1, outputPerM: 2, imageOutputPerM: 3 }
+    : { inputPerM: 1, outputPerM: 2 }
+  const f = fixture({
+    quota: { perDay: 5 },
+    format: scenario.format,
+    output: OUTPUT_FOR[scenario.format],
+    config: { pricing: { p1: { m1: price }, p2: { m2: price } } },
+  })
   const controller = new AbortController()
+  const parse = vi.spyOn(JSON, 'parse')
 
   // Stores.
   if (scenario.reserve === 'deny') {
@@ -151,11 +219,11 @@ async function runScenario(scenario: Scenario): Promise<void> {
   f.p1.always((request) => {
     void request
     if (scenario.abortAt === 'primary') controller.abort()
-    return scriptAttempt(scenario.primary)()
+    return scriptAttempt(scenario.primary, scenario)()
   })
   f.p2.always(() => {
     if (scenario.abortAt === 'fallback') controller.abort()
-    return scriptAttempt(scenario.fallback)()
+    return scriptAttempt(scenario.fallback, scenario)()
   })
 
   const run = observe(f.ai.run('echo', ARGS, { signal: controller.signal }))
@@ -163,9 +231,34 @@ async function runScenario(scenario: Scenario): Promise<void> {
   await f.runtime.advance(60_000) // burn every backoff and every detached retry deadline
   await f.runtime.advance(60_000)
   await flushMicrotasks()
+  const parseCalls = parse.mock.calls.length
+  parse.mockRestore()
 
   // The run always settles.
   expect(run.state).not.toBe('pending')
+
+  // Image output never enters JSON.parse; text never does either.
+  if (scenario.format !== 'json') expect(parseCalls).toBe(0)
+
+  // §7 pricing under the split and rate axes, on whichever path the run took.
+  const attempts =
+    run.state === 'resolved'
+      ? run.value?.attempts
+      : (run.error as { attempts?: readonly AttemptRecord[] }).attempts
+  checkCosts(attempts, scenario)
+
+  // §3 point 4b: zero images is always an output rejection, malformed always malformed.
+  if (scenario.format === 'image' && scenario.abortAt === 'never' && attempts !== undefined) {
+    const expected: Record<string, string | undefined> = {
+      'bad-json': 'output_rejected',
+      'malformed-image': 'malformed_response',
+    }
+    const scripts = [scenario.primary, scenario.fallback]
+    attempts.forEach((attempt, index) => {
+      const want = expected[scripts[index] ?? '']
+      if (want !== undefined) expect(attempt.outcome).toBe(want)
+    })
+  }
 
   // Never more than two reservations: the original plus §4's single re-reserve.
   expect(f.s.reserve.calls.length).toBeLessThanOrEqual(2)

@@ -1,4 +1,4 @@
-import { C as ReservationEnvelope, a as ConformanceResult, g as Provider, i as ConfigStore, j as UsageStore, r as AttemptRecord, v as ProviderRequest } from "./types.js";
+import { A as ReservationEnvelope, R as UsageStore, S as Provider, T as ProviderRequest, a as ConfigStore, i as AttemptRecord, o as ConformanceResult } from "./types.js";
 //#region src/conformance/config-store.d.ts
 /**
  * Checks a `ConfigStore` against the behaviour spec §8 requires of one.
@@ -59,8 +59,11 @@ declare function runUsageStoreConformance(opts: {
 //#region src/conformance/provider.d.ts
 /** Optional classification scenarios the harness can drive when the adopter supplies them. */
 type OptionalScenario = 'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient' | 'malformed_response' | 'truncated' | 'refused';
-/** Optional media scenarios: success-class conditions dispatching a request that carries a file. */
-type MediaScenario = 'document' | 'image';
+/**
+ * Optional media scenarios: success-class conditions dispatching their own request, one
+ * carrying a file of the named class or, for `image_output`, asking for images back.
+ */
+type MediaScenario = 'document' | 'image' | 'image_output';
 /** Controls that let the suite verify responseFormat and capability without guessing. */
 interface ProviderConformanceControls {
   /** Declares whether the provider under test supports native JSON mode. */

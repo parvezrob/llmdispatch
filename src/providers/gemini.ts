@@ -66,6 +66,11 @@ function geminiParts(parts: readonly ContentPart[]): unknown[] {
 }
 
 async function completeGemini(apiKey: string, req: ProviderRequest): Promise<ProviderResponse> {
+  // Transitional (spec §5c): this adapter maps no image wire, so an image request is
+  // rejected before any network call; the quota slot the run took is still consumed.
+  if (req.responseFormat.type === 'image') {
+    throw new ProviderError('invalid_request', { message: 'image output is not supported' })
+  }
   const url = `${HOST}/models/${encodeURIComponent(req.model)}:generateContent`
   const generationConfig: Record<string, unknown> = {}
   if (req.maxOutputTokens !== undefined) generationConfig.maxOutputTokens = req.maxOutputTokens

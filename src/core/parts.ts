@@ -42,7 +42,7 @@ function invalidPart(operation: string, index: number, rule: string): TypeError 
 }
 
 /** Why `data` is not §6 base64, or `null` when it is. */
-function base64Problem(data: unknown): string | null {
+export function base64Problem(data: unknown): string | null {
   if (typeof data !== 'string') return 'data must be a string'
   if (data === '') return 'data must not be empty'
   if (data.startsWith('data:')) return 'data must be raw base64 with no data-URL prefix'

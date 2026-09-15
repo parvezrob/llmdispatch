@@ -1,14 +1,14 @@
 /**
  * The projection every store applies before it writes attempt records.
  *
- * Spec §4 draws the privacy boundary at seven fields; copying exactly those means an object
+ * Spec §4 draws the privacy boundary at seven fields (usage carrying at most three counters); copying exactly those means an object
  * that also carries a prompt or a raw error cannot reach a ledger, whatever the caller hands
  * over.
  *
  * @module
  */
 
-import type { AttemptRecord } from '../../types'
+import type { AttemptRecord, TokenUsage } from '../../types'
 import { assertStoreString } from './domain'
 
 /**
@@ -27,10 +27,7 @@ export function projectAttempts(attempts: readonly AttemptRecord[]): AttemptReco
       provider,
       model,
       outcome,
-      usage:
-        usage === null
-          ? null
-          : { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+      usage: usage === null ? null : projectUsage(usage),
       costUsd,
       durationMs,
     }
@@ -39,4 +36,12 @@ export function projectAttempts(attempts: readonly AttemptRecord[]): AttemptReco
     assertStoreString(record.model, `attempts[${String(index)}].model`)
     return record
   })
+}
+
+/** The two base counters, plus the optional image split only when the record carries it. */
+function projectUsage(usage: TokenUsage): TokenUsage {
+  const { inputTokens, outputTokens, imageOutputTokens } = usage
+  const projected: TokenUsage = { inputTokens, outputTokens }
+  if (imageOutputTokens !== undefined) projected.imageOutputTokens = imageOutputTokens
+  return projected
 }

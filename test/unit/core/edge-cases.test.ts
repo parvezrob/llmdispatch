@@ -205,6 +205,11 @@ describe('the remaining createSwitch shape checks', () => {
       config: { pricing: { p1: { m1: { inputPerM: 1, outputPerM: -1 } } } },
       field: 'outputPerM',
     },
+    ...[-1, Number.NaN, Number.POSITIVE_INFINITY, '1', null].map((imageOutputPerM) => ({
+      name: `a pricing entry with imageOutputPerM ${String(imageOutputPerM)}`,
+      config: { pricing: { p1: { m1: { inputPerM: 1, outputPerM: 1, imageOutputPerM } } } },
+      field: 'imageOutputPerM',
+    })),
     {
       name: 'a null operation definition',
       config: { operations: { echo: null } },
@@ -249,6 +254,19 @@ describe('the remaining createSwitch shape checks', () => {
       expect((caught as LLMDispatchError).message).toContain(field)
     })
   }
+})
+
+describe('an image rate at createSwitch', () => {
+  it('accepts zero and a valid rate, and keeps the key absent when none was given', () => {
+    const f = fixture({
+      config: { pricing: { p1: { m1: { inputPerM: 1, outputPerM: 1, imageOutputPerM: 0 } } } },
+    })
+    expect(f.ai).toBeDefined()
+    const g = fixture({
+      config: { pricing: { p1: { m1: { inputPerM: 1, outputPerM: 1, imageOutputPerM: 40 } } } },
+    })
+    expect(g.ai).toBeDefined()
+  })
 })
 
 describe('readiness captured at registration', () => {

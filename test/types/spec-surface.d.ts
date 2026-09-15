@@ -69,11 +69,37 @@ export interface FilePart {
 }
 export type ContentPart = TextPart | FilePart
 
+// --- image output ---
+export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'
+export type ImageSize = '1K' | '2K' | '4K'                // provider-relative resolution class, not a pixel promise
+export interface ImageOptions {
+  readonly count?: number                                // safe integer, 1–10; omitted = provider default (one)
+  readonly aspectRatio?: AspectRatio
+  readonly size?: ImageSize
+  readonly background?: 'transparent' | 'opaque'
+}
+export type GeneratedImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp'
+// As an adapter hands an image back: dimensions both stated, or both left to the core's header read.
+export type ProviderImage = { readonly mediaType: GeneratedImageMediaType; readonly data: string }
+  & ({ readonly width: number; readonly height: number } | { readonly width?: undefined; readonly height?: undefined })
+// As an adopter receives it: a FilePart that also states the encoded raster's pixel size.
+export interface GeneratedImage {
+  readonly type: 'file'
+  readonly mediaType: GeneratedImageMediaType
+  readonly data: string
+  readonly width: number
+  readonly height: number
+}
+export interface ImageOutput { readonly images: readonly GeneratedImage[]; readonly text: string }
+// A z.ZodType<ImageOutput> accepting at least one well-formed image; refine it for more.
+export declare const imageOutputSchema: z.ZodType<ImageOutput>
+
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
   prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
-  format?: 'json' | 'json-any' | 'text'                  // default 'json' (§3)
+  format?: 'json' | 'json-any' | 'text' | 'image'        // default 'json' (§3)
+  image?: ImageOptions                                   // only with format 'image'; validated at createSwitch
   quality?: (ctx: { input: z.output<In>; data: z.output<Out> }) => QualityVerdict | Promise<QualityVerdict>
   quota?: { perDay: number }                             // safe integer, 0–1_000_000 (0 = halted)
   timeoutMs?: number                                     // provider I/O timeout; default 60_000; 1_000–600_000
@@ -123,8 +149,8 @@ export interface AttemptRecord {
   // injected clock. Output processing is not counted.
   durationMs: number
 }
-export interface TokenUsage { inputTokens: number; outputTokens: number }  // non-negative SAFE integers
-export interface ModelPrice { inputPerM: number; outputPerM: number }      // finite, ≥ 0
+export interface TokenUsage { inputTokens: number; outputTokens: number; imageOutputTokens?: number }  // non-negative SAFE integers; imageOutputTokens ≤ outputTokens (§7)
+export interface ModelPrice { inputPerM: number; outputPerM: number; imageOutputPerM?: number }        // finite, ≥ 0
 
 // --- providers ---
 export interface Provider {
@@ -137,19 +163,22 @@ export interface PreparedProvider {
 export interface ProviderRequest {
   parts: readonly ContentPart[]                          // normalized, non-empty, frozen
   model: string
-  responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
+  responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' } | ({ type: 'image' } & ImageOptions)
   maxOutputTokens?: number
   temperature?: number
   signal: AbortSignal
 }
-// Discriminated: truncation and refusal are billable HTTP-200 terminations, so they travel
-// on the RESPONSE (usage retained), not as thrown errors. `kind: 'complete'` proceeds to
-// the output pipeline; 'truncated' classifies `truncated`; 'refused' classifies `refused`.
-// `text` may be partial or empty for the non-complete kinds.
+// Discriminated: truncation and refusal are billable terminations the adapter normalizes
+// from a success or an error response (§5c), so they travel on the RESPONSE (usage
+// retained), not as thrown errors. `kind: 'complete'` proceeds to the output pipeline;
+// 'truncated' classifies `truncated`; 'refused' classifies `refused`. `text` may be partial
+// or empty for the non-complete kinds. `images` is read only for an image-format operation
+// (§3). `costUsd` is the provider's own charge and, when finite and non-negative, is
+// authoritative over the pricing table (§7).
 export type ProviderResponse =
-  | { kind: 'complete';  text: string; usage: TokenUsage | null }
-  | { kind: 'truncated'; text: string; usage: TokenUsage | null }  // text may be partial
-  | { kind: 'refused';   text: string; usage: TokenUsage | null }  // text may be empty
+  | { kind: 'complete';  text: string; usage: TokenUsage | null; images?: readonly ProviderImage[]; costUsd?: number }
+  | { kind: 'truncated'; text: string; usage: TokenUsage | null; costUsd?: number }  // text may be partial
+  | { kind: 'refused';   text: string; usage: TokenUsage | null; costUsd?: number }  // text may be empty
 export type ProviderErrorKind = 'transient' | 'rate_limit' | 'auth' | 'model_not_found'
   | 'invalid_request' | 'aborted' | 'malformed_response'
 export declare class ProviderError extends Error {

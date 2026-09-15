@@ -17,6 +17,7 @@ import type { CoreRuntime, TimerMode } from '../../../src/core/runtime'
 import type {
   AttemptRecord,
   CreateSwitchConfig,
+  ImageOptions,
   OperationDefinition,
   OperationsMap,
   Provider,
@@ -376,8 +377,11 @@ export const ECHO_OUTPUT = z.object({ answer: z.string() })
 export interface FixtureOptions {
   quota?: { perDay: number } | undefined
   timeoutMs?: number
-  format?: 'json' | 'json-any' | 'text'
-  quality?: OperationDefinition<typeof ECHO_INPUT, typeof ECHO_OUTPUT>['quality']
+  format?: 'json' | 'json-any' | 'text' | 'image'
+  image?: ImageOptions
+  /** Replaces `ECHO_OUTPUT`; an image operation wants `imageOutputSchema` or a superset. */
+  output?: z.ZodType
+  quality?: OperationDefinition<typeof ECHO_INPUT, z.ZodType>['quality']
   fallback?: false
   config?: Partial<CreateSwitchConfig<OperationsMap>>
   operations?: OperationsMap
@@ -414,6 +418,8 @@ export function fixture(options: FixtureOptions = {}): Fixture {
   if (options.quota !== undefined) definition.quota = options.quota
   if (options.timeoutMs !== undefined) definition.timeoutMs = options.timeoutMs
   if (options.format !== undefined) definition.format = options.format
+  if (options.image !== undefined) definition.image = options.image
+  if (options.output !== undefined) definition.output = options.output
   if (options.quality !== undefined) definition.quality = options.quality
   const operations = options.operations ?? {
     echo: definition as unknown as OperationsMap[string],

@@ -98,7 +98,7 @@ Admin code on your server calls `ai.setConfig()` to change a route or a daily li
 
 ## Limits
 
-Server-side only, Node.js 20 or newer, ESM and CJS. Input is text, PDFs and images, output is text or validated JSON. Files go up as base64 in the request; URLs, file references and audio or video are not supported. No streaming yet.
+Server-side only, Node.js 20 or newer, ESM and CJS. Input is text, PDFs and images; output is text, validated JSON, or generated images through an adapter that supports them. Files go up as base64 in the request; URLs, file references and audio or video are not supported. No streaming yet.
 
 ## Documentation
 

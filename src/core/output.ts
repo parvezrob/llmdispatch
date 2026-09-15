@@ -10,9 +10,16 @@
  */
 
 import { z } from 'zod'
-import type { OperationDefinition, QualityVerdict } from '../types'
+import type { GeneratedImage, OperationDefinition, QualityVerdict } from '../types'
 import { AbortRaceLost, raceWithAbort } from './abort'
+import type { OutputFormat } from './usage'
 import { isRecord } from './validate'
+
+/** A completed response as `readResponse` validated it; `images` only in image format. */
+export interface CompletedBody {
+  readonly text: string
+  readonly images: readonly GeneratedImage[] | undefined
+}
 
 /** How processing one completed response ended. */
 export type OutputResult =
@@ -65,24 +72,32 @@ function isWellFormedVerdict(value: unknown): value is QualityVerdict {
 }
 
 /**
- * Runs the §3 pipeline over a completed response's text.
+ * Runs the §3 pipeline over a completed response.
  *
- * @param text The response body, already known to be a string.
- * @param definition The operation, for `format`, `output` and `quality`.
+ * @param body The response text, plus the normalized images in image format.
+ * @param format The operation's format as `createSwitch` snapshotted it.
+ * @param definition The operation, for `output` and `quality`.
  * @param parsedInput What the input schema produced, handed to the quality gate.
  * @param signal The caller's signal; `output.parseAsync` and `quality` are raced with it.
  */
 export async function processOutput(
-  text: string,
+  body: CompletedBody,
+  format: OutputFormat,
   definition: OperationDefinition<z.ZodType, z.ZodType>,
   parsedInput: unknown,
   signal: AbortSignal | undefined,
 ): Promise<OutputResult> {
-  const format = definition.format ?? 'json'
+  const { text } = body
 
   let candidate: unknown
   if (format === 'text') {
     candidate = text
+  } else if (format === 'image') {
+    // §3 point 4b: the candidate is the frozen images plus the text; zero images is the
+    // image analogue of a parse failure. JSON.parse never sees image output.
+    const images = body.images ?? []
+    if (images.length === 0) return { type: 'rejected' }
+    candidate = Object.freeze({ images, text })
   } else {
     const unwrapped = unwrapWholeResponseFence(text)
     try {

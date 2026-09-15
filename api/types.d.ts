@@ -63,12 +63,54 @@ interface FilePart {
 }
 /** What a request is made of, in the order the model should see it. */
 type ContentPart = TextPart | FilePart;
+/** The aspect ratios every built-in image adapter accepts (§6). */
+type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3';
+/** A provider-relative resolution class (§6), never a pixel promise. */
+type ImageSize = '1K' | '2K' | '4K';
+/** The knobs an image operation declares (§6). Every one is optional; an unset knob never reaches the wire. */
+interface ImageOptions {
+  readonly count?: number;
+  readonly aspectRatio?: AspectRatio;
+  readonly size?: ImageSize;
+  readonly background?: 'transparent' | 'opaque';
+}
+/** The raster types a generated image may come back as (§6). */
+type GeneratedImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp';
+/**
+ * One generated image as an adapter hands it back (§6): base64 under the request grammar,
+ * with its pixel dimensions either both stated or both left for the core to read from the
+ * image header.
+ */
+type ProviderImage = {
+  readonly mediaType: GeneratedImageMediaType;
+  readonly data: string;
+} & ({
+  readonly width: number;
+  readonly height: number;
+} | {
+  readonly width?: undefined;
+  readonly height?: undefined;
+});
+/** One generated image as an adopter receives it: a file part that also states its pixel size. */
+interface GeneratedImage {
+  readonly type: 'file';
+  readonly mediaType: GeneratedImageMediaType;
+  readonly data: string;
+  readonly width: number;
+  readonly height: number;
+}
+/** What an image operation's output schema receives (§3): the images, and any text beside them. */
+interface ImageOutput {
+  readonly images: readonly GeneratedImage[];
+  readonly text: string;
+}
 /** One operation: its schemas, its prompt, and the optional gates around them. */
 interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In;
   output: Out;
   prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>;
-  format?: 'json' | 'json-any' | 'text';
+  format?: 'json' | 'json-any' | 'text' | 'image';
+  image?: ImageOptions;
   quality?: (ctx: {
     input: z.output<In>;
     data: z.output<Out>;
@@ -145,11 +187,13 @@ interface AttemptRecord {
 interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  imageOutputTokens?: number;
 }
 /** One model's price, per million tokens. Finite, ≥ 0. */
 interface ModelPrice {
   inputPerM: number;
   outputPerM: number;
+  imageOutputPerM?: number;
 }
 /** What a provider adapter implements: one call out, optionally with a readiness step. */
 interface Provider {
@@ -169,7 +213,9 @@ interface ProviderRequest {
   } | {
     type: 'json';
     topLevel: 'object' | 'any';
-  };
+  } | ({
+    type: 'image';
+  } & ImageOptions);
   maxOutputTokens?: number;
   temperature?: number;
   signal: AbortSignal;
@@ -177,22 +223,29 @@ interface ProviderRequest {
 /**
  * What an attempt returned, discriminated by how the provider terminated.
  *
- * Truncation and refusal are billable HTTP-200 terminations, so they travel on the RESPONSE
- * (usage retained), not as thrown errors. `kind: 'complete'` proceeds to the output pipeline;
- * `'truncated'` classifies `truncated`; `'refused'` classifies `refused`.
+ * Truncation and refusal are billable terminations the adapter normalizes from a success or
+ * an error response (§5c), so they travel on the RESPONSE (usage retained), not as thrown
+ * errors. `kind: 'complete'` proceeds to the output pipeline; `'truncated'` classifies
+ * `truncated`; `'refused'` classifies `refused`. `images` is read only for an image-format
+ * operation (§3). `costUsd` is the provider's own charge for the attempt and, when it is a
+ * finite non-negative number, is authoritative over the pricing table (§7).
  */
 type ProviderResponse = {
   kind: 'complete';
   text: string;
   usage: TokenUsage | null;
+  images?: readonly ProviderImage[];
+  costUsd?: number;
 } | {
   kind: 'truncated';
   text: string;
   usage: TokenUsage | null;
+  costUsd?: number;
 } | {
   kind: 'refused';
   text: string;
   usage: TokenUsage | null;
+  costUsd?: number;
 };
 /** How an adapter classifies a failure; the classification drives fallback (§5b). */
 type ProviderErrorKind = 'transient' | 'rate_limit' | 'auth' | 'model_not_found' | 'invalid_request' | 'aborted' | 'malformed_response';
@@ -240,5 +293,5 @@ interface ConformanceResult {
   skipped: string[];
 }
 //#endregion
-export { TokenUsage as A, ReservationEnvelope as C, StorePair as D, SettlementFailure as E, Switch as O, QuotaView as S, RunResult as T, ProviderErrorKind as _, ConformanceResult as a, QualityVerdict as b, FilePart as c, OperationConfigView as d, OperationDefinition as f, Provider as g, PreparedProvider as h, ConfigStore as i, UsageStore as j, TextPart as k, Logger as l, OperationsMap as m, AttemptOutcome as n, ContentPart as o, OperationRoute as p, AttemptRecord as r, CreateSwitchConfig as s, ApiKeyResolver as t, ModelPrice as u, ProviderRequest as v, RouteTarget as w, QuotaKey as x, ProviderResponse as y };
+export { ReservationEnvelope as A, ProviderErrorKind as C, QualityVerdict as D, ProviderResponse as E, Switch as F, TextPart as I, TokenUsage as L, RunResult as M, SettlementFailure as N, QuotaKey as O, StorePair as P, UsageStore as R, Provider as S, ProviderRequest as T, OperationConfigView as _, ConfigStore as a, OperationsMap as b, CreateSwitchConfig as c, GeneratedImageMediaType as d, ImageOptions as f, ModelPrice as g, Logger as h, AttemptRecord as i, RouteTarget as j, QuotaView as k, FilePart as l, ImageSize as m, AspectRatio as n, ConformanceResult as o, ImageOutput as p, AttemptOutcome as r, ContentPart as s, ApiKeyResolver as t, GeneratedImage as u, OperationDefinition as v, ProviderImage as w, PreparedProvider as x, OperationRoute as y };
 //# sourceMappingURL=types.d.ts.map

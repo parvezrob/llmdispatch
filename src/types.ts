@@ -89,6 +89,53 @@ export interface FilePart {
 /** What a request is made of, in the order the model should see it. */
 export type ContentPart = TextPart | FilePart
 
+// --- image output ---
+
+/** The aspect ratios every built-in image adapter accepts (§6). */
+export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'
+
+/** A provider-relative resolution class (§6), never a pixel promise. */
+export type ImageSize = '1K' | '2K' | '4K'
+
+/** The knobs an image operation declares (§6). Every one is optional; an unset knob never reaches the wire. */
+export interface ImageOptions {
+  readonly count?: number // safe integer, 1–10; omitted = the provider's default (one)
+  readonly aspectRatio?: AspectRatio
+  readonly size?: ImageSize
+  readonly background?: 'transparent' | 'opaque'
+}
+
+/** The raster types a generated image may come back as (§6). */
+export type GeneratedImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp'
+
+/**
+ * One generated image as an adapter hands it back (§6): base64 under the request grammar,
+ * with its pixel dimensions either both stated or both left for the core to read from the
+ * image header.
+ */
+export type ProviderImage = {
+  readonly mediaType: GeneratedImageMediaType
+  readonly data: string
+} & (
+  | { readonly width: number; readonly height: number }
+  | { readonly width?: undefined; readonly height?: undefined }
+)
+
+/** One generated image as an adopter receives it: a file part that also states its pixel size. */
+export interface GeneratedImage {
+  readonly type: 'file'
+  readonly mediaType: GeneratedImageMediaType
+  readonly data: string
+  readonly width: number // the encoded raster's pixels; EXIF orientation is not applied
+  readonly height: number
+}
+
+/** What an image operation's output schema receives (§3): the images, and any text beside them. */
+export interface ImageOutput {
+  readonly images: readonly GeneratedImage[]
+  readonly text: string
+}
+
 /** One operation: its schemas, its prompt, and the optional gates around them. */
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
@@ -96,7 +143,8 @@ export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType
   prompt: (
     input: z.output<In>,
   ) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
-  format?: 'json' | 'json-any' | 'text' // default 'json' (§3)
+  format?: 'json' | 'json-any' | 'text' | 'image' // default 'json' (§3)
+  image?: ImageOptions // only with format 'image' (§6)
   quality?: (ctx: {
     input: z.output<In>
     data: z.output<Out>
@@ -183,12 +231,14 @@ export interface AttemptRecord {
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
+  imageOutputTokens?: number // of which image tokens; at most outputTokens (§7)
 }
 
 /** One model's price, per million tokens. Finite, ≥ 0. */
 export interface ModelPrice {
   inputPerM: number
   outputPerM: number
+  imageOutputPerM?: number // the rate for image output tokens (§7)
 }
 
 // --- providers ---
@@ -208,7 +258,10 @@ export interface PreparedProvider {
 export interface ProviderRequest {
   parts: readonly ContentPart[]
   model: string
-  responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
+  responseFormat:
+    | { type: 'text' }
+    | { type: 'json'; topLevel: 'object' | 'any' }
+    | ({ type: 'image' } & ImageOptions) // the operation's image block, copied through (§3)
   maxOutputTokens?: number // omitted from the wire body when unset, never defaulted (§5c)
   temperature?: number // omitted from the wire body when unset, never defaulted (§5c)
   signal: AbortSignal
@@ -217,14 +270,23 @@ export interface ProviderRequest {
 /**
  * What an attempt returned, discriminated by how the provider terminated.
  *
- * Truncation and refusal are billable HTTP-200 terminations, so they travel on the RESPONSE
- * (usage retained), not as thrown errors. `kind: 'complete'` proceeds to the output pipeline;
- * `'truncated'` classifies `truncated`; `'refused'` classifies `refused`.
+ * Truncation and refusal are billable terminations the adapter normalizes from a success or
+ * an error response (§5c), so they travel on the RESPONSE (usage retained), not as thrown
+ * errors. `kind: 'complete'` proceeds to the output pipeline; `'truncated'` classifies
+ * `truncated`; `'refused'` classifies `refused`. `images` is read only for an image-format
+ * operation (§3). `costUsd` is the provider's own charge for the attempt and, when it is a
+ * finite non-negative number, is authoritative over the pricing table (§7).
  */
 export type ProviderResponse =
-  | { kind: 'complete'; text: string; usage: TokenUsage | null }
-  | { kind: 'truncated'; text: string; usage: TokenUsage | null } // text may be partial
-  | { kind: 'refused'; text: string; usage: TokenUsage | null } // text may be empty
+  | {
+      kind: 'complete'
+      text: string
+      usage: TokenUsage | null
+      images?: readonly ProviderImage[]
+      costUsd?: number
+    }
+  | { kind: 'truncated'; text: string; usage: TokenUsage | null; costUsd?: number } // text may be partial
+  | { kind: 'refused'; text: string; usage: TokenUsage | null; costUsd?: number } // text may be empty
 
 /** How an adapter classifies a failure; the classification drives fallback (§5b). */
 export type ProviderErrorKind =

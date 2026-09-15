@@ -27,6 +27,8 @@ import type { ProviderFailureKind } from '../errors/factories'
 import type {
   AttemptRecord,
   ContentPart,
+  GeneratedImage,
+  ImageOptions,
   Logger,
   OperationDefinition,
   OperationRoute,
@@ -45,17 +47,23 @@ import type { AttemptFailureKind } from './classify'
 import { classifyThrown, isFallbackEligible } from './classify'
 import type { ConfigService } from './config'
 import { isZodError, processOutput } from './output'
-import { normalizePromptParts } from './parts'
 import { commitWithRecovery, reserveSlot, settleDetached } from './quota'
 import type { QuotaContext } from './quota'
 import type { CoreRuntime } from './runtime'
-import type { PricingTable } from './usage'
+import { readImageDimensions } from './image-header'
+import { IMAGE_MEDIA_TYPES } from './image-output'
+import { base64Problem, normalizePromptParts } from './parts'
+import type { OutputFormat, PricingTable } from './usage'
 import { aggregateAttempts, normalizeUsage, priceAttempt } from './usage'
-import { isRecord, storeStringProblem } from './validate'
+import { isCount, isRecord, storeStringProblem } from './validate'
 
 /** One declared operation, as `createSwitch` validated and stored it. */
 export interface ValidatedOperation {
   definition: OperationDefinition<z.ZodType, z.ZodType>
+  /** The declared format, defaulted; the run reads this, never `definition.format`. */
+  format: OutputFormat
+  /** The validated image knobs, frozen, only the ones set; `undefined` outside image format. */
+  image: Readonly<ImageOptions> | undefined
   quota: { perDay: number } | undefined
   timeoutMs: number
   defaultRoute: OperationRoute | undefined
@@ -402,11 +410,24 @@ async function runAttempts(
   throw terminalFor(operation, primary.kind, copyAttempts(attempts))
 }
 
+/** What an attempt learned about billing from the response itself (spec §7). */
+interface Billing {
+  usage: AttemptRecord['usage']
+  /** The provider-reported cost when it is a finite non-negative number; else absent. */
+  costUsd: number | undefined
+}
+
 /** What reading a `ProviderResponse` produced; only a `complete` body travels onward. */
 type ReadResponse =
-  | { kind: 'complete'; text: string; usage: AttemptRecord['usage'] }
-  | { kind: 'truncated' | 'refused'; usage: AttemptRecord['usage'] }
-  | { kind: 'malformed'; usage: AttemptRecord['usage'] }
+  | ({
+      kind: 'complete'
+      text: string
+      images: readonly GeneratedImage[] | undefined
+    } & Billing)
+  | ({ kind: 'truncated' | 'refused' } & Billing)
+  | ({ kind: 'malformed' } & Billing)
+
+const IMAGE_MEDIA_TYPE_SET: ReadonlySet<string> = new Set(IMAGE_MEDIA_TYPES)
 
 /**
  * Validates a resolved `ProviderResponse` (spec §3, §6).
@@ -415,29 +436,83 @@ type ReadResponse =
  * pipeline, but `text: string` belongs to every variant of the union, so a non-string body
  * is still a §6 shape failure. Every property is read once behind a guard, so a hostile
  * response classifies `malformed_response` instead of throwing into the state machine.
+ * `images` is read in image format only (§3 point 4b); `costUsd` on every kind (§7).
  */
-function readResponse(response: unknown): ReadResponse {
+function readResponse(response: unknown, format: OutputFormat): ReadResponse {
+  // Billing is read first and kept outside the guard: a property that throws later in the
+  // read makes the response malformed but does not un-report a cost already read (§7).
+  let usage: AttemptRecord['usage'] = null
+  let costUsd: number | undefined
   try {
-    if (!isRecord(response)) return { kind: 'malformed', usage: null }
+    if (!isRecord(response)) return { kind: 'malformed', usage, costUsd }
     const kind = response.kind
-    const usage = normalizeUsage(response.usage)
+    usage = normalizeUsage(response.usage)
+    costUsd = reportedCost(response.costUsd)
     if (kind !== 'complete' && kind !== 'truncated' && kind !== 'refused') {
-      return { kind: 'malformed', usage }
+      return { kind: 'malformed', usage, costUsd }
     }
     const text = response.text
-    if (typeof text !== 'string') return { kind: 'malformed', usage }
-    return kind === 'complete' ? { kind, text, usage } : { kind, usage }
+    if (typeof text !== 'string') return { kind: 'malformed', usage, costUsd }
+    if (kind !== 'complete') return { kind, usage, costUsd }
+    if (format !== 'image') return { kind, text, images: undefined, usage, costUsd }
+    const images = readImages(response.images)
+    if (images === null) return { kind: 'malformed', usage, costUsd }
+    return { kind, text, images, usage, costUsd }
   } catch {
-    return { kind: 'malformed', usage: null }
+    return { kind: 'malformed', usage, costUsd }
   }
 }
 
-/** The §3 `responseFormat` for an operation's declared `format` (default `'json'`). */
-function responseFormatOf(
-  format: 'json' | 'json-any' | 'text' | undefined,
-): ProviderRequest['responseFormat'] {
-  if (format === 'text') return { type: 'text' }
-  if (format === 'json-any') return { type: 'json', topLevel: 'any' }
+/** §7: a reported cost counts only as a finite non-negative number; anything else is absent. */
+function reportedCost(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
+  return value === 0 ? 0 : value
+}
+
+/**
+ * Normalizes a complete response's `images` into owned, frozen `GeneratedImage`s (§3 point
+ * 4b), or `null` for any shape failure. Absent counts as none. Each element is read once;
+ * dimensions the adapter stated are checked against the header, absent ones read from it.
+ */
+function readImages(value: unknown): readonly GeneratedImage[] | null {
+  if (value === undefined) return Object.freeze([])
+  if (!Array.isArray(value)) return null
+  // Length once, then indexed reads: an overridden iterator cannot yield a sequence other
+  // than the one validated, and nothing is copied before element 0 has been checked.
+  const length: unknown = (value as unknown[]).length
+  if (!isCount(length)) return null
+  const images: GeneratedImage[] = []
+  for (let index = 0; index < length; index++) {
+    const element: unknown = (value as unknown[])[index]
+    if (!isRecord(element)) return null
+    const { mediaType, data, width, height } = element
+    if (typeof mediaType !== 'string' || !IMAGE_MEDIA_TYPE_SET.has(mediaType)) return null
+    if (base64Problem(data) !== null) return null
+    const type = mediaType as GeneratedImage['mediaType']
+    const header = readImageDimensions(type, data as string)
+    if (header === null) return null
+    if (width !== undefined || height !== undefined) {
+      if (!isCount(width) || !isCount(height)) return null
+      if (width !== header.width || height !== header.height) return null
+    }
+    images.push(
+      Object.freeze({
+        type: 'file',
+        mediaType: type,
+        data: data as string,
+        width: header.width,
+        height: header.height,
+      }),
+    )
+  }
+  return Object.freeze(images)
+}
+
+/** The §3 `responseFormat` for an operation, from the `createSwitch` snapshot. */
+function responseFormatOf(op: ValidatedOperation): ProviderRequest['responseFormat'] {
+  if (op.format === 'image') return { type: 'image', ...op.image }
+  if (op.format === 'text') return { type: 'text' }
+  if (op.format === 'json-any') return { type: 'json', topLevel: 'any' }
   return { type: 'json', topLevel: 'object' }
 }
 
@@ -457,17 +532,18 @@ async function executeAttempt(
   const { signal, attempts } = shared
   let durationMs = 0
 
-  function record(
-    outcome: AttemptRecord['outcome'],
-    usage: AttemptRecord['usage'],
-    status?: number,
-  ): void {
+  const NO_BILLING: Billing = { usage: null, costUsd: undefined }
+
+  function record(outcome: AttemptRecord['outcome'], billing: Billing, status?: number): void {
+    // §7: a well-formed reported cost is authoritative; otherwise the pricing table.
     const attempt: AttemptRecord = {
       provider: target.provider,
       model: target.model,
       outcome,
-      usage,
-      costUsd: priceAttempt(ctx.pricing, target.provider, target.model, usage),
+      usage: billing.usage,
+      costUsd:
+        billing.costUsd ??
+        priceAttempt(ctx.pricing, target.provider, target.model, billing.usage, op.format),
       durationMs,
     }
     if (status !== undefined) attempt.status = status
@@ -477,9 +553,9 @@ async function executeAttempt(
   function recordAndFail(
     kind: Exclude<AttemptFailureKind, 'output_schema_error' | 'quality_error'>,
     status: number | undefined,
-    usage: AttemptRecord['usage'] = null,
+    billing: Billing = NO_BILLING,
   ): AttemptEnd {
-    record(kind, usage, status)
+    record(kind, billing, status)
     return { type: 'failed', kind }
   }
 
@@ -521,7 +597,7 @@ async function executeAttempt(
   const request: ProviderRequest = {
     parts: shared.parts,
     model: target.model,
-    responseFormat: responseFormatOf(op.definition.format),
+    responseFormat: responseFormatOf(op),
     signal: controller.signal,
   }
   if (target.maxOutputTokens !== undefined) request.maxOutputTokens = target.maxOutputTokens
@@ -554,25 +630,29 @@ async function executeAttempt(
     return recordAndFail(classified.kind, classified.status)
   }
 
-  const read = readResponse(raced.response)
+  const read = readResponse(raced.response, op.format)
   if (read.kind !== 'complete') {
-    if (read.kind === 'malformed') {
-      return recordAndFail('malformed_response', undefined, read.usage)
-    }
-    return recordAndFail(read.kind, undefined, read.usage)
+    if (read.kind === 'malformed') return recordAndFail('malformed_response', undefined, read)
+    return recordAndFail(read.kind, undefined, read)
   }
 
-  const output = await processOutput(read.text, op.definition, shared.parsedInput, signal)
+  const output = await processOutput(
+    { text: read.text, images: read.images },
+    op.format,
+    op.definition,
+    shared.parsedInput,
+    signal,
+  )
   switch (output.type) {
     case 'success':
-      record('succeeded', read.usage)
+      record('succeeded', read)
       return { type: 'success', data: output.data }
     case 'rejected':
-      return recordAndFail('output_rejected', undefined, read.usage)
+      return recordAndFail('output_rejected', undefined, read)
     case 'aborted':
-      return recordAndFail('aborted', undefined, read.usage)
+      return recordAndFail('aborted', undefined, read)
     case 'user-error':
-      record(output.outcome, read.usage)
+      record(output.outcome, read)
       return { type: 'user-error', error: output.error }
   }
 }
