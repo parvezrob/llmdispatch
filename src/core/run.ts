@@ -469,10 +469,20 @@ function reportedCost(value: unknown): number | undefined {
   return value === 0 ? 0 : value
 }
 
+/** §3 point 4b: how many images one response may carry, whatever the operation asked for. */
+const MAX_RESPONSE_IMAGES = 10
+
+/** §3 point 4b: the per-image response ceiling, in base64 characters (22.5 MB decoded). */
+const MAX_RESPONSE_IMAGE_CHARACTERS = 30_000_000
+
 /**
  * Normalizes a complete response's `images` into owned, frozen `GeneratedImage`s (§3 point
  * 4b), or `null` for any shape failure. Absent counts as none. Each element is read once;
  * dimensions the adapter stated are checked against the header, absent ones read from it.
+ *
+ * The two response-side caps come first: the count before any element is read, and each
+ * element's data length before that element's grammar and header work, so an oversized
+ * payload costs one length read rather than a scan and a decode.
  */
 function readImages(value: unknown): readonly GeneratedImage[] | null {
   if (value === undefined) return Object.freeze([])
@@ -480,12 +490,13 @@ function readImages(value: unknown): readonly GeneratedImage[] | null {
   // Length once, then indexed reads: an overridden iterator cannot yield a sequence other
   // than the one validated, and nothing is copied before element 0 has been checked.
   const length: unknown = (value as unknown[]).length
-  if (!isCount(length)) return null
+  if (!isCount(length) || length > MAX_RESPONSE_IMAGES) return null
   const images: GeneratedImage[] = []
   for (let index = 0; index < length; index++) {
     const element: unknown = (value as unknown[])[index]
     if (!isRecord(element)) return null
     const { mediaType, data, width, height } = element
+    if (typeof data === 'string' && data.length > MAX_RESPONSE_IMAGE_CHARACTERS) return null
     if (typeof mediaType !== 'string' || !IMAGE_MEDIA_TYPE_SET.has(mediaType)) return null
     if (base64Problem(data) !== null) return null
     const type = mediaType as GeneratedImage['mediaType']

@@ -442,6 +442,52 @@ describe('the hostile images matrix classifies malformed_response', () => {
   })
 })
 
+describe('the response-side caps (spec §3 point 4b)', () => {
+  /** A PNG whose header is real, padded with zero bytes to exactly `characters` base64. */
+  function paddedPng(characters: number): string {
+    const bytes = Buffer.alloc((characters / 4) * 3)
+    Buffer.from(png(4, 5)).copy(bytes)
+    return bytes.toString('base64')
+  }
+
+  function copies(count: number): ProviderImage[] {
+    return Array.from({ length: count }, () => providerImage('image/png', 2, 3))
+  }
+
+  it('accepts ten images', async () => {
+    const f = imageFixture({ fallback: false })
+    f.p1.nextResolve(complete(copies(10)))
+    const result = await f.ai.run('echo', INPUT)
+    expect((result.data as z.infer<typeof imageOutputSchema>).images).toHaveLength(10)
+  })
+
+  it('classifies an eleventh image as malformed_response', async () => {
+    const f = imageFixture({ fallback: false })
+    f.p1.nextResolve(complete(copies(11)))
+    const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
+    expect(error.attempts?.map((a) => a.outcome)).toEqual(['malformed_response'])
+  })
+
+  // The cap is read off the length alone, before the grammar scan and before the header
+  // reader: this string would fail both, and the classification is the same either way.
+  it('classifies data over the per-image cap as malformed_response', async () => {
+    const f = imageFixture({ fallback: false })
+    f.p1.nextResolve(complete([{ mediaType: 'image/png', data: `${paddedPng(30_000_000)}A` }]))
+    const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
+    expect(error.attempts?.map((a) => a.outcome)).toEqual(['malformed_response'])
+  })
+
+  it('leaves data of exactly the cap to the grammar and the header reader', async () => {
+    const f = imageFixture({ fallback: false })
+    f.p1.nextResolve(complete([{ mediaType: 'image/png', data: paddedPng(30_000_000) }]))
+    const result = await f.ai.run('echo', INPUT)
+    expect((result.data as z.infer<typeof imageOutputSchema>).images[0]).toMatchObject({
+      width: 4,
+      height: 5,
+    })
+  })
+})
+
 describe('images outside image format', () => {
   it('is never read on a json operation, even when reading it would throw', async () => {
     const f = fixture()
