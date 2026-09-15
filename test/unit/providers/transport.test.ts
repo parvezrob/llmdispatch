@@ -3,19 +3,25 @@
  * must classify as `transient` / `aborted`, never leak a raw fetch error that the core would
  * treat as `provider_unclassified`. Unparseable JSON stays a null body, not a network error.
  *
- * The second half holds the adapters' response-side rules, the raster media types and the §6
- * base64 grammar, to the core definitions they are copied from.
+ * The second half holds the adapters' response-side rules, the raster media types, the two
+ * response caps and the §6 base64 grammar, to the core definitions they are copied from.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ProviderError } from '../../../src/errors'
-import { IMAGE_MEDIA_TYPES } from '../../../src/core/image-output'
+import {
+  IMAGE_MEDIA_TYPES,
+  MAX_RESPONSE_IMAGE_CHARACTERS,
+  MAX_RESPONSE_IMAGES,
+} from '../../../src/core/image-output'
 import { base64Problem } from '../../../src/core/parts'
 import {
   fetchJson,
   GENERATED_IMAGE_MEDIA_TYPES,
   isWireBase64,
+  MAX_GENERATED_IMAGE_CHARACTERS,
+  MAX_GENERATED_IMAGES,
 } from '../../../src/providers/transport'
 
 afterEach(() => {
@@ -85,6 +91,11 @@ describe('fetchJson body settlement', () => {
 describe('the response-side copies of the core rules', () => {
   it('accepts exactly the media types the core accepts', () => {
     expect([...GENERATED_IMAGE_MEDIA_TYPES].sort()).toEqual([...IMAGE_MEDIA_TYPES].sort())
+  })
+
+  it('caps a response at the same count and the same length as the core', () => {
+    expect(MAX_GENERATED_IMAGES).toBe(MAX_RESPONSE_IMAGES)
+    expect(MAX_GENERATED_IMAGE_CHARACTERS).toBe(MAX_RESPONSE_IMAGE_CHARACTERS)
   })
 
   const corpus: unknown[] = [

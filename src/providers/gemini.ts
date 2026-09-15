@@ -24,6 +24,8 @@ import {
   GENERATED_IMAGE_MEDIA_TYPES,
   isRecord,
   isWireBase64,
+  MAX_GENERATED_IMAGE_CHARACTERS,
+  MAX_GENERATED_IMAGES,
   throwForStatus,
 } from './transport'
 
@@ -162,8 +164,9 @@ function addImageConfig(generationConfig: Record<string, unknown>, image: ImageO
  * Image mode (§5c): every candidate's finish reason is read before any content, under one
  * precedence over all of them. A `STOP` candidate contributes its images and its text; a
  * `NO_IMAGE` candidate contributes nothing, so an all-`NO_IMAGE` response is complete with
- * no images and the core records the output rejection. With one candidate this is exactly
- * the text-mode rule.
+ * no images and the core records the output rejection. With one candidate the precedence
+ * reduces to the text-mode rule, apart from the content requirement in `readGeminiImages`
+ * and the `NO_IMAGE` reason, neither of which has a text-mode counterpart.
  */
 function readImageResponse(
   candidates: readonly unknown[],
@@ -205,6 +208,9 @@ function readImageResponse(
  * cannot map, and so is a contributing candidate with no readable `content.parts`: a
  * candidate that said `STOP` and then stated no content is a shape failure, not an answer
  * with nothing in it.
+ *
+ * The §3 point 4b caps are read here too, before the grammar: the core would reject the same
+ * response, but only after this adapter had scanned every oversized string it holds.
  */
 function readGeminiImages(
   candidates: readonly Record<string, unknown>[],
@@ -222,6 +228,10 @@ function readGeminiImages(
       const mediaType = inline.mimeType === undefined ? inline.mime_type : inline.mimeType
       const data: unknown = inline.data
       if (typeof mediaType !== 'string' || !GENERATED_IMAGE_MEDIA_TYPES.has(mediaType)) {
+        malformed(status)
+      }
+      if (images.length >= MAX_GENERATED_IMAGES) malformed(status)
+      if (typeof data === 'string' && data.length > MAX_GENERATED_IMAGE_CHARACTERS) {
         malformed(status)
       }
       if (!isWireBase64(data)) malformed(status)

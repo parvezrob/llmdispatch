@@ -51,7 +51,11 @@ import { commitWithRecovery, reserveSlot, settleDetached } from './quota'
 import type { QuotaContext } from './quota'
 import type { CoreRuntime } from './runtime'
 import { readImageDimensions } from './image-header'
-import { IMAGE_MEDIA_TYPES } from './image-output'
+import {
+  IMAGE_MEDIA_TYPES,
+  MAX_RESPONSE_IMAGE_CHARACTERS,
+  MAX_RESPONSE_IMAGES,
+} from './image-output'
 import { base64Problem, normalizePromptParts } from './parts'
 import type { OutputFormat, PricingTable } from './usage'
 import { aggregateAttempts, normalizeUsage, priceAttempt } from './usage'
@@ -468,19 +472,6 @@ function reportedCost(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
   return value === 0 ? 0 : value
 }
-
-/**
- * §3 point 4b: how many images one response may carry, whatever the operation asked for.
- *
- * Deliberately above `MAX_IMAGE_COUNT` in `create-switch.ts`: that is the knob an operation
- * may ask for, this is a payload bound on what comes back. One provider candidate may carry
- * several images for a single requested one, so a ceiling at the knob would reject a paid
- * run for answering generously.
- */
-const MAX_RESPONSE_IMAGES = 32
-
-/** §3 point 4b: the per-image response ceiling, in base64 characters (22.5 MB decoded). */
-const MAX_RESPONSE_IMAGE_CHARACTERS = 30_000_000
 
 /**
  * Normalizes a complete response's `images` into owned, frozen `GeneratedImage`s (§3 point

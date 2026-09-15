@@ -132,6 +132,20 @@ export const GENERATED_IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
   'image/webp',
 ])
 
+/**
+ * The adapters' copy of the §3 point 4b count cap, read on the wire side before an adapter
+ * scans a generated image. The core states both caps in `core/image-output.ts`, which a
+ * provider may not import (`.dependency-cruiser.cjs`); a unit test holds the two pairs
+ * together.
+ */
+export const MAX_GENERATED_IMAGES = 32
+
+/**
+ * The per-image ceiling in base64 characters that goes with `MAX_GENERATED_IMAGES`. Reading
+ * the length first is what keeps an oversized payload from costing a full grammar scan.
+ */
+export const MAX_GENERATED_IMAGE_CHARACTERS = 30_000_000
+
 const BASE64_ALPHABET = /^[A-Za-z0-9+/]+$/
 const TRAILING_PADDING = /={1,2}$/
 
@@ -142,9 +156,10 @@ const TRAILING_PADDING = /={1,2}$/
  * rejects whitespace and a data-URL prefix along with everything else outside it.
  *
  * This is the adapters' copy of the grammar. It lives here because a provider may not import
- * `core/parts.ts`, where the request side states the same rule (`.dependency-cruiser.cjs`),
- * and the conformance suite keeps its own copy for that same reason. A unit test holds this
- * one to `base64Problem`, so the three cannot drift apart unnoticed.
+ * `core/parts.ts`, where the request side states the same rule (`.dependency-cruiser.cjs`).
+ * A unit test holds this copy to `base64Problem`, so those two cannot drift apart unnoticed.
+ * The conformance suite keeps a third copy, out of reach of both for the same boundary
+ * reason and not covered by that test.
  */
 export function isWireBase64(data: unknown): data is string {
   if (typeof data !== 'string' || data === '' || data.length % 4 !== 0) return false
