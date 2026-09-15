@@ -177,7 +177,9 @@ part, a non-string `data`, `data` outside the §6 base64 grammar, a `parts[]` en
 not an object, an `inlineData`/`inline_data` value that is not an object, and a contributing
 candidate whose `content` is absent or whose `content.parts` is not an array: a candidate
 that said `STOP` and then stated no content is a shape failure, not an answer with nothing
-in it. Text: on a refusal or a truncation the text of every candidate is concatenated; on a
+in it. The adapter applies the two §3 point 4b caps before its own grammar check, so an
+oversized part costs a length read on this wire as well, not a scan the core would then
+repeat. Text: on a refusal or a truncation the text of every candidate is concatenated; on a
 complete response only the contributing candidates' text is.
 Usage: the base counters as above, plus, **in image mode only**, `imageOutputTokens` from
 the first `usageMetadata.candidatesTokensDetails` entry whose `modality` is `'IMAGE'`, when
