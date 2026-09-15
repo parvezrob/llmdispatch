@@ -10,7 +10,11 @@ import { z } from 'zod'
 
 import { LLMDispatchError } from '../../../src/errors'
 import { createSwitchCore } from '../../../src/core/create-switch'
+import { readImageDimensions } from '../../../src/core/image-header'
+import type * as imageHeaderModule from '../../../src/core/image-header'
 import { imageOutputSchema } from '../../../src/core/image-output'
+import { base64Problem } from '../../../src/core/parts'
+import type * as partsModule from '../../../src/core/parts'
 import type {
   ImageOptions,
   OperationsMap,
@@ -29,6 +33,18 @@ import {
   ECHO_OUTPUT,
 } from './helpers'
 import type { FixtureOptions } from './helpers'
+
+// Both modules keep their real behaviour; the wrapper only makes the call observable, so
+// the cap tests below can show that the core never reaches the grammar or the header
+// reader. Vitest hoists these above the imports above.
+vi.mock('../../../src/core/image-header', async (importOriginal) => {
+  const actual = await importOriginal<typeof imageHeaderModule>()
+  return { ...actual, readImageDimensions: vi.fn(actual.readImageDimensions) }
+})
+vi.mock('../../../src/core/parts', async (importOriginal) => {
+  const actual = await importOriginal<typeof partsModule>()
+  return { ...actual, base64Problem: vi.fn(actual.base64Problem) }
+})
 
 const INPUT = { input: { text: 'a fox' } }
 
@@ -480,6 +496,7 @@ describe('the response-side caps (spec §3 point 4b)', () => {
   })
 
   it('leaves data of exactly the cap to the grammar and the header reader', async () => {
+    vi.mocked(readImageDimensions).mockClear()
     const f = imageFixture({ fallback: false })
     f.p1.nextResolve(complete([{ mediaType: 'image/png', data: paddedPng(30_000_000) }]))
     const result = await f.ai.run('echo', INPUT)
@@ -487,6 +504,37 @@ describe('the response-side caps (spec §3 point 4b)', () => {
       width: 4,
       height: 5,
     })
+    // The counterpart of the next test: at the cap the reader is reached, one char over it
+    // is not, so neither assertion can pass by the wrapper simply never being installed.
+    expect(readImageDimensions).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an over-long array on the count, without reading element 0', async () => {
+    let reads = 0
+    const images: unknown[] = new Array<unknown>(33)
+    Object.defineProperty(images, 0, {
+      enumerable: true,
+      get: () => {
+        reads += 1
+        return providerImage('image/png', 2, 3)
+      },
+    })
+    const f = imageFixture({ fallback: false })
+    f.p1.nextResolve(complete(images))
+    const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
+    expect(error.attempts?.map((a) => a.outcome)).toEqual(['malformed_response'])
+    expect(reads).toBe(0)
+  })
+
+  it('rejects over-long data on the length, before the grammar and the header', async () => {
+    vi.mocked(base64Problem).mockClear()
+    vi.mocked(readImageDimensions).mockClear()
+    const f = imageFixture({ fallback: false })
+    f.p1.nextResolve(complete([{ mediaType: 'image/png', data: paddedPng(30_000_004) }]))
+    const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
+    expect(error.attempts?.map((a) => a.outcome)).toEqual(['malformed_response'])
+    expect(base64Problem).not.toHaveBeenCalled()
+    expect(readImageDimensions).not.toHaveBeenCalled()
   })
 })
 

@@ -443,6 +443,16 @@ describe('image mode: the finish-reason precedence', () => {
     expect(response).toEqual({ kind: 'truncated', text: 'part', usage: null })
   })
 
+  it('truncates on one candidate while another stopped, keeping every text', async () => {
+    const body = imageBody([
+      imageCandidate([{ text: 'A' }], 'MAX_TOKENS'),
+      imageCandidate([{ text: 'B' }, imagePart()]),
+    ])
+    const response = await runImage(body)
+    expect(response).toEqual({ kind: 'truncated', text: 'AB', usage: null })
+    expect(response).not.toHaveProperty('images')
+  })
+
   it.each(['IMAGE_OTHER', 'SOMETHING_NEW'])(
     "throws malformed_response for '%s'",
     async (finishReason) => {
@@ -550,10 +560,28 @@ describe('image mode: the usage split', () => {
     ['a count above the output tokens', [{ modality: 'IMAGE', tokenCount: 1201 }]],
     ['a non-record entry', ['IMAGE']],
     ['details that are not an array', { modality: 'IMAGE', tokenCount: 1120 }],
+    ['a count past the safe integers', [{ modality: 'IMAGE', tokenCount: 2 ** 53 }]],
+    ['a null count', [{ modality: 'IMAGE', tokenCount: null }]],
   ])('omits the field for %s, keeping the base counters', async (_label, details) => {
     const usage = await usageFor(details)
     expect(usage).toEqual({ inputTokens: 10, outputTokens: 1200 })
     expect(usage).not.toHaveProperty('imageOutputTokens')
+  })
+
+  // `JSON.stringify` turns a non-finite number into `null`, so the only way to put one on
+  // the wire is to script the body text: `1e400` parses back as `Infinity`.
+  it('omits the field for a non-finite count', async () => {
+    const raw =
+      `{"candidates":${JSON.stringify([imageCandidate()])},` +
+      '"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":1200,' +
+      '"candidatesTokensDetails":[{"modality":"IMAGE","tokenCount":1e400}]}}'
+    installFetch(
+      () => new Response(raw, { status: 200, headers: { 'content-type': 'application/json' } }),
+    )
+    const run = await complete()
+    const response = await run(baseRequest({ responseFormat: { type: 'image' } }))
+    expect(response.usage).toEqual({ inputTokens: 10, outputTokens: 1200 })
+    expect(response.usage).not.toHaveProperty('imageOutputTokens')
   })
 
   it('keeps usage null when the base counters are missing', async () => {
