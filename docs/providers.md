@@ -165,8 +165,9 @@ contribute their images and text and a `NO_IMAGE` candidate contributes nothing,
 all-`NO_IMAGE` response is complete with no images and §3 point 4b records the output
 rejection. `promptFeedback.blockReason` and the no-candidates rule are as above; a candidate
 that is not an object counts as an unknown reason, so it weighs in the same precedence
-rather than settling the response on its own. With one candidate this reduces to the rule
-above, and text and JSON mode still read `candidates[0]` only.
+rather than settling the response on its own. With one candidate the precedence reduces to
+the rule above, apart from the content requirement below and the `NO_IMAGE` reason, neither
+of which has a text-mode counterpart. Text and JSON mode still read `candidates[0]` only.
 Images: across the contributing candidates in order, every `parts[]` entry carrying
 `inlineData` or `inline_data` (the camelCase spelling is read when present, the snake_case
 one otherwise) whose `mimeType`/`mime_type` is `image/png`, `image/jpeg` or `image/webp`
