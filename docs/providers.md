@@ -164,17 +164,28 @@ across all of them: any refused reason (the list above, which `IMAGE_SAFETY`,
 contribute their images and text and a `NO_IMAGE` candidate contributes nothing, so an
 all-`NO_IMAGE` response is complete with no images and §3 point 4b records the output
 rejection. `promptFeedback.blockReason` and the no-candidates rule are as above; a candidate
-that is not an object is `malformed_response`. With one candidate this reduces to the rule
+that is not an object counts as an unknown reason, so it weighs in the same precedence
+rather than settling the response on its own. With one candidate this reduces to the rule
 above, and text and JSON mode still read `candidates[0]` only.
 Images: across the contributing candidates in order, every `parts[]` entry carrying
-`inlineData` or `inline_data` whose `mimeType`/`mime_type` is `image/png`, `image/jpeg` or
-`image/webp` becomes one `ProviderImage` with no dimensions, which the core reads from the
-header (§3 point 4b); any other mime on an inline part, a non-string `data`, or `data`
-outside the §6 base64 grammar throws `ProviderError('malformed_response')`. Text parts are
-concatenated across the contributing candidates.
-Usage: the base counters as above, plus `imageOutputTokens` from the first
-`usageMetadata.candidatesTokensDetails` entry whose `modality` is `'IMAGE'`, when its
-`tokenCount` is a non-negative safe integer no greater than the computed output tokens;
-otherwise the field is absent and §7 prices the attempt `null`. The errors table is
-unchanged: a model that rejects `candidateCount` or an `imageConfig` value answers 400
-`INVALID_ARGUMENT`, which classifies `invalid_request`.
+`inlineData` or `inline_data` (the camelCase spelling is read when present, the snake_case
+one otherwise) whose `mimeType`/`mime_type` is `image/png`, `image/jpeg` or `image/webp`
+becomes one `ProviderImage` with no dimensions, which the core reads from the header (§3
+point 4b). `ProviderError('malformed_response')` is thrown for any other mime on an inline
+part, a non-string `data`, `data` outside the §6 base64 grammar, a `parts[]` entry that is
+not an object, an `inlineData`/`inline_data` value that is not an object, and a contributing
+candidate whose `content` is absent or whose `content.parts` is not an array: a candidate
+that said `STOP` and then stated no content is a shape failure, not an answer with nothing
+in it. Text: on a refusal or a truncation the text of every candidate is concatenated; on a
+complete response only the contributing candidates' text is.
+Usage: the base counters as above, plus, **in image mode only**, `imageOutputTokens` from
+the first `usageMetadata.candidatesTokensDetails` entry whose `modality` is `'IMAGE'`, when
+its `tokenCount` is a non-negative safe integer no greater than the computed output tokens;
+otherwise the field is absent and §7 prices the attempt `null`. A text or JSON operation
+cannot produce images, so its usage never carries the split whatever the response reports.
+Note that image tokens are counted inside `candidatesTokenCount`, hundreds to thousands per
+image, so a `maxOutputTokens` sized for a text answer makes the model answer `MAX_TOKENS`
+and the run comes back truncated with no images: size the budget for the images, or leave
+it unset.
+The errors table is unchanged: a model that rejects `candidateCount` or an `imageConfig`
+value answers 400 `INVALID_ARGUMENT`, which classifies `invalid_request`.
