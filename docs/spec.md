@@ -143,9 +143,15 @@ Per-operation resolution matrix:
    grammar, and `width`/`height` either both stated by the adapter or both read by the core
    from the image header (§6 normalization); a stated size that disagrees with the header, an
    unreadable header, one dimension without the other, or any other shape failure classifies
-   `malformed_response`. The frozen array is the candidate → `output.parseAsync`. **Zero
-   images is an output rejection** (fallback-eligible), the image analogue of a JSON parse
-   failure. `images` is never read for a `text`/`json`/`json-any` operation.
+   `malformed_response`. Two response-side caps are read before that work, the count before
+   any element and each element's `data` length before that element's grammar and header
+   work: more than **10** images, or one image's `data` over **30 000 000** base64 characters
+   (22.5 MB decoded), classifies `malformed_response`. The per-image ceiling is a safety
+   bound against a runaway payload, deliberately larger than the request-side file cap so
+   that every documented 4K output, which the caller has already paid for, fits. The frozen
+   array is the candidate → `output.parseAsync`. **Zero images is an output rejection**
+   (fallback-eligible), the image analogue of a JSON parse failure. `images` is never read
+   for a `text`/`json`/`json-any` operation.
 5. `JSON.parse` failure, object-shape failure, zero images, or `ZodError` → output rejection
    (fallback-eligible). A non-Zod exception from user transform code → `output_schema_error`
    (settled, unwrapped, no fallback).
@@ -748,6 +754,10 @@ from the header through a pure, dependency-free reader with this contract:
   rule above), but only a prefix is decoded: the first 174 764 base64 characters (a multiple
   of four; 131 073 bytes, so one maximum-length 64 KiB JPEG APP1 segment followed by the
   frame header still fits), never the whole image.
+- **Capped input.** The reader is never reached for an image the §3 point 4b response caps
+  reject: more than 10 images in one response, or one image's `data` over 30 000 000 base64
+  characters, classifies `malformed_response` on the length alone, before the grammar scan
+  and before any decode.
 - **PNG:** the 8-byte signature, then IHDR must be the first chunk with declared length 13;
   width and height are its first two big-endian 32-bit fields, each 1 to 2³¹ − 1 per the PNG
   specification.
