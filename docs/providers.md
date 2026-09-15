@@ -145,6 +145,36 @@ candidatesTokenCount + thoughtsTokenCount` where `candidatesTokenCount` is requi
 Errors (`{error:{code,status,message}}`): 401/403 → `auth`; 404 → `model_not_found`;
 429/`RESOURCE_EXHAUSTED` → `rate_limit`; 500/503 → `transient`; 400/`INVALID_ARGUMENT` →
 `invalid_request`.
-Image output: this release maps no image wire, so a request whose `responseFormat.type` is
-`'image'` throws `ProviderError('invalid_request')` before any fetch. A later release adds
-the image-generation mapping.
+Image output: a request whose `responseFormat.type` is `'image'` maps to the
+image-generation wire of the same endpoint
+([image generation](https://ai.google.dev/gemini-api/docs/image-generation)).
+**Gate:** `background: 'transparent'` throws `ProviderError('invalid_request')` before any
+fetch, since no model in this family produces an alpha channel; `'opaque'` and an absent
+value send nothing extra.
+Request, all inside `generationConfig`: `responseModalities: ['TEXT','IMAGE']`;
+`imageConfig: { aspectRatio?, imageSize? }` only when at least one knob is set, each value
+sent verbatim (`size` is `imageSize`); `candidateCount` only when `count` is set; **never
+`responseMimeType`** in image mode. `maxOutputTokens`, `temperature` and `contents` are as
+above, so reference images ride along as ordinary inline parts.
+Response: every candidate's `finishReason` is read before any content, under one precedence
+across all of them: any refused reason (the list above, which `IMAGE_SAFETY`,
+`IMAGE_PROHIBITED_CONTENT` and `IMAGE_RECITATION` join, harmless for a text run) →
+`'refused'`; else any `MAX_TOKENS` → `'truncated'`; else `IMAGE_OTHER` or any unknown reason
+→ throw `ProviderError('malformed_response')`; else `'complete'`, where `STOP` candidates
+contribute their images and text and a `NO_IMAGE` candidate contributes nothing, so an
+all-`NO_IMAGE` response is complete with no images and §3 point 4b records the output
+rejection. `promptFeedback.blockReason` and the no-candidates rule are as above; a candidate
+that is not an object is `malformed_response`. With one candidate this reduces to the rule
+above, and text and JSON mode still read `candidates[0]` only.
+Images: across the contributing candidates in order, every `parts[]` entry carrying
+`inlineData` or `inline_data` whose `mimeType`/`mime_type` is `image/png`, `image/jpeg` or
+`image/webp` becomes one `ProviderImage` with no dimensions, which the core reads from the
+header (§3 point 4b); any other mime on an inline part, a non-string `data`, or `data`
+outside the §6 base64 grammar throws `ProviderError('malformed_response')`. Text parts are
+concatenated across the contributing candidates.
+Usage: the base counters as above, plus `imageOutputTokens` from the first
+`usageMetadata.candidatesTokensDetails` entry whose `modality` is `'IMAGE'`, when its
+`tokenCount` is a non-negative safe integer no greater than the computed output tokens;
+otherwise the field is absent and §7 prices the attempt `null`. The errors table is
+unchanged: a model that rejects `candidateCount` or an `imageConfig` value answers 400
+`INVALID_ARGUMENT`, which classifies `invalid_request`.
