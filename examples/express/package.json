@@ -9,6 +9,6 @@
   "dependencies": {
     "express": "5.2.1",
     "llmdispatch": "file:./llmdispatch-local.tgz",
-    "zod": "4.4.3"
+    "zod": "4.5.2"
   }
 }
