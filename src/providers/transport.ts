@@ -141,9 +141,10 @@ const TRAILING_PADDING = /={1,2}$/
  * Stripping the padding first is what bounds it to the trailing position; the alphabet then
  * rejects whitespace and a data-URL prefix along with everything else outside it.
  *
- * The request side keeps the same rule in `core/parts.ts`, which an adapter may not import
- * (`.dependency-cruiser.cjs`); this is the one response-side copy, shared by the adapters so
- * an image that cannot be decoded is `malformed_response` on every wire.
+ * This is the adapters' copy of the grammar. It lives here because a provider may not import
+ * `core/parts.ts`, where the request side states the same rule (`.dependency-cruiser.cjs`),
+ * and the conformance suite keeps its own copy for that same reason. A unit test holds this
+ * one to `base64Problem`, so the three cannot drift apart unnoticed.
  */
 export function isWireBase64(data: unknown): data is string {
   if (typeof data !== 'string' || data === '' || data.length % 4 !== 0) return false

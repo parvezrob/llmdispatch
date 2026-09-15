@@ -2,12 +2,21 @@
  * Body settlement is still network I/O (spec §5c): a reset or abort during `response.text()`
  * must classify as `transient` / `aborted`, never leak a raw fetch error that the core would
  * treat as `provider_unclassified`. Unparseable JSON stays a null body, not a network error.
+ *
+ * The second half holds the adapters' response-side rules, the raster media types and the §6
+ * base64 grammar, to the core definitions they are copied from.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ProviderError } from '../../../src/errors'
-import { fetchJson } from '../../../src/providers/transport'
+import { IMAGE_MEDIA_TYPES } from '../../../src/core/image-output'
+import { base64Problem } from '../../../src/core/parts'
+import {
+  fetchJson,
+  GENERATED_IMAGE_MEDIA_TYPES,
+  isWireBase64,
+} from '../../../src/providers/transport'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -66,4 +75,62 @@ describe('fetchJson body settlement', () => {
       body: null,
     })
   })
+})
+
+/**
+ * The adapters keep their own copy of two rules the core also states, because a provider may
+ * not import core (`.dependency-cruiser.cjs`). These hold the copies to the originals, so a
+ * change on one side cannot pass unnoticed on the other.
+ */
+describe('the response-side copies of the core rules', () => {
+  it('accepts exactly the media types the core accepts', () => {
+    expect([...GENERATED_IMAGE_MEDIA_TYPES].sort()).toEqual([...IMAGE_MEDIA_TYPES].sort())
+  })
+
+  const corpus: unknown[] = [
+    '',
+    'AAAA',
+    'AAA=',
+    'AA==',
+    'A===',
+    '====',
+    '=AAA',
+    'AA=A',
+    'A=AA',
+    'AAA',
+    'AAAAA',
+    'AAAA=',
+    'AAAA\n',
+    '\nAAAA',
+    'AA AA',
+    'AAAA\t',
+    'AAAA ',
+    'data:image/png;base64,AAAA',
+    'data',
+    'data:AAA',
+    'AAA+',
+    'AAA/',
+    'AAA-',
+    'AAA_',
+    'AAAé',
+    'AA A',
+    'AAAAAAAA',
+    'A'.repeat(4000),
+    undefined,
+    null,
+    0,
+    1120,
+    true,
+    {},
+    [],
+    ['AAAA'],
+    new Date(0),
+  ]
+
+  it.each(corpus.map((value, index) => [index, value]))(
+    'answers the core grammar on corpus entry %i',
+    (_index, value) => {
+      expect(isWireBase64(value)).toBe(base64Problem(value) === null)
+    },
+  )
 })
