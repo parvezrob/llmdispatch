@@ -124,7 +124,7 @@ async function completeGemini(apiKey: string, req: ProviderRequest): Promise<Pro
 
   if (!isRecord(http.body)) malformed(http.status)
 
-  const usage = readGeminiUsage(http.body.usageMetadata)
+  const usage = readGeminiUsage(http.body.usageMetadata, image !== null)
   const feedback = isRecord(http.body.promptFeedback) ? http.body.promptFeedback : null
   if (feedback?.blockReason != null) return { kind: 'refused', text: '', usage }
 
@@ -175,9 +175,13 @@ function readImageResponse(
   let truncated = false
   let unmappable = false
   for (const candidate of candidates) {
-    // A candidate that is not a record states no terminal state to weigh, so it settles the
-    // response on its own rather than joining the precedence below.
-    if (!isRecord(candidate)) malformed(status)
+    // A candidate that is not a record states no reason this adapter can map, so it weighs
+    // like an unknown reason. Settling the response on it would turn a terminal refusal
+    // beside it into a fallback-eligible malformed one.
+    if (!isRecord(candidate)) {
+      unmappable = true
+      continue
+    }
     records.push(candidate)
     const finish = candidate.finishReason
     if (typeof finish === 'string' && REFUSED_REASONS.has(finish)) refused = true
@@ -194,10 +198,13 @@ function readImageResponse(
 }
 
 /**
- * Every inline image part of the given candidates, in order, without dimensions: the core
- * reads those from the image header (§3 point 4b). ProtoJSON prints the camelCase spelling
- * on output and accepts the snake_case one, so both are read. Anything else on an inline
- * part is a response this adapter cannot map.
+ * Every inline image part of the contributing candidates, in order, without dimensions: the
+ * core reads those from the image header (§3 point 4b). ProtoJSON prints the camelCase
+ * spelling on output and accepts the snake_case one, so `inlineData` is read when present
+ * and `inline_data` otherwise. Anything else on an inline part is a response this adapter
+ * cannot map, and so is a contributing candidate with no readable `content.parts`: a
+ * candidate that said `STOP` and then stated no content is a shape failure, not an answer
+ * with nothing in it.
  */
 function readGeminiImages(
   candidates: readonly Record<string, unknown>[],
@@ -205,7 +212,9 @@ function readGeminiImages(
 ): ProviderImage[] {
   const images: ProviderImage[] = []
   for (const candidate of candidates) {
-    for (const part of candidateParts(candidate)) {
+    const content = isRecord(candidate.content) ? candidate.content : null
+    if (content === null || !Array.isArray(content.parts)) malformed(status)
+    for (const part of content.parts as readonly unknown[]) {
       if (!isRecord(part)) malformed(status)
       const inline = part.inlineData === undefined ? part.inline_data : part.inlineData
       if (inline === undefined) continue
@@ -240,7 +249,12 @@ function readGeminiText(candidates: readonly Record<string, unknown>[]): string 
   return chunks.join('')
 }
 
-function readGeminiUsage(raw: unknown): TokenUsage | null {
+/**
+ * Usage (§5c). The image split is read in image mode only: a text or JSON operation cannot
+ * produce images, so letting its response report one would hand the wire the choice of
+ * pricing basis for an attempt that has no images to price.
+ */
+function readGeminiUsage(raw: unknown, imageMode: boolean): TokenUsage | null {
   if (!isRecord(raw)) return null
   const usage = buildUsage(
     raw.promptTokenCount,
@@ -248,7 +262,7 @@ function readGeminiUsage(raw: unknown): TokenUsage | null {
     [],
     [raw.thoughtsTokenCount],
   )
-  if (usage === null) return null
+  if (usage === null || !imageMode) return usage
   const imageOutputTokens = readImageTokens(raw.candidatesTokensDetails)
   if (imageOutputTokens === null || imageOutputTokens > usage.outputTokens) return usage
   return { ...usage, imageOutputTokens }
