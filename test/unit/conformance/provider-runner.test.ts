@@ -11,6 +11,7 @@ import type {
   ProviderRequest,
   ProviderResponse,
 } from '../../../src/types'
+import { base64, png } from '../core/image-fixtures'
 import { baseRequest, installFetch, jsonResponse } from '../providers/helpers'
 
 afterEach(() => {
@@ -432,6 +433,14 @@ describe('the built-in adapters, driven end to end through the runner', () => {
           { type: 'file', mediaType: 'image/png', data: FILE_DATA },
         ],
       }),
+    // Only an adapter that maps the image wire gets an `image_output` scenario beside this
+    // request; for the others the pair is incomplete and the scenario stays skipped.
+    image_output: () =>
+      baseRequest({
+        model,
+        parts: [{ type: 'text', text: 'draw it' }],
+        responseFormat: { type: 'image' },
+      }),
   })
 
   it('passes openaiCompatible over scripted fetch, native json capability', async () => {
@@ -526,6 +535,21 @@ describe('the built-in adapters, driven end to end through the runner', () => {
       candidates: [{ content: { parts: [{ text }] }, finishReason }],
       usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
     })
+    const imageBody = {
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { mimeType: 'image/png', data: base64(png(1, 1)) } }],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 1,
+        candidatesTokenCount: 12,
+        candidatesTokensDetails: [{ modality: 'IMAGE', tokenCount: 10 }],
+      },
+    }
     const result = await runProviderConformance({
       provider,
       requestFactory: () => baseRequest({ model: 'gemini-x' }),
@@ -551,6 +575,7 @@ describe('the built-in adapters, driven end to end through the runner', () => {
         image: step(() =>
           installFetch(() => jsonResponse(200, generateBody('STOP', '{"ok":true}'))),
         ),
+        image_output: step(() => installFetch(() => jsonResponse(200, imageBody))),
       },
       requests: mediaRequests('gemini-x'),
       controls: { jsonCapability: 'prompt-only' },
@@ -558,7 +583,7 @@ describe('the built-in adapters, driven end to end through the runner', () => {
     expect(result).toEqual({
       passed: true,
       failures: [],
-      skipped: ['responseFormat:native', 'image_output'],
+      skipped: ['responseFormat:native'],
     })
   })
 })
