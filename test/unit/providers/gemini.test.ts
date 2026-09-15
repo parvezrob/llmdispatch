@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ProviderError } from '../../../src/errors'
 import { gemini } from '../../../src/providers/gemini'
+import { isWireBase64 } from '../../../src/providers/transport'
+import type * as transportModule from '../../../src/providers/transport'
 import type { ImageOptions, ProviderRequest } from '../../../src/types'
 import { base64, png } from '../core/image-fixtures'
 import {
@@ -13,6 +15,14 @@ import {
   textParts,
   withPrepared,
 } from './helpers'
+
+// The module keeps its real behaviour; the wrapper only makes the grammar scan observable,
+// so the cap tests can show what the adapter never reaches. Vitest hoists this above the
+// imports above.
+vi.mock('../../../src/providers/transport', async (importOriginal) => {
+  const actual = await importOriginal<typeof transportModule>()
+  return { ...actual, isWireBase64: vi.fn(actual.isWireBase64) }
+})
 
 const KEY = () => 'goog-key-test'
 
@@ -422,6 +432,43 @@ describe('image mode: images and text', () => {
 
   it('throws malformed_response for no candidates without block metadata', async () => {
     await expectMalformed({ candidates: [] })
+  })
+})
+
+describe('image mode: the response caps', () => {
+  // The adapter states the §3 point 4b caps on its own side: the core would reject the same
+  // response, but only after the grammar had run over every oversized string in it.
+  const OVERSIZED = 'A'.repeat(30_000_004)
+  const AT_CAP = 'A'.repeat(30_000_000)
+
+  function parts(count: number) {
+    return Array.from({ length: count }, () => imagePart())
+  }
+
+  it('reads thirty-two image parts across candidates', async () => {
+    const response = await runImage(
+      imageBody([imageCandidate(parts(20)), imageCandidate(parts(12))]),
+    )
+    expect(response.kind === 'complete' && response.images).toHaveLength(32)
+  })
+
+  it('throws malformed_response on the thirty-third part, before its grammar scan', async () => {
+    vi.mocked(isWireBase64).mockClear()
+    await expectMalformed(imageBody([imageCandidate(parts(20)), imageCandidate(parts(13))]))
+    expect(isWireBase64).toHaveBeenCalledTimes(32)
+  })
+
+  it('reads a part whose data is exactly the per-image cap', async () => {
+    const response = await runImage(imageBody([imageCandidate([imagePart(AT_CAP)])]))
+    expect(response.kind === 'complete' && response.images).toEqual([
+      { mediaType: 'image/png', data: AT_CAP },
+    ])
+  })
+
+  it('throws malformed_response on over-long data, without running the grammar', async () => {
+    vi.mocked(isWireBase64).mockClear()
+    await expectMalformed(imageBody([imageCandidate([imagePart(OVERSIZED)])]))
+    expect(isWireBase64).not.toHaveBeenCalled()
   })
 })
 

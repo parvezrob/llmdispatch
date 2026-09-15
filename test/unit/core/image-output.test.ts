@@ -509,6 +509,18 @@ describe('the response-side caps (spec §3 point 4b)', () => {
     expect(readImageDimensions).toHaveBeenCalledTimes(1)
   })
 
+  it('rejects an over-long image that follows a valid one', async () => {
+    const f = imageFixture({ fallback: false })
+    f.p1.nextResolve(
+      complete([
+        providerImage('image/png', 2, 3),
+        { mediaType: 'image/png', data: paddedPng(30_000_004) },
+      ]),
+    )
+    const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
+    expect(error.attempts?.map((a) => a.outcome)).toEqual(['malformed_response'])
+  })
+
   it('rejects an over-long array on the count, without reading element 0', async () => {
     let reads = 0
     const images: unknown[] = new Array<unknown>(33)
