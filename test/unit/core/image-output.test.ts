@@ -454,25 +454,27 @@ describe('the response-side caps (spec §3 point 4b)', () => {
     return Array.from({ length: count }, () => providerImage('image/png', 2, 3))
   }
 
-  it('accepts ten images', async () => {
+  // The count cap is a payload bound, not the `image.count` knob: it sits well above it,
+  // since one provider candidate may carry several images for a single requested one.
+  it('accepts thirty-two images', async () => {
     const f = imageFixture({ fallback: false })
-    f.p1.nextResolve(complete(copies(10)))
+    f.p1.nextResolve(complete(copies(32)))
     const result = await f.ai.run('echo', INPUT)
-    expect((result.data as z.infer<typeof imageOutputSchema>).images).toHaveLength(10)
+    expect((result.data as z.infer<typeof imageOutputSchema>).images).toHaveLength(32)
   })
 
-  it('classifies an eleventh image as malformed_response', async () => {
+  it('classifies a thirty-third image as malformed_response', async () => {
     const f = imageFixture({ fallback: false })
-    f.p1.nextResolve(complete(copies(11)))
+    f.p1.nextResolve(complete(copies(33)))
     const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['malformed_response'])
   })
 
-  // The cap is read off the length alone, before the grammar scan and before the header
-  // reader: this string would fail both, and the classification is the same either way.
+  // Four characters over the cap, so the string is still valid base64 and still a readable
+  // PNG: only the length cap can be what rejects it.
   it('classifies data over the per-image cap as malformed_response', async () => {
     const f = imageFixture({ fallback: false })
-    f.p1.nextResolve(complete([{ mediaType: 'image/png', data: `${paddedPng(30_000_000)}A` }]))
+    f.p1.nextResolve(complete([{ mediaType: 'image/png', data: paddedPng(30_000_004) }]))
     const error = await expectCode(f.ai.run('echo', INPUT), 'PROVIDER_FAILED')
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['malformed_response'])
   })
