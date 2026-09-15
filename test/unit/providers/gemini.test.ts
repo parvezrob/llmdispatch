@@ -357,6 +357,22 @@ describe('image mode: images and text', () => {
     ])
   })
 
+  it('reads the camelCase spelling when one part carries both, disagreeing', async () => {
+    const other = base64(png(4, 5))
+    const body = imageBody([
+      imageCandidate([
+        {
+          inlineData: { mimeType: 'image/png', data: PNG_DATA },
+          inline_data: { mime_type: 'image/webp', data: other },
+        },
+      ]),
+    ])
+    const response = await runImage(body)
+    expect(response.kind === 'complete' && response.images).toEqual([
+      { mediaType: 'image/png', data: PNG_DATA },
+    ])
+  })
+
   it('concatenates text across candidates and keeps it beside the images', async () => {
     const response = await runImage(
       imageBody([
@@ -380,9 +396,21 @@ describe('image mode: images and text', () => {
     await expectMalformed(imageBody([imageCandidate(parts)]))
   })
 
-  it('throws malformed_response for a candidate that is not a record', async () => {
+  it('weighs a candidate that is not a record as an unknown reason', async () => {
     await expectMalformed(imageBody([imageCandidate(), 'candidate']))
   })
+
+  // A STOP candidate that then states no content is a shape failure, not an empty answer.
+  it.each([
+    ['content.parts is not an array', { content: { parts: { 0: imagePart() } } }],
+    ['content is absent', { finishReason: 'STOP' }],
+    ['content is not a record', { content: 'parts', finishReason: 'STOP' }],
+  ])(
+    'throws malformed_response when a contributing candidate has %s',
+    async (_label, extra) => {
+      await expectMalformed(imageBody([{ finishReason: 'STOP', ...extra }]))
+    },
+  )
 
   it('maps promptFeedback.blockReason to refused before reading candidates', async () => {
     const response = await runImage({
@@ -422,20 +450,33 @@ describe('image mode: the finish-reason precedence', () => {
     },
   )
 
-  it('lets a refused candidate beat a truncated one, whatever the order', async () => {
+  it.each([
+    ['refused first', 'IMAGE_SAFETY', 'MAX_TOKENS'],
+    ['truncated first', 'MAX_TOKENS', 'IMAGE_SAFETY'],
+  ])('lets a refused candidate beat a truncated one, %s', async (_label, one, two) => {
     const body = imageBody([
-      imageCandidate([{ text: 'a' }], 'MAX_TOKENS'),
-      imageCandidate([{ text: 'b' }], 'IMAGE_SAFETY'),
+      imageCandidate([{ text: 'a' }], one),
+      imageCandidate([{ text: 'b' }], two),
     ])
     const response = await runImage(body)
     expect(response).toEqual({ kind: 'refused', text: 'ab', usage: null })
   })
 
-  it('lets a refused candidate beat an unmappable one', async () => {
+  it('carries no images on a refusal, even when a candidate holds an image part', async () => {
     const body = imageBody([
-      imageCandidate([{ text: '' }], 'IMAGE_OTHER'),
-      imageCandidate([{ text: '' }], 'IMAGE_RECITATION'),
+      imageCandidate([{ text: 'sorry' }, imagePart()], 'IMAGE_SAFETY'),
+      imageCandidate(),
     ])
+    const response = await runImage(body)
+    expect(response).toEqual({ kind: 'refused', text: 'sorry', usage: null })
+    expect(response).not.toHaveProperty('images')
+  })
+
+  it.each([
+    ['an unmappable reason', imageCandidate([{ text: '' }], 'IMAGE_OTHER')],
+    ['a candidate that is not a record', 'candidate'],
+  ])('lets a refused candidate beat %s', async (_label, other) => {
+    const body = imageBody([other, imageCandidate([{ text: '' }], 'IMAGE_RECITATION')])
     expect((await runImage(body)).kind).toBe('refused')
   })
 
@@ -516,15 +557,17 @@ describe('image mode: the usage split', () => {
   })
 
   it('keeps usage null when the base counters are missing', async () => {
-    const usage = await usageFor([{ modality: 'IMAGE', tokenCount: 1120 }])
-    expect(usage).toMatchObject({ imageOutputTokens: 1120 })
     const response = await runImage(
-      imageBody([imageCandidate()], { candidatesTokensDetails: [] }),
+      imageBody([imageCandidate()], {
+        candidatesTokensDetails: [{ modality: 'IMAGE', tokenCount: 1120 }],
+      }),
     )
     expect(response.usage).toBeNull()
   })
 
-  it('carries the split on a text run that reports one', async () => {
+  // A text operation cannot produce images, so the wire does not get to pick the pricing
+  // basis for the attempt: the split is read in image mode only.
+  it('omits the split on a text run, even when an IMAGE entry is reported', async () => {
     installFetch(() =>
       jsonResponse(200, {
         candidates: [{ content: { parts: [{ text: 'x' }] }, finishReason: 'STOP' }],
@@ -536,11 +579,8 @@ describe('image mode: the usage split', () => {
     )
     const run = await complete()
     const response = await run(baseRequest())
-    expect(response.usage).toEqual({
-      inputTokens: 10,
-      outputTokens: 1200,
-      imageOutputTokens: 5,
-    })
+    expect(response.usage).toEqual({ inputTokens: 10, outputTokens: 1200 })
+    expect(response.usage).not.toHaveProperty('imageOutputTokens')
   })
 })
 
