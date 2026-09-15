@@ -150,9 +150,9 @@ Per-operation resolution matrix:
    back, not restatements of the `image.count` knob, which is why the count ceiling sits well
    above it: one provider candidate may carry several images for a single requested one. The
    per-image ceiling is a safety bound against a runaway payload, deliberately larger than
-   the request-side file cap, so a 4K output, which the caller has already paid for, fits
-   with margin. The frozen
-   array is the candidate → `output.parseAsync`. **Zero images is an output rejection**
+   the request-side file cap, so that a 4K output, which the caller has already paid for,
+   fits comfortably at the output sizes the §5c adapters document. The frozen array is the
+   candidate → `output.parseAsync`. **Zero images is an output rejection**
    (fallback-eligible), the image analogue of a JSON parse failure. `images` is never read
    for a `text`/`json`/`json-any` operation.
 5. `JSON.parse` failure, object-shape failure, zero images, or `ZodError` → output rejection
@@ -475,8 +475,9 @@ contribute their images and text and a `NO_IMAGE` candidate contributes nothing,
 all-`NO_IMAGE` response is complete with no images and §3 point 4b records the output
 rejection. `promptFeedback.blockReason` and the no-candidates rule are as above; a candidate
 that is not an object counts as an unknown reason, so it weighs in the same precedence
-rather than settling the response on its own. With one candidate this reduces to the rule
-above, and text and JSON mode still read `candidates[0]` only.
+rather than settling the response on its own. With one candidate the precedence reduces to
+the rule above, apart from the content requirement below and the `NO_IMAGE` reason, neither
+of which has a text-mode counterpart. Text and JSON mode still read `candidates[0]` only.
 Images: across the contributing candidates in order, every `parts[]` entry carrying
 `inlineData` or `inline_data` (the camelCase spelling is read when present, the snake_case
 one otherwise) whose `mimeType`/`mime_type` is `image/png`, `image/jpeg` or `image/webp`
