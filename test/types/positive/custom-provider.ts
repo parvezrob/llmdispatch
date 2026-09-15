@@ -6,6 +6,8 @@ import { ProviderError, type Provider } from 'llmdispatch'
 
 export const myProvider: Provider = {
   async complete(req) {
+    // The format union includes 'image'; reject it unless your backend generates images.
+    if (req.responseFormat.type === 'image') throw new ProviderError('invalid_request')
     const res = await callMyBackend(req) // req.responseFormat tells you text vs JSON
     if (res.status === 429) throw new ProviderError('rate_limit', { status: 429 })
     if (res.status === 401) throw new ProviderError('auth', { status: 401 })

@@ -37,16 +37,28 @@ const OPTIONAL: readonly OptionalScenario[] = [
   'refused',
 ]
 
-/** Optional media scenarios: success-class conditions dispatching a request that carries a file. */
-type MediaScenario = 'document' | 'image'
+/**
+ * Optional media scenarios: success-class conditions dispatching their own request, one
+ * carrying a file of the named class or, for `image_output`, asking for images back.
+ */
+type MediaScenario = 'document' | 'image' | 'image_output'
 
-const MEDIA: readonly MediaScenario[] = ['document', 'image']
+const MEDIA: readonly MediaScenario[] = ['document', 'image', 'image_output']
 
 /** What each media scenario's request has to carry, in the words its failure message uses. */
 const MEDIA_EXPECTATION: Readonly<Record<MediaScenario, string>> = {
   document: "an 'application/pdf' file part",
   image: 'an image file part',
+  image_output: "responseFormat.type 'image'",
 }
+
+const IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+const BASE64_ALPHABET = /^[A-Za-z0-9+/]+$/
+const TRAILING_PADDING = /={1,2}$/
 
 /** Controls that let the suite verify responseFormat and capability without guessing. */
 export interface ProviderConformanceControls {
@@ -176,7 +188,9 @@ export async function runProviderConformance(opts: {
         )
         continue
       }
-      assertSuccess(await dispatch(req), failures, name)
+      const response = await dispatch(req)
+      assertSuccess(response, failures, name)
+      if (name === 'image_output') assertImages(response, failures, name)
     } catch (error) {
       failures.push(`${name}: ${thrown(error)}`)
     }
@@ -187,6 +201,7 @@ export async function runProviderConformance(opts: {
 
 /** Whether a request carries a file part of the scenario's media class (spec §6b). */
 function carriesMedia(name: MediaScenario, req: ProviderRequest): boolean {
+  if (name === 'image_output') return req.responseFormat.type === 'image'
   return req.parts.some(
     (part) =>
       part.type === 'file' &&
@@ -194,6 +209,54 @@ function carriesMedia(name: MediaScenario, req: ProviderRequest): boolean {
         ? part.mediaType === 'application/pdf'
         : part.mediaType.startsWith('image/')),
   )
+}
+
+/**
+ * The `ProviderImage` contract (spec §6, §8): at least one image, each with one of the three
+ * raster types, §6-grammar base64, and dimensions both present as positive safe integers or
+ * both absent. The core's header reader is not reachable from here, so a missing pair is
+ * the adapter's right to leave, not a failure.
+ */
+function assertImages(response: ProviderResponse, failures: string[], label: string): void {
+  if (response.kind !== 'complete') return
+  const images = (response as { images?: unknown }).images
+  if (!Array.isArray(images) || images.length === 0) {
+    failures.push(`${label}: expected images to be a non-empty array`)
+    return
+  }
+  // Indexed reads: a sparse slot is a missing image, not a skipped one.
+  const length: number = images.length
+  for (let index = 0; index < length; index++) {
+    const problem = providerImageProblem((images as unknown[])[index])
+    if (problem !== null) failures.push(`${label}: images[${String(index)}] ${problem}`)
+  }
+}
+
+function providerImageProblem(image: unknown): string | null {
+  if (typeof image !== 'object' || image === null || Array.isArray(image)) {
+    return 'must be an object'
+  }
+  const { mediaType, data, width, height } = image as Record<string, unknown>
+  if (typeof mediaType !== 'string' || !IMAGE_MEDIA_TYPES.has(mediaType)) {
+    return "mediaType must be 'image/png', 'image/jpeg' or 'image/webp'"
+  }
+  if (typeof data !== 'string' || !isBase64(data)) {
+    return 'data must be non-empty standard-alphabet base64'
+  }
+  if (width === undefined && height === undefined) return null
+  if (!isDimension(width) || !isDimension(height)) {
+    return 'width and height must both be positive safe integers or both be absent'
+  }
+  return null
+}
+
+function isBase64(data: string): boolean {
+  if (data === '' || data.length % 4 !== 0 || data.startsWith('data:')) return false
+  return BASE64_ALPHABET.test(data.replace(TRAILING_PADDING, ''))
+}
+
+function isDimension(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
 function assertSuccess(response: ProviderResponse, failures: string[], label: string): void {
@@ -244,12 +307,15 @@ function assertScenarioError(name: OptionalScenario, error: unknown, failures: s
 
 function usageOk(usage: TokenUsage | null): boolean {
   if (usage === null) return true
-  return (
+  const baseOk =
     Number.isSafeInteger(usage.inputTokens) &&
     usage.inputTokens >= 0 &&
     Number.isSafeInteger(usage.outputTokens) &&
     usage.outputTokens >= 0
-  )
+  if (!baseOk) return false
+  const split = usage.imageOutputTokens
+  if (split === undefined) return true
+  return Number.isSafeInteger(split) && split >= 0 && split <= usage.outputTokens
 }
 
 function thrown(error: unknown): string {

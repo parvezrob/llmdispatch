@@ -49,7 +49,9 @@ const RECORD: AttemptRecord = {
   model: 'conformance-model',
   outcome: 'succeeded',
   status: 200,
-  usage: { inputTokens: 120, outputTokens: 34 },
+  // The optional split is part of the round trip: a store that persists only the two base
+  // counters fails the exact comparison below (spec §8).
+  usage: { inputTokens: 120, outputTokens: 34, imageOutputTokens: 12 },
   costUsd: 0.00042,
   durationMs: 250,
 }

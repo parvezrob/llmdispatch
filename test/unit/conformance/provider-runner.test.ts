@@ -29,6 +29,7 @@ const OPTIONAL_ORDER = [
   'refused',
   'document',
   'image',
+  'image_output',
 ]
 
 /** Base64 short enough to read; no adapter here decodes it. */
@@ -473,7 +474,7 @@ describe('the built-in adapters, driven end to end through the runner', () => {
       requests: mediaRequests('gpt-x'),
       controls: { jsonCapability: 'native' },
     })
-    expect(result).toEqual({ passed: true, failures: [], skipped: [] })
+    expect(result).toEqual({ passed: true, failures: [], skipped: ['image_output'] })
   })
 
   it('passes anthropic over scripted fetch, prompt-only json capability', async () => {
@@ -512,7 +513,11 @@ describe('the built-in adapters, driven end to end through the runner', () => {
       requests: mediaRequests('claude-x'),
       controls: { jsonCapability: 'prompt-only' },
     })
-    expect(result).toEqual({ passed: true, failures: [], skipped: ['responseFormat:native'] })
+    expect(result).toEqual({
+      passed: true,
+      failures: [],
+      skipped: ['responseFormat:native', 'image_output'],
+    })
   })
 
   it('passes gemini over scripted fetch, prompt-only json capability', async () => {
@@ -550,6 +555,10 @@ describe('the built-in adapters, driven end to end through the runner', () => {
       requests: mediaRequests('gemini-x'),
       controls: { jsonCapability: 'prompt-only' },
     })
-    expect(result).toEqual({ passed: true, failures: [], skipped: ['responseFormat:native'] })
+    expect(result).toEqual({
+      passed: true,
+      failures: [],
+      skipped: ['responseFormat:native', 'image_output'],
+    })
   })
 })

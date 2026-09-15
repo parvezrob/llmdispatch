@@ -28,7 +28,7 @@ That cap bounds file payload only, and it is llmdispatch's own ceiling rather th
 
 ## Output: from model text to typed data
 
-Each operation declares its `format`: `'json'` (the default, a top-level JSON object), `'json-any'` (arrays and scalars), or `'text'`. Built-in adapters enable the provider's native JSON mode when the format is a top-level object and the provider genuinely supports it (verified per provider, spec §5c). Responses are unwrapped from a whole-response code fence if present, parsed, then validated with your Zod schema (async transforms supported). A parse or validation failure is an **output rejection**: fallback-eligible, never silently returned. An optional `quality` gate runs after validation:
+Each operation declares its `format`: `'json'` (the default, a top-level JSON object), `'json-any'` (arrays and scalars), `'text'`, or `'image'` (generated images as dimensioned file parts, validated by the packaged `imageOutputSchema`; spec §3 and §6). Built-in adapters enable the provider's native JSON mode when the format is a top-level object and the provider genuinely supports it (verified per provider, spec §5c). Responses are unwrapped from a whole-response code fence if present, parsed, then validated with your Zod schema (async transforms supported). A parse or validation failure is an **output rejection**: fallback-eligible, never silently returned. An optional `quality` gate runs after validation:
 
 ```ts
 summarize: {
@@ -189,6 +189,7 @@ import { ProviderError, type Provider } from 'llmdispatch'
 
 const myProvider: Provider = {
   async complete(req) {
+    if (req.responseFormat.type === 'image') throw new ProviderError('invalid_request') // unless you generate images
     const res = await callMyBackend(req)                 // req.responseFormat tells you text vs JSON
     if (res.status === 429) throw new ProviderError('rate_limit', { status: 429 })
     if (res.status === 401) throw new ProviderError('auth', { status: 401 })
@@ -200,7 +201,7 @@ const myProvider: Provider = {
 
 ## Cost
 
-Token usage is reported per attempt, normalized from provider-reported counts into `{ inputTokens, outputTokens }`, and `null` when the provider didn't report (spec §7 defines each adapter's mapping). Dollar cost is computed **only from prices you supply**, keyed by provider ID plus model. The same model can cost differently through different providers, and a bundled price table would go stale and lie:
+Token usage is reported per attempt, normalized from provider-reported counts into `{ inputTokens, outputTokens }` (plus `imageOutputTokens`, an "of which" share of the output, when the provider reports it), and `null` when the provider didn't report (spec §7 defines each adapter's mapping). Dollar cost is what the adapter reports for the attempt when it reports one (spec §7), otherwise it is computed **only from prices you supply**, keyed by provider ID plus model. The same model can cost differently through different providers, and a bundled price table would go stale and lie:
 
 ```ts
 createSwitch({
@@ -211,7 +212,7 @@ createSwitch({
 })
 ```
 
-`result.cost` is a **simple input/output-token estimate** (cached-token discounts and request fees are out of scope, spec §7), and it's `null` whenever any dispatched attempt is unpriced or has unknown usage. Explicitly unknown, never a misleading zero.
+`result.cost` sums the per-attempt costs: a provider-reported cost where the adapter gave one, otherwise a **simple token estimate** from your prices (cached-token discounts and request fees are out of scope, spec §7). It is `null` whenever any dispatched attempt could not be priced. Explicitly unknown, never a misleading zero.
 
 ## TypeScript
 

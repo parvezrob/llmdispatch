@@ -19,6 +19,13 @@ export type {
   TextPart,
   FilePart,
   ContentPart,
+  AspectRatio,
+  ImageSize,
+  ImageOptions,
+  GeneratedImageMediaType,
+  ProviderImage,
+  GeneratedImage,
+  ImageOutput,
   OperationDefinition,
   QualityVerdict,
   OperationRoute,
@@ -53,6 +60,7 @@ export { gemini } from './providers/gemini'
 export { memoryStores } from './stores/memory'
 export { postgresStores } from './stores/postgres'
 export { defineOperation, defineOperations } from './core/create-switch'
+export { imageOutputSchema } from './core/image-output'
 
 /**
  * Builds a configured switch: providers, operations and stores in; `run` plus the admin

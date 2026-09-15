@@ -16,6 +16,7 @@ describe('entry points', () => {
       'defineOperation',
       'defineOperations',
       'gemini',
+      'imageOutputSchema',
       'memoryStores',
       'openaiCompatible',
       'postgresStores',

@@ -1,4 +1,4 @@
-import { A as TokenUsage, C as ReservationEnvelope, D as StorePair, E as SettlementFailure, O as Switch, S as QuotaView, T as RunResult, _ as ProviderErrorKind, b as QualityVerdict, c as FilePart, d as OperationConfigView, f as OperationDefinition, g as Provider, h as PreparedProvider, i as ConfigStore, j as UsageStore, k as TextPart, l as Logger, m as OperationsMap, n as AttemptOutcome, o as ContentPart, p as OperationRoute, r as AttemptRecord, s as CreateSwitchConfig, t as ApiKeyResolver, u as ModelPrice, v as ProviderRequest, w as RouteTarget, x as QuotaKey, y as ProviderResponse } from "./types.js";
+import { A as ReservationEnvelope, C as ProviderErrorKind, D as QualityVerdict, E as ProviderResponse, F as Switch, I as TextPart, L as TokenUsage, M as RunResult, N as SettlementFailure, O as QuotaKey, P as StorePair, R as UsageStore, S as Provider, T as ProviderRequest, _ as OperationConfigView, a as ConfigStore, b as OperationsMap, c as CreateSwitchConfig, d as GeneratedImageMediaType, f as ImageOptions, g as ModelPrice, h as Logger, i as AttemptRecord, j as RouteTarget, k as QuotaView, l as FilePart, m as ImageSize, n as AspectRatio, p as ImageOutput, r as AttemptOutcome, s as ContentPart, t as ApiKeyResolver, u as GeneratedImage, v as OperationDefinition, w as ProviderImage, x as PreparedProvider, y as OperationRoute } from "./types.js";
 import { z } from "zod";
 //#region src/errors/llmdispatch-error.d.ts
 /** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
@@ -125,6 +125,14 @@ declare function defineOperation<In extends z.ZodType, Out extends z.ZodType>(de
  */
 declare function defineOperations<Ops extends OperationsMap>(operations: Ops): Ops;
 //#endregion
+//#region src/core/image-output.d.ts
+/**
+ * Accepts exactly what the §3 image sub-stage produces: at least one well-formed image and
+ * the text beside it. The one-image case is the default; `imageOutputSchema.refine(...)`
+ * adds a count or a dimension floor.
+ */
+declare const imageOutputSchema: z.ZodType<ImageOutput>;
+//#endregion
 //#region src/index.d.ts
 /**
  * Builds a configured switch: providers, operations and stores in; `run` plus the admin
@@ -144,5 +152,5 @@ declare function defineOperations<Ops extends OperationsMap>(operations: Ops): O
  */
 declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
 //#endregion
-export { type ApiKeyResolver, type AttemptOutcome, type AttemptRecord, type ConfigStore, type ContentPart, type CreateSwitchConfig, type FilePart, LLMDispatchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TextPart, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, memoryStores, openaiCompatible, postgresStores };
+export { type ApiKeyResolver, type AspectRatio, type AttemptOutcome, type AttemptRecord, type ConfigStore, type ContentPart, type CreateSwitchConfig, type FilePart, type GeneratedImage, type GeneratedImageMediaType, type ImageOptions, type ImageOutput, type ImageSize, LLMDispatchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderImage, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TextPart, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, imageOutputSchema, memoryStores, openaiCompatible, postgresStores };
 //# sourceMappingURL=index.d.ts.map

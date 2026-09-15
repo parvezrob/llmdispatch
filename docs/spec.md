@@ -1,12 +1,12 @@
-# llmdispatch v0.2 Normative Specification
+# llmdispatch v0.3 Normative Specification
 
-This document is the exact contract for llmdispatch v0.2. The [README](../README.md) is the
+This document is the exact contract for llmdispatch v0.3. The [README](../README.md) is the
 introduction; when they disagree, this spec wins. §8 defines the adopter-facing conformance
 suite; the core's own behavior (state machine, matrices, sanitization, type inference) is
 enforced by the package's internal test suite, including compile-time positive and negative
 type fixtures (which include the exact README quickstart shape).
 
-Status: **normative contract for v0.2**. Semver: while on 0.x, breaking changes to anything
+Status: **normative contract for v0.3**. Semver: while on 0.x, breaking changes to anything
 here bump the minor version.
 
 ---
@@ -120,12 +120,16 @@ Per-operation resolution matrix:
 ## 3. Output pipeline (attempt sub-stages)
 
 1. Each operation declares `format`: **`'json'`** (the default: a top-level JSON **object**),
-   **`'json-any'`** (arbitrary JSON; native provider JSON modes never enabled), or
-   **`'text'`**. No schema introspection: text-shaped output schemas MUST set `'text'`.
+   **`'json-any'`** (arbitrary JSON; native provider JSON modes never enabled),
+   **`'text'`**, or **`'image'`** (generated images, §3 point 4b). No schema introspection:
+   text-shaped output schemas MUST set `'text'`.
 2. The adapter receives `responseFormat: { type: 'text' } | { type: 'json'; topLevel:
-   'object' | 'any' }` and enables native generic JSON mode only per its §5c capability
-   rule AND `topLevel: 'object'`. Schema-constrained structured output is NOT in this
-   contract; the prompt carries the shape.
+   'object' | 'any' } | { type: 'image'; count?; aspectRatio?; size?; background? }` and
+   enables native generic JSON mode only per its §5c capability rule AND `topLevel:
+   'object'`. Schema-constrained structured output is NOT in this contract; the prompt
+   carries the shape. The image variant carries the operation's declared `image` block
+   verbatim: an unset knob is absent, never defaulted, and an adapter whose wire cannot
+   express a request throws `ProviderError('invalid_request')` before dispatching (§5c).
 3. **Termination is checked before content**: adapters normalize termination metadata
    into `ProviderResponse.kind` (§5c). `'truncated'` classifies `truncated`; `'refused'`
    classifies `refused`; unknown terminal states are the ADAPTER'S job to map (unmappable →
@@ -133,7 +137,16 @@ Per-operation resolution matrix:
 4. `text`: raw text → `output.parseAsync`. `json`/`json-any`: unwrap a single
    whole-response code fence if present → `JSON.parse` → **for `'json'`, the parsed value
    must be a non-null, non-array object** (else output rejection) → `output.parseAsync`.
-5. `JSON.parse` failure, object-shape failure, or `ZodError` → output rejection
+   4b. `image`: the candidate is `{ images, text }` built from the response's `images`
+   (absent counts as none) and `text`. Every element is read once into an owned, frozen
+   `GeneratedImage`: `mediaType` one of the three raster types, `data` under the §6 base64
+   grammar, and `width`/`height` either both stated by the adapter or both read by the core
+   from the image header (§6 normalization); a stated size that disagrees with the header, an
+   unreadable header, one dimension without the other, or any other shape failure classifies
+   `malformed_response`. The frozen array is the candidate → `output.parseAsync`. **Zero
+   images is an output rejection** (fallback-eligible), the image analogue of a JSON parse
+   failure. `images` is never read for a `text`/`json`/`json-any` operation.
+5. `JSON.parse` failure, object-shape failure, zero images, or `ZodError` → output rejection
    (fallback-eligible). A non-Zod exception from user transform code → `output_schema_error`
    (settled, unwrapped, no fallback).
 6. Quality gate: `quality({ input, data })` (raced with abort). `{ ok:false }` → output
@@ -276,8 +289,8 @@ implementing exactly this.
 | `malformed_response` (unusable body/shape/unknown terminal state) | ✅ | `PROVIDER_FAILED` | `true` |
 | `timeout` (core-assigned) | ✅ | `PROVIDER_FAILED` | `true` |
 | `truncated` (`ProviderResponse.kind: 'truncated'`, max-token/length/context termination per §5c) | ✅ | `OUTPUT_REJECTED` | `true` |
-| `output_rejected` (JSON parse / object-shape / `ZodError` / quality `{ok:false}`) | ✅ | `OUTPUT_REJECTED` | `true` |
-| `refused` (`ProviderResponse.kind: 'refused'`, refusal/safety/policy block on a 200 per §5c) | ❌ | `PROVIDER_FAILED` | `false` |
+| `output_rejected` (JSON parse / object-shape / zero-image image output / `ZodError` / quality `{ok:false}`) | ✅ | `OUTPUT_REJECTED` | `true` |
+| `refused` (`ProviderResponse.kind: 'refused'`, a refusal/safety/policy block the adapter normalizes from a success or an error response per §5c) | ❌ | `PROVIDER_FAILED` | `false` |
 | `auth` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
 | `model_not_found` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
 | `invalid_request` (content-dependent rejection, e.g. context overflow) | ❌ | `PROVIDER_FAILED` | `false` |
@@ -307,7 +320,7 @@ tables.
   stops waiting and classifies from its own flags regardless. A caller's abort that wins
   while the provider call is still pending records the attempt outcome as `'aborted'`.
 
-### 5c. Built-in adapter wire contracts (research-verified 2026-08-10; primary sources linked)
+### 5c. Built-in adapter wire contracts (research-verified 2026-09-15; primary sources linked)
 
 All built-ins: `fetch` with `redirect: 'error'`, JSON bodies, per-attempt signal.
 **Optional request fields (`maxOutputTokens`, `temperature`) are omitted from the wire body
@@ -364,6 +377,8 @@ Errors ([OpenAI error codes](https://developers.openai.com/api/docs/guides/error
 `model_not_found`; 429 and 402 → `rate_limit`; 408/5xx/498 → `transient`; other
 400/413/422 → `invalid_request`; unparseable body → classify by status; unknown status →
 `transient` (a real HTTP outcome, unlike unclassified thrown values).
+Image output: chat completions has no image wire, so a request whose `responseFormat.type`
+is `'image'` throws `ProviderError('invalid_request')` before any fetch.
 
 **`anthropic({ apiKey, baseUrl? })`, native Messages API.** Default `baseUrl`
 `https://api.anthropic.com`; `POST {baseUrl}/v1/messages`; **`x-api-key`** + required
@@ -392,6 +407,8 @@ are summed into `inputTokens`. ([Anthropic usage/caching](https://docs.anthropic
 Errors (envelope `{type:'error', error:{type,message}}`): `authentication_error` →
 `auth`; `not_found_error` → `model_not_found`; `rate_limit_error`/429 → `rate_limit`;
 `overloaded_error`/529/5xx → `transient`; `invalid_request_error`/400 → `invalid_request`.
+Image output: the Messages API has no image wire, so a request whose `responseFormat.type`
+is `'image'` throws `ProviderError('invalid_request')` before any fetch.
 
 **`gemini({ apiKey })`, native generateContent.** `POST
 https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`;
@@ -429,6 +446,9 @@ candidatesTokenCount + thoughtsTokenCount` where `candidatesTokenCount` is requi
 Errors (`{error:{code,status,message}}`): 401/403 → `auth`; 404 → `model_not_found`;
 429/`RESOURCE_EXHAUSTED` → `rate_limit`; 500/503 → `transient`; 400/`INVALID_ARGUMENT` →
 `invalid_request`.
+Image output: this release maps no image wire, so a request whose `responseFormat.type` is
+`'image'` throws `ProviderError('invalid_request')` before any fetch. A later release adds
+the image-generation mapping.
 
 ## 6. Public API (authoritative, self-contained, compiles under strict TS + Zod 4)
 
@@ -501,11 +521,37 @@ export interface FilePart {
 }
 export type ContentPart = TextPart | FilePart
 
+// --- image output ---
+export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'
+export type ImageSize = '1K' | '2K' | '4K'                // provider-relative resolution class, not a pixel promise
+export interface ImageOptions {
+  readonly count?: number                                // safe integer, 1–10; omitted = provider default (one)
+  readonly aspectRatio?: AspectRatio
+  readonly size?: ImageSize
+  readonly background?: 'transparent' | 'opaque'
+}
+export type GeneratedImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp'
+// As an adapter hands an image back: dimensions both stated, or both left to the core's header read.
+export type ProviderImage = { readonly mediaType: GeneratedImageMediaType; readonly data: string }
+  & ({ readonly width: number; readonly height: number } | { readonly width?: undefined; readonly height?: undefined })
+// As an adopter receives it: a FilePart that also states the encoded raster's pixel size.
+export interface GeneratedImage {
+  readonly type: 'file'
+  readonly mediaType: GeneratedImageMediaType
+  readonly data: string
+  readonly width: number
+  readonly height: number
+}
+export interface ImageOutput { readonly images: readonly GeneratedImage[]; readonly text: string }
+// A z.ZodType<ImageOutput> accepting at least one well-formed image; refine it for more.
+export declare const imageOutputSchema: z.ZodType<ImageOutput>
+
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
   prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
-  format?: 'json' | 'json-any' | 'text'                  // default 'json' (§3)
+  format?: 'json' | 'json-any' | 'text' | 'image'        // default 'json' (§3)
+  image?: ImageOptions                                   // only with format 'image'; validated at createSwitch
   quality?: (ctx: { input: z.output<In>; data: z.output<Out> }) => QualityVerdict | Promise<QualityVerdict>
   quota?: { perDay: number }                             // safe integer, 0–1_000_000 (0 = halted)
   timeoutMs?: number                                     // provider I/O timeout; default 60_000; 1_000–600_000
@@ -555,8 +601,8 @@ export interface AttemptRecord {
   // injected clock. Output processing is not counted.
   durationMs: number
 }
-export interface TokenUsage { inputTokens: number; outputTokens: number }  // non-negative SAFE integers
-export interface ModelPrice { inputPerM: number; outputPerM: number }      // finite, ≥ 0
+export interface TokenUsage { inputTokens: number; outputTokens: number; imageOutputTokens?: number }  // non-negative SAFE integers; imageOutputTokens ≤ outputTokens (§7)
+export interface ModelPrice { inputPerM: number; outputPerM: number; imageOutputPerM?: number }        // finite, ≥ 0
 
 // --- providers ---
 export interface Provider {
@@ -569,19 +615,22 @@ export interface PreparedProvider {
 export interface ProviderRequest {
   parts: readonly ContentPart[]                          // normalized, non-empty, frozen
   model: string
-  responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
+  responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' } | ({ type: 'image' } & ImageOptions)
   maxOutputTokens?: number
   temperature?: number
   signal: AbortSignal
 }
-// Discriminated: truncation and refusal are billable HTTP-200 terminations, so they travel
-// on the RESPONSE (usage retained), not as thrown errors. `kind: 'complete'` proceeds to
-// the output pipeline; 'truncated' classifies `truncated`; 'refused' classifies `refused`.
-// `text` may be partial or empty for the non-complete kinds.
+// Discriminated: truncation and refusal are billable terminations the adapter normalizes
+// from a success or an error response (§5c), so they travel on the RESPONSE (usage
+// retained), not as thrown errors. `kind: 'complete'` proceeds to the output pipeline;
+// 'truncated' classifies `truncated`; 'refused' classifies `refused`. `text` may be partial
+// or empty for the non-complete kinds. `images` is read only for an image-format operation
+// (§3). `costUsd` is the provider's own charge and, when finite and non-negative, is
+// authoritative over the pricing table (§7).
 export type ProviderResponse =
-  | { kind: 'complete';  text: string; usage: TokenUsage | null }
-  | { kind: 'truncated'; text: string; usage: TokenUsage | null }  // text may be partial
-  | { kind: 'refused';   text: string; usage: TokenUsage | null }  // text may be empty
+  | { kind: 'complete';  text: string; usage: TokenUsage | null; images?: readonly ProviderImage[]; costUsd?: number }
+  | { kind: 'truncated'; text: string; usage: TokenUsage | null; costUsd?: number }  // text may be partial
+  | { kind: 'refused';   text: string; usage: TokenUsage | null; costUsd?: number }  // text may be empty
 export type ProviderErrorKind = 'transient' | 'rate_limit' | 'auth' | 'model_not_found'
   | 'invalid_request' | 'aborted' | 'malformed_response'
 export declare class ProviderError extends Error {
@@ -690,6 +739,39 @@ parts — has no part to name and reports the request instead. No message ever n
 or a filename: those are payload, held to the same rule as prompt text and model output — no
 message, log line or package-owned error field carries them (§4, §6).
 
+**Image header reader (§3 point 4b).** `GeneratedImage.width` and `height` are the encoded
+raster's pixel dimensions as the container header states them, positive safe integers.
+Adapters fill them where the provider states them; where it does not, the core reads them
+from the header through a pure, dependency-free reader with this contract:
+
+- **Bounded decode.** The base64 grammar is validated over the whole string (the `FilePart`
+  rule above), but only a prefix is decoded: the first 174 764 base64 characters (a multiple
+  of four; 131 073 bytes, so one maximum-length 64 KiB JPEG APP1 segment followed by the
+  frame header still fits), never the whole image.
+- **PNG:** the 8-byte signature, then IHDR must be the first chunk with declared length 13;
+  width and height are its first two big-endian 32-bit fields, each 1 to 2³¹ − 1 per the PNG
+  specification.
+- **WebP:** `RIFF`, a RIFF size, `WEBP`, then the first chunk, whose padded extent must fit
+  both the RIFF size and the file's decoded length (the bitstream chunk may run far past
+  the decoded prefix; only its header bytes must be in it): `VP8 ` (payload at least 10 bytes; the frame
+  must carry the sync code `9D 01 2A` at bytes 3 to 5; dimensions are the following two
+  14-bit little-endian fields), `VP8L` (payload at least 5 bytes; signature byte `2F`,
+  version bits zero; two 14-bit fields plus one), or `VP8X` (declared length exactly 10; two
+  24-bit little-endian canvas fields plus one). Any other first chunk, a short payload, or a
+  failed signature is unreadable.
+- **JPEG:** `FF D8`, then a marker walk: `FF` fill bytes skipped; `D0` to `D8` and `01` are
+  standalone and carry no length; `D9` (EOI) and `DA` (SOS) end the walk as unreadable;
+  every other segment declares a big-endian length of at least 2 (a length of 0 or 1 is
+  unreadable) and is skipped by it; a SOF0 to SOF15 marker (excluding DHT `C4`, JPG `C8`,
+  DAC `CC`) with length at least 7 yields height then width, both required non-zero; a
+  length that runs past the decoded prefix, or a 65th segment, is unreadable.
+- **EXIF orientation is ignored.** The values are the stored raster's, which is what a print
+  pipeline rasterizes; an adopter that honours orientation knows to swap.
+- **Limits are the containers' own.** There is no general pixel ceiling; a megapixel cap is
+  the adopter's rule. A header the reader cannot parse, a mime that does not match the
+  signature, or adapter-stated dimensions that disagree with the header →
+  `malformed_response`. A dimension is never guessed.
+
 **String domain.** Every string that reaches a store (operation names, provider
 registration IDs, `OperationRoute`/`RouteTarget` `provider` and `model`, `subjectId`,
 `ReservationEnvelope.reservationId`, and `AttemptRecord.provider`/`model`) is well-formed
@@ -759,18 +841,21 @@ export declare function runProviderConformance(opts: {
   requestFactory: () => ProviderRequest
   // 'success' is MANDATORY; each other scenario puts the adopter's backend into the named
   // condition and resolves when ready; the harness dispatches and asserts the resulting
-  // ProviderResponse.kind or ProviderError classification. 'document' and 'image' are
-  // success-class instead: the backend answers normally and the harness dispatches that
-  // scenario's request from `requests` below. Absent optional scenarios are reported in
-  // `skipped`: a skipped scenario means that classification is UNVERIFIED.
+  // ProviderResponse.kind or ProviderError classification. 'document', 'image' and
+  // 'image_output' are success-class instead: the backend answers normally and the harness
+  // dispatches that scenario's request from `requests` below. Absent optional scenarios are
+  // reported in `skipped`: a skipped scenario means that classification is UNVERIFIED.
   scenarios: { success: () => Promise<void> } & Partial<Record<
     'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient'
-    | 'malformed_response' | 'truncated' | 'refused' | 'document' | 'image', () => Promise<void>>>
-  // The request each media scenario dispatches, which MUST carry a file part of that
-  // scenario's media class: 'application/pdf' for document, an image/* type for image. A
+    | 'malformed_response' | 'truncated' | 'refused' | 'document' | 'image' | 'image_output',
+    () => Promise<void>>>
+  // The request each media scenario dispatches. 'document' and 'image' MUST carry a file
+  // part of that scenario's media class: 'application/pdf' for document, an image/* type
+  // for image. 'image_output' MUST carry `responseFormat.type: 'image'`; the harness asserts
+  // a complete response whose `images` holds at least one well-formed ProviderImage. A
   // media scenario runs only when both its scenario callback and its request are supplied;
   // with either absent it is reported in `skipped` like any other unsupplied scenario.
-  requests?: Partial<Record<'document' | 'image', () => ProviderRequest>>
+  requests?: Partial<Record<'document' | 'image' | 'image_output', () => ProviderRequest>>
   // Optional controls: declare JSON capability and observe dispatched requests so the
   // harness can verify responseFormat without guessing the provider's wire behaviour.
   controls?: {
@@ -791,14 +876,28 @@ only on pass.
 Normalization formulas are fixed per adapter in §5c. The universal rule: **required base
 counters missing or invalid → the attempt's usage is `null`** (never a fabricated zero);
 only explicitly additive-optional categories (Anthropic cache fields, Gemini thought
-tokens) default to 0. Raw provider usage is not exposed. **Aggregates (normative):**
-`result.usage` = field-wise sum over attempts with non-null usage (`{0,0}` when none);
-`usageComplete` = true iff every dispatched attempt has non-null usage AND neither
-aggregate field overflowed (field-wise clamp to `Number.MAX_SAFE_INTEGER` on overflow).
-`cost` = `inputTokens × inputPerM/1e6 + outputTokens × outputPerM/1e6` per attempt, priced
-by registered provider ID + model. Every dispatched attempt is potentially billable: if
-any dispatched attempt lacks usage or a price, aggregate `cost` is `null`. Cached-token
-discounts, tiered pricing, and request fees are out of scope.
+tokens) default to 0. The optional `imageOutputTokens` is an "of which" count inside
+`outputTokens`: present and a non-negative safe integer at most `outputTokens`, or absent;
+present and invalid → the whole usage is `null`. Raw provider usage is not exposed.
+**Aggregates (normative):** `result.usage` = field-wise sum over attempts with non-null
+usage (`{0,0}` when none); `usageComplete` = true iff every dispatched attempt has non-null
+usage AND neither base aggregate field overflowed (field-wise clamp to
+`Number.MAX_SAFE_INTEGER` on overflow). `result.usage.imageOutputTokens` is present iff at
+least one attempt has non-null usage AND every attempt with non-null usage reports it, and
+is then their sum, clamped the same way; a partial split is never summed and an all-null run
+never invents a zero. **Cost per attempt:** a provider-reported `costUsd` that is a finite
+non-negative number is authoritative and the pricing table is not consulted; an invalid
+reported value is treated as absent (it never fails the attempt). Otherwise, with `textOut
+= outputTokens − (imageOutputTokens ?? 0)`, `cost = inputTokens × inputPerM/1e6 + textOut ×
+outputPerM/1e6 + imageOutputTokens × imageOutputPerM/1e6`, priced by registered provider
+ID + model, under three rules: usage carrying `imageOutputTokens > 0` against a price
+without `imageOutputPerM` → `null`; an `image`-format attempt whose usage has `outputTokens
+> 0` and no `imageOutputTokens` → `null`, whatever the response kind or image count (the
+split is unknown, and pricing image tokens at the text rate would be fabricated); usage
+without the field on any other format prices as before. Every dispatched attempt is
+potentially billable: if any dispatched attempt's cost is `null`, aggregate `cost` is
+`null`. Cached-token discounts, tiered pricing, input-side image tokens, and request fees
+are out of scope.
 
 ## 8. Conformance suite (adopter-facing)
 
@@ -813,7 +912,9 @@ persists only a whitelist of route fields, needs updating. Coverage:
   lease expiry (pending frees, committed never), lease capped at day boundary, day
   rollover via `setTime`, snapshot correctness including pending, settle
   duplicate/conflict/unknown-reservation behavior observed via `readSettled`,
-  envelope validity (key match, `YYYY-MM-DD` day format), a `reserve` call with `limit: 0`
+  envelope validity (key match, `YYYY-MM-DD` day format), an attempt record whose usage
+  carries `imageOutputTokens` read back verbatim (a store that persists only the two base
+  counters fails the suite), a `reserve` call with `limit: 0`
   denying without inserting a reservation (observed as: a following `reserve` at `limit: 1`
   on the same key is admitted with `used` 0), and a limit lowered below existing
   pending/committed usage denying new reservations while leaving those rows intact.
@@ -826,16 +927,25 @@ persists only a whitelist of route fields, needs updating. Coverage:
 - **Provider:** mandatory success dispatch (correct `kind`/text/usage shape); honors
   `signal`; classifies each supplied scenario via `ProviderResponse.kind` or
   `ProviderError`; respects `responseFormat` per its capability; normalizes usage or
-  returns `null`; and carries two optional media scenarios, `document` and `image`. Those
-  two are success-class: the backend answers normally, and each is verified by dispatching
-  its own request from `requests` rather than the shared `requestFactory`, because what is
-  under test is a request carrying a file part. Each runs only when BOTH its scenario
-  callback and its matching request are supplied; with either absent it is reported as
-  unverified like any other unsupplied scenario. The dispatched request must carry a file
-  part of the scenario's media class — `application/pdf` for `document`, an `image/*` type
-  for `image` — so a text-only request fails the scenario rather than passing it, and the
-  dispatch must answer `kind: 'complete'` with the same text and usage shape the mandatory
-  success case requires. Skipped optional scenarios are reported as unverified.
+  returns `null`; and carries three optional media scenarios, `document`, `image` and
+  `image_output`. All three are success-class: the backend answers normally, and each is
+  verified by dispatching its own request from `requests` rather than the shared
+  `requestFactory`, because what is under test is the request's media. Each runs only when
+  BOTH its scenario callback and its matching request are supplied; with either absent it
+  is reported as unverified like any other unsupplied scenario. For `document` and `image`
+  the dispatched request must carry a file part of the scenario's media class —
+  `application/pdf` for `document`, an `image/*` type for `image` — so a text-only request
+  fails the scenario rather than passing it, and the dispatch must answer `kind:
+  'complete'` with the same text and usage shape the mandatory success case requires. For
+  `image_output` the dispatched request must carry `responseFormat.type: 'image'` (a
+  request without it fails the scenario), and the dispatch must answer `kind: 'complete'`
+  with `images` holding at least one element that satisfies the `ProviderImage` contract
+  (one of the three raster types, the §6 base64 grammar, dimensions both present as
+  positive safe integers or both absent) and a usage that is `null` or well-formed,
+  `imageOutputTokens` included when present. The suite dispatches to the adapter directly,
+  so it asserts the adapter's contract; that every `GeneratedImage` an adopter receives is
+  dimensioned is core behaviour, tested internally. Skipped optional scenarios are reported
+  as unverified.
   Core-behavior
   checks are internal package tests, not part of this suite: state machine, matrices,
   sanitization, validation-on-read, default-restoration, effective-quota precedence

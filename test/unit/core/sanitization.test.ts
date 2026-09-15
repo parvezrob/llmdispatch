@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { LLMDispatchError, ProviderError } from '../../../src/errors'
 import type { OperationsMap } from '../../../src/types'
 import { createSwitchCore } from '../../../src/core/create-switch'
+import { imageOutputSchema } from '../../../src/core/image-output'
 import {
   fakeRuntime,
   fixture,
@@ -24,6 +25,8 @@ const INPUT_SENTINEL = 'SENTINEL_INPUT_7f3a'
 const PROMPT_SENTINEL = 'SENTINEL_PROMPT_9c1d'
 const OUTPUT_SENTINEL = 'SENTINEL_OUTPUT_2e8b'
 const PROVIDER_SENTINEL = 'SENTINEL_PROVIDER_5d4c'
+/** Image bytes as base64: valid under the §6 grammar, unreadable as any container. */
+const IMAGE_SENTINEL = Buffer.from('SENTINEL_IMAGE_4b2f_SENTINEL_IMAGE_4b2f').toString('base64')
 
 const DISPATCH_SENTINELS = [INPUT_SENTINEL, PROMPT_SENTINEL, OUTPUT_SENTINEL]
 
@@ -63,7 +66,7 @@ function expectNoSentinels(strings: string[], sentinels: string[]): void {
 }
 
 /** A fixture whose every user-controlled surface carries a sentinel. */
-function sentinelFixture(options: { quota?: { perDay: number } } = {}) {
+function sentinelFixture(options: { quota?: { perDay: number }; format?: 'image' } = {}) {
   const loggerLines: unknown[][] = []
   const runtime = fakeRuntime()
   const s = scriptedStores()
@@ -75,6 +78,9 @@ function sentinelFixture(options: { quota?: { perDay: number } } = {}) {
       output: ECHO_OUTPUT,
       prompt: ({ text }: { text: string }) => `${PROMPT_SENTINEL}:${text}`,
       ...(options.quota === undefined ? {} : { quota: options.quota }),
+      ...(options.format === undefined
+        ? {}
+        : { format: options.format, output: imageOutputSchema }),
       defaultRoute: { provider: 'p1', model: 'm1', fallback: { provider: 'p2', model: 'm2' } },
     },
   } as unknown as OperationsMap
@@ -287,4 +293,76 @@ describe('the sentinel sweep over the whole error matrix', () => {
     }
     expect(caught).toBe(bug) // raw, by design (spec §1): the user's bug in full
   })
+})
+
+describe('image output under the same guarantee', () => {
+  const IMAGE_SENTINELS = [...DISPATCH_SENTINELS, IMAGE_SENTINEL]
+
+  const scenarios: {
+    name: string
+    code: LLMDispatchError['code']
+    provoke: (f: ReturnType<typeof sentinelFixture>) => void
+  }[] = [
+    {
+      name: 'PROVIDER_FAILED after a malformed image carrying sentinel bytes',
+      code: 'PROVIDER_FAILED',
+      provoke: (f) => {
+        const response = {
+          kind: 'complete',
+          text: OUTPUT_SENTINEL,
+          usage: null,
+          images: [{ mediaType: 'image/png', data: IMAGE_SENTINEL }],
+        } as const
+        f.p1.nextResolve(response)
+        f.p2.nextResolve(response)
+      },
+    },
+    {
+      name: 'PROVIDER_FAILED after an image outside the grammar',
+      code: 'PROVIDER_FAILED',
+      provoke: (f) => {
+        const response = {
+          kind: 'complete',
+          text: '',
+          usage: null,
+          images: [{ mediaType: 'image/png', data: `data:image/png;base64,${IMAGE_SENTINEL}` }],
+        } as const
+        f.p1.nextResolve(response)
+        f.p2.nextResolve(response)
+      },
+    },
+    {
+      name: 'OUTPUT_REJECTED after zero images with sentinel text',
+      code: 'OUTPUT_REJECTED',
+      provoke: (f) => {
+        f.p1.nextResolve({ kind: 'complete', text: OUTPUT_SENTINEL, usage: null, images: [] })
+        f.p2.nextResolve({ kind: 'complete', text: OUTPUT_SENTINEL, usage: null })
+      },
+    },
+  ]
+
+  for (const { name, code, provoke } of scenarios) {
+    it(`keeps every core-constructed field of ${name} free of image and dispatch content`, async () => {
+      const f = sentinelFixture({ quota: { perDay: 5 }, format: 'image' })
+      f.s.settle.always(() => {
+        throw new Error('settlement down')
+      })
+      provoke(f)
+      let caught: unknown
+      try {
+        await f.ai.run('echo', ARGS)
+      } catch (error) {
+        caught = error
+      }
+      expect(caught).toBeInstanceOf(LLMDispatchError)
+      const error = caught as LLMDispatchError
+      expect(error.code).toBe(code)
+      expectNoSentinels(coreConstructedStrings(error), IMAGE_SENTINELS)
+      expectNoSentinels(reachableStrings(error), IMAGE_SENTINELS)
+      await f.runtime.advance(40_000)
+      for (const line of f.loggerLines) {
+        expectNoSentinels(reachableStrings(line), [...IMAGE_SENTINELS, PROVIDER_SENTINEL])
+      }
+    })
+  }
 })

@@ -72,6 +72,8 @@ Errors ([OpenAI error codes](https://developers.openai.com/api/docs/guides/error
 `model_not_found`; 429 and 402 → `rate_limit`; 408/5xx/498 → `transient`; other
 400/413/422 → `invalid_request`; unparseable body → classify by status; unknown status →
 `transient` (a real HTTP outcome, unlike unclassified thrown values).
+Image output: chat completions has no image wire, so a request whose `responseFormat.type`
+is `'image'` throws `ProviderError('invalid_request')` before any fetch.
 
 ## `anthropic`
 
@@ -102,6 +104,8 @@ are summed into `inputTokens`. ([Anthropic usage/caching](https://docs.anthropic
 Errors (envelope `{type:'error', error:{type,message}}`): `authentication_error` →
 `auth`; `not_found_error` → `model_not_found`; `rate_limit_error`/429 → `rate_limit`;
 `overloaded_error`/529/5xx → `transient`; `invalid_request_error`/400 → `invalid_request`.
+Image output: the Messages API has no image wire, so a request whose `responseFormat.type`
+is `'image'` throws `ProviderError('invalid_request')` before any fetch.
 
 ## `gemini`
 
@@ -141,3 +145,6 @@ candidatesTokenCount + thoughtsTokenCount` where `candidatesTokenCount` is requi
 Errors (`{error:{code,status,message}}`): 401/403 → `auth`; 404 → `model_not_found`;
 429/`RESOURCE_EXHAUSTED` → `rate_limit`; 500/503 → `transient`; 400/`INVALID_ARGUMENT` →
 `invalid_request`.
+Image output: this release maps no image wire, so a request whose `responseFormat.type` is
+`'image'` throws `ProviderError('invalid_request')` before any fetch. A later release adds
+the image-generation mapping.
