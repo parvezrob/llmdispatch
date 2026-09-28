@@ -247,9 +247,11 @@ element that is not an object, a `b64_json` that is absent or not a string (a UR
 included), and one outside the §6 base64 grammar. An empty `data` is complete with no
 images, and §3 point 4b records the output rejection. Other fields (`created`,
 `revised_prompt`, the echoed settings) are ignored, and `text` is always `''`.
-**Refusal:** before any other reading of the body, whatever the status, an `error` object
-whose `code` is `moderation_blocked` (or the legacy `content_policy_violation`) or whose
-`type` is `image_generation_user_error` → `'refused'`, with `text: ''` and `usage: null`.
+**Refusal:** before any other reading of the body, an `error` object whose `code` is
+`moderation_blocked` (or the legacy `content_policy_violation`), at any status, or whose
+`type` alone is `image_generation_user_error`, on a 4xx only → `'refused'`, with `text: ''`
+and `usage: null`. The type alone counts on a 4xx only, since outside it a type-only match
+would turn a retryable server failure into a terminal refusal; there it classifies by status.
 Usage: base counters `usage.input_tokens` and `usage.output_tokens` REQUIRED
 (missing/invalid → `usage: null`), plus `imageOutputTokens` from
 `usage.output_tokens_details.image_tokens` when the details are an object and the value is

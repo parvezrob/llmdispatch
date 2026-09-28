@@ -548,6 +548,8 @@ describe('the response caps', () => {
 })
 
 describe('refusal', () => {
+  const USER_ERROR = { error: { type: 'image_generation_user_error' } }
+
   it.each([
     [
       'moderation_blocked at 400',
@@ -555,33 +557,44 @@ describe('refusal', () => {
       { error: { code: 'moderation_blocked', type: 'image_generation_user_error' } },
     ],
     ['moderation_blocked alone', 400, { error: { code: 'moderation_blocked' } }],
-    [
-      'image_generation_user_error at 400',
-      400,
-      { error: { type: 'image_generation_user_error' } },
-    ],
-    [
-      'image_generation_user_error at 403',
-      403,
-      { error: { type: 'image_generation_user_error' } },
-    ],
-    [
-      'image_generation_user_error at 500',
-      500,
-      { error: { type: 'image_generation_user_error' } },
-    ],
+    ['moderation_blocked at 500', 500, { error: { code: 'moderation_blocked' } }],
     ['content_policy_violation at 400', 400, { error: { code: 'content_policy_violation' } }],
+    ['content_policy_violation at 503', 503, { error: { code: 'content_policy_violation' } }],
     [
       'moderation_blocked on a 2xx body beside data',
       200,
       { error: { code: 'moderation_blocked' }, data: [{ b64_json: PNG_DATA }] },
     ],
+    ['image_generation_user_error alone at 400', 400, USER_ERROR],
+    ['image_generation_user_error alone at 403', 403, USER_ERROR],
+    ['image_generation_user_error alone at 408', 408, USER_ERROR],
+    ['image_generation_user_error alone at 429', 429, USER_ERROR],
+    ['image_generation_user_error alone at 499', 499, USER_ERROR],
   ])('returns refused with null usage for %s', async (_label, status, body) => {
     const response = await runImage(status, {
       ...body,
       usage: { input_tokens: 10, output_tokens: 0 },
     })
     expect(response).toEqual({ kind: 'refused', text: '', usage: null })
+  })
+
+  // Outside 4xx the type alone is not enough: a server failure that happens to carry it stays
+  // retryable and can fall back, rather than ending the run as a refusal.
+  it.each([500, 502, 503, 529])(
+    'classifies image_generation_user_error alone at %i by its status, as transient',
+    async (status) => {
+      await expect(runImage(status, USER_ERROR)).rejects.toSatisfy(isKind('transient'))
+    },
+  )
+
+  it('reads a 2xx body carrying image_generation_user_error alone as an answer', async () => {
+    const response = await runImage(200, imagesBody(USER_ERROR))
+    expect(response).toEqual({
+      kind: 'complete',
+      text: '',
+      images: [{ mediaType: 'image/png', data: PNG_DATA }],
+      usage: null,
+    })
   })
 
   it.each([
