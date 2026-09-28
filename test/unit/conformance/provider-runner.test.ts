@@ -5,6 +5,7 @@ import { ProviderError } from '../../../src/errors'
 import { anthropic } from '../../../src/providers/anthropic'
 import { gemini } from '../../../src/providers/gemini'
 import { openaiCompatible } from '../../../src/providers/openai-compatible'
+import { openaiImages } from '../../../src/providers/openai-images'
 import type {
   Provider,
   ProviderErrorKind,
@@ -584,6 +585,49 @@ describe('the built-in adapters, driven end to end through the runner', () => {
       passed: true,
       failures: [],
       skipped: ['responseFormat:native'],
+    })
+  })
+
+  it('passes openaiImages over scripted fetch, every request an image one', async () => {
+    const provider = openaiImages({ apiKey: KEY })
+    const imagesBody = {
+      created: 1,
+      data: [{ b64_json: base64(png(1, 1)) }],
+      usage: {
+        input_tokens: 1,
+        output_tokens: 12,
+        output_tokens_details: { image_tokens: 10 },
+      },
+    }
+    // The endpoint makes only images, so the shared request asks for one; the text-mode
+    // duties (native JSON, truncation) and the input-media scenarios have nothing to run on.
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () =>
+        baseRequest({
+          model: 'gpt-image-x',
+          parts: [{ type: 'text', text: 'draw it' }],
+          responseFormat: { type: 'image' },
+        }),
+      scenarios: {
+        success: step(() => installFetch(() => jsonResponse(200, imagesBody))),
+        auth: step(() => installFetch(() => jsonResponse(401, {}))),
+        rate_limit: step(() => installFetch(() => jsonResponse(429, {}))),
+        model_not_found: step(() => installFetch(() => jsonResponse(404, {}))),
+        invalid_request: step(() => installFetch(() => jsonResponse(400, {}))),
+        transient: step(() => installFetch(() => jsonResponse(500, {}))),
+        malformed_response: step(() => installFetch(() => jsonResponse(200, { data: 'x' }))),
+        refused: step(() =>
+          installFetch(() => jsonResponse(400, { error: { code: 'moderation_blocked' } })),
+        ),
+        image_output: step(() => installFetch(() => jsonResponse(200, imagesBody))),
+      },
+      requests: mediaRequests('gpt-image-x'),
+    })
+    expect(result).toEqual({
+      passed: true,
+      failures: [],
+      skipped: ['responseFormat', 'truncated', 'document', 'image'],
     })
   })
 })
