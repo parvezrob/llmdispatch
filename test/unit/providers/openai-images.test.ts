@@ -440,6 +440,7 @@ describe('the response', () => {
 
   it.each([
     ['absent', undefined, 'image/png'],
+    ['null', null, 'image/png'],
     ["'png'", 'png', 'image/png'],
     ["'jpeg'", 'jpeg', 'image/jpeg'],
     ["'webp'", 'webp', 'image/webp'],
@@ -456,7 +457,8 @@ describe('the response', () => {
     ["'PNG'", 'PNG'],
     ["'image/png'", 'image/png'],
     ['a number', 1],
-    ['null', null],
+    ['an empty string', ''],
+    ['an object', { format: 'png' }],
   ])('throws malformed_response for an output_format of %s', async (_label, outputFormat) => {
     await expectMalformed(imagesBody({ output_format: outputFormat }))
   })
