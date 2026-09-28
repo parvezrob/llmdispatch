@@ -263,9 +263,12 @@ function readImagesData(
   return images
 }
 
-/** The response's `output_format` as a media type: absent means png, the default (§5c). */
+/**
+ * The response's `output_format` as a media type (§5c): absent or `null` means png, the
+ * default, since a `null` field states no format any more than a missing one does.
+ */
 function readImageMediaType(value: unknown, status: number): ProviderImage['mediaType'] {
-  if (value === undefined || value === 'png') return 'image/png'
+  if (value === undefined || value === null || value === 'png') return 'image/png'
   if (value === 'jpeg') return 'image/jpeg'
   if (value === 'webp') return 'image/webp'
   malformed(status)
