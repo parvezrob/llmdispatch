@@ -17,6 +17,7 @@ import {
 } from '../../../src/core/image-output'
 import { base64Problem } from '../../../src/core/parts'
 import {
+  asTokenCount,
   fetchJson,
   GENERATED_IMAGE_MEDIA_TYPES,
   isWireBase64,
@@ -80,6 +81,20 @@ describe('fetchJson body settlement', () => {
       status: 200,
       body: null,
     })
+  })
+})
+
+describe('asTokenCount', () => {
+  // `JSON.parse('-0')` is `-0`, which passes a `>= 0` check: a count read from the wire must
+  // still come back unsigned, or `Object.is` and a stored record could tell the two apart.
+  it('reads -0 as 0', () => {
+    expect(Object.is(asTokenCount(-0), 0)).toBe(true)
+    expect(Object.is(asTokenCount(JSON.parse('-0')), 0)).toBe(true)
+  })
+
+  it('keeps 0 and a positive count as they are', () => {
+    expect(Object.is(asTokenCount(0), 0)).toBe(true)
+    expect(asTokenCount(1200)).toBe(1200)
   })
 })
 

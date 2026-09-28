@@ -712,6 +712,25 @@ describe('usage', () => {
     expect(usage).toEqual({ inputTokens: 10, outputTokens: 1200, imageOutputTokens: 1200 })
   })
 
+  // `JSON.stringify` writes `-0` as `0`, so the only way to put one on the wire is to script
+  // the body text; `JSON.parse` reads it back as `-0`.
+  it('reads an image_tokens of -0 as an unsigned 0', async () => {
+    const raw =
+      `{"data":[{"b64_json":"${PNG_DATA}"}],"usage":{"input_tokens":10,` +
+      '"output_tokens":1200,"output_tokens_details":{"image_tokens":-0}}}'
+    installFetch(
+      () => new Response(raw, { status: 200, headers: { 'content-type': 'application/json' } }),
+    )
+    const run = await complete()
+    const response = await run(imageRequest())
+    expect(response.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 1200,
+      imageOutputTokens: 0,
+    })
+    expect(Object.is(response.usage?.imageOutputTokens, 0)).toBe(true)
+  })
+
   it.each([
     ['details are absent', undefined],
     ['details are null', null],
