@@ -523,14 +523,16 @@ describe('the response caps', () => {
   }
 
   it('reads thirty-two images', async () => {
+    vi.mocked(isWireBase64).mockClear()
     const response = await runImage(200, imagesBody({}, elements(32)))
     expect(response.kind === 'complete' && response.images).toHaveLength(32)
+    expect(isWireBase64).toHaveBeenCalledTimes(32)
   })
 
-  it('throws malformed_response on the thirty-third image, before its grammar scan', async () => {
+  it('throws malformed_response for thirty-three images, before reading any of them', async () => {
     vi.mocked(isWireBase64).mockClear()
     await expectMalformed(imagesBody({}, elements(33)))
-    expect(isWireBase64).toHaveBeenCalledTimes(32)
+    expect(isWireBase64).not.toHaveBeenCalled()
   })
 
   it('reads an image whose data is exactly the per-image cap', async () => {

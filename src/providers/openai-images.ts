@@ -236,9 +236,9 @@ function readImagesResponse(body: Record<string, unknown>, status: number): Prov
 
 /**
  * Every `data[]` element's `b64_json`, in order (§5c). The §3 point 4b caps are read before
- * the grammar, as in the Gemini adapter: the count before an element is taken, and the
- * length before the scan, so an oversized payload costs a length read rather than a scan the
- * core would then repeat.
+ * the grammar: the count before any element is read, as in the core, and each length before
+ * its scan, so an oversized payload costs a length read rather than a scan the core would
+ * then repeat.
  */
 function readImagesData(
   data: readonly unknown[],
@@ -246,10 +246,10 @@ function readImagesData(
   dimensions: { width: number; height: number } | null,
   status: number,
 ): ProviderImage[] {
+  if (data.length > MAX_GENERATED_IMAGES) malformed(status)
   const images: ProviderImage[] = []
   for (const element of data) {
     if (!isRecord(element)) malformed(status)
-    if (images.length >= MAX_GENERATED_IMAGES) malformed(status)
     const encoded: unknown = element.b64_json
     if (typeof encoded !== 'string') malformed(status)
     if (encoded.length > MAX_GENERATED_IMAGE_CHARACTERS) malformed(status)
