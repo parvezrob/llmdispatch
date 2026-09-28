@@ -649,7 +649,8 @@ attempt's cost and the pricing table is not consulted; without one the table app
 since this usage carries no image split, an image attempt with a non-zero output prices
 `null` (§7).
 **Refusal and errors:** OpenRouter's error envelope as `openaiCompatible` defines it above
-(the error-type word read from its three `error_type` places, the moderation envelope, and
+(the error-type word, read from its three documented `error_type` places and then from
+`metadata.code`, `code` and `type`; the moderation envelope; and
 the embedded-error mapping), unchanged, and applied whatever `baseUrl` this factory is
 given, since it speaks OpenRouter's envelope by definition. An embedded error, read only
 when the body carries no images (above), that is a moderation envelope → `'refused'`, with
