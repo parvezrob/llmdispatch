@@ -186,4 +186,19 @@ describe('openrouterImages through run()', () => {
       }),
     ])
   })
+
+  it('hands over the images a 2xx carries beside an embedded error, at the reported cost', async () => {
+    installFetch(() =>
+      jsonResponse(200, {
+        ...answer({ prompt_tokens: 10, completion_tokens: 1200, cost: 0.0406 }),
+        error: { metadata: { error_type: 'moderation' } },
+      }),
+    )
+    const result = await draw()
+    expect(result.data.images).toHaveLength(1)
+    expect(result.attempts).toEqual([
+      expect.objectContaining({ outcome: 'succeeded', costUsd: 0.0406 }),
+    ])
+    expect(result.cost).toBe(0.0406)
+  })
 })

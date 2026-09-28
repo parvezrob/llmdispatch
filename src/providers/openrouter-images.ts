@@ -145,20 +145,25 @@ function throwImagesError(status: number, body: unknown): never {
 }
 
 /**
- * A 2xx body (§5c). An error OpenRouter embeds in it is read first: moderation is a refusal
- * that keeps the body's usage and reported cost, and any other kind is thrown with the HTTP
- * status. Otherwise `data` must be an array; an empty one is a complete answer with no
- * images, which the core records as the output rejection. There is never any text.
+ * A 2xx body (§5c). Images win: a non-empty `data` array is the answer, read by the element
+ * rules, and an error embedded beside it is not consulted, since OpenRouter bills an image
+ * call all or nothing and answers a failed generation with a 502 it does not bill. Only
+ * without images is an embedded error read: moderation is a refusal that keeps the body's
+ * usage and reported cost, and any other kind is thrown with the HTTP status. After that,
+ * `data` must be an array, and an empty one is a complete answer with no images, which the
+ * core records as the output rejection. There is never any text.
  */
 function readImagesResponse(body: Record<string, unknown>, status: number): ProviderResponse {
   const billing = readBilling(body.usage)
+  const data: unknown = body.data
+  if (Array.isArray(data) && data.length > 0) {
+    return { kind: 'complete', text: '', images: readImagesData(data, status), ...billing }
+  }
   const embedded = classifyEmbeddedError(body)
   if (embedded === 'refused') return { kind: 'refused', text: '', ...billing }
   if (embedded !== null) throw new ProviderError(embedded, { status })
-  const data: unknown = body.data
   if (!Array.isArray(data)) malformed(status)
-  const images = readImagesData(data as readonly unknown[], status)
-  return { kind: 'complete', text: '', images, ...billing }
+  return { kind: 'complete', text: '', images: [], ...billing }
 }
 
 /**
