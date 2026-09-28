@@ -12,6 +12,7 @@
 - [`openaiCompatible`](#openaicompatible)
 - [`anthropic`](#anthropic)
 - [`gemini`](#gemini)
+- [`openaiImages`](#openaiimages)
 
 ## All adapters
 
@@ -192,3 +193,70 @@ and the run comes back truncated with no images: size the budget for the images,
 it unset.
 The errors table is unchanged: a model that rejects `candidateCount` or an `imageConfig`
 value answers 400 `INVALID_ARGUMENT`, which classifies `invalid_request`.
+
+## `openaiImages`
+
+**`openaiImages({ apiKey, baseUrl?, quality? })`, the Images API generations endpoint.**
+Default `baseUrl` `https://api.openai.com/v1`; `POST {baseUrl}/images/generations`;
+`Authorization: Bearer`, the key resolved in `prepare()` like the other built-ins
+([Images API reference](https://platform.openai.com/docs/api-reference/images/create),
+[image generation](https://platform.openai.com/docs/guides/image-generation)). The endpoint
+makes images only, so this adapter has no text or JSON mode. The factory option `quality`
+(`'low' | 'medium' | 'high' | 'xhigh' | 'max'`) is per instance and sent verbatim as
+`quality` when set; unset sends nothing and the provider default applies. Like `jsonMode`
+and `tokenParam`, it is typed, not checked at runtime.
+**Gates**, in this order, each throwing `ProviderError('invalid_request')` before any fetch:
+a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here; any
+part that is not a text part, since the generations endpoint takes no reference images or
+documents; exactly one of `aspectRatio` and `size` set, since the wire has one size field
+and no half of it is invented; `size: '4K'` with any `aspectRatio` other than `'16:9'`.
+Request: `model`; `prompt`, the text parts joined with `'\n'`, so a single part is sent
+verbatim, `''` included; then, each only when set, `n` from `count`, `size` from the table
+below (both knobs set; with neither, no size field is sent and the provider default
+applies), `background` verbatim, and the factory's `quality`. `output_format` and
+`moderation` are never sent, so they stay at the provider defaults, png and the stricter
+`auto` filter; nor is `response_format`, which GPT Image models do not support: they always
+answer base64. **An exception to the opening rule of this section:** `maxOutputTokens` and
+`temperature` have no field on this wire, so they are dropped even when the route sets them.
+The `size` table, by class then ratio, each cell `<width>x<height>`:
+
+- `1K`: `1:1` `1024x1024`, `3:2` `1536x1024`, `2:3` `1024x1536`, `16:9` `1536x864`,
+  `9:16` `864x1536`, `4:3` `1024x768`, `3:4` `768x1024`.
+- `2K`: `1:1` `2048x2048`, `3:2` `2016x1344`, `2:3` `1344x2016`, `16:9` `2048x1152`,
+  `9:16` `1152x2048`, `4:3` `2048x1536`, `3:4` `1536x2048`.
+- `4K`: `16:9` `3840x2160` only.
+
+Every cell is a multiple of 16 on both sides, exactly on its ratio, and within 1:3 to 3:1.
+Not every model accepts every cell: `1K` is the only class older GPT Image models accept,
+and only its first three cells. A model that rejects a `size`, `n`, `background` or
+`quality` value answers its own 400, which classifies `invalid_request` (errors below).
+Response: a refusal is read first (below); then a non-2xx status classifies by the errors
+below, and a 2xx body that is not an object throws `ProviderError('malformed_response')`.
+`data` must be an array. `output_format` and `size` are read once, from the top level,
+before the elements, and apply to every image: `output_format` absent → `image/png` (the
+default), `'png'`, `'jpeg'` and `'webp'` → `image/png`, `image/jpeg` and `image/webp`, any
+other value → `malformed_response`; a `size` of exactly `<width>x<height>`, both positive
+safe integers, gives every image that `width` and `height`, and anything else (`'auto'`,
+absent, any other string or type) states none, so the core reads both from the header (§3
+point 4b) and a pair is never half stated. Each `data[]` element, in order, becomes one
+`ProviderImage` from its `b64_json`. The two §3 point 4b caps come before the grammar
+check, as on the Gemini wire: the count before an element is taken, then the length, so an
+oversized image costs a length read rather than a scan the core would repeat.
+`ProviderError('malformed_response')` is thrown for `data` absent or not an array, an
+element that is not an object, a `b64_json` that is absent or not a string (a URL answer
+included), and one outside the §6 base64 grammar. An empty `data` is complete with no
+images, and §3 point 4b records the output rejection. Other fields (`created`,
+`revised_prompt`, the echoed settings) are ignored, and `text` is always `''`.
+**Refusal:** before any other reading of the body, whatever the status, an `error` object
+whose `code` is `moderation_blocked` (or the legacy `content_policy_violation`) or whose
+`type` is `image_generation_user_error` → `'refused'`, with `text: ''` and `usage: null`.
+Usage: base counters `usage.input_tokens` and `usage.output_tokens` REQUIRED
+(missing/invalid → `usage: null`), plus `imageOutputTokens` from
+`usage.output_tokens_details.image_tokens` when the details are an object and the value is
+a non-negative safe integer no greater than the output tokens; otherwise the field is absent
+and §7 prices a non-zero output `null`. The total is never assumed to be all images.
+Errors: the `openaiCompatible` status rows above, shared, in this precedence: 401/403 →
+`auth`; 429 and 402 → `rate_limit`; 404, or a model-not-found code on any other 4xx →
+`model_not_found`; 408/5xx/498 → `transient`; 400/413/422 → `invalid_request`; any other
+4xx by family; unparseable body → classify by status; unknown status → `transient`. There
+is no OpenRouter branch: a 403 that is not a refusal is `auth`.
