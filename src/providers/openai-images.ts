@@ -123,14 +123,18 @@ async function completeImages(
     signal: req.signal,
   })
 
+  const body = isRecord(http.body) ? http.body : null
   // A refusal is read before anything else in the body: the Images API reports a blocked
-  // prompt as an error response, and that is a refusal (§5b), not a bad request.
-  if (isImageRefusal(http.status, http.body)) return { kind: 'refused', text: '', usage: null }
+  // prompt as an error response, and that is a refusal (§5b), not a bad request. Like any
+  // refusal it keeps the usage the body reports, which is usually none.
+  if (body !== null && isImageRefusal(http.status, body)) {
+    return { kind: 'refused', text: '', usage: readImagesUsage(body.usage) }
+  }
   if (http.status < 200 || http.status >= 300) {
     throwForStatus(http.status, classifyOpenAIStatus(http.status, http.body))
   }
-  if (!isRecord(http.body)) malformed(http.status)
-  return readImagesResponse(http.body, http.status)
+  if (body === null) malformed(http.status)
+  return readImagesResponse(body, http.status)
 }
 
 /**
@@ -208,8 +212,8 @@ function imageBody(
  * alone is `image_generation_user_error`, on a 4xx only. Outside 4xx a type-only match would
  * turn a retryable server failure into a terminal refusal, so there it classifies by status.
  */
-function isImageRefusal(status: number, body: unknown): boolean {
-  if (!isRecord(body) || !isRecord(body.error)) return false
+function isImageRefusal(status: number, body: Record<string, unknown>): boolean {
+  if (!isRecord(body.error)) return false
   const { code, type } = body.error
   if (code === 'moderation_blocked' || code === 'content_policy_violation') return true
   return type === 'image_generation_user_error' && status >= 400 && status < 500

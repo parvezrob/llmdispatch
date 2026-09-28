@@ -250,8 +250,10 @@ images, and §3 point 4b records the output rejection. Other fields (`created`,
 **Refusal:** before any other reading of the body, an `error` object whose `code` is
 `moderation_blocked` (or the legacy `content_policy_violation`), at any status, or whose
 `type` alone is `image_generation_user_error`, on a 4xx only → `'refused'`, with `text: ''`
-and `usage: null`. The type alone counts on a 4xx only, since outside it a type-only match
-would turn a retryable server failure into a terminal refusal; there it classifies by status.
+and the body's usage read as below (a refusal keeps its usage, §6; `null` when the body
+reports none, which is the usual case). The type alone counts on a 4xx only, since outside
+it a type-only match would turn a retryable server failure into a terminal refusal; there it
+classifies by status.
 Usage: base counters `usage.input_tokens` and `usage.output_tokens` REQUIRED
 (missing/invalid → `usage: null`), plus `imageOutputTokens` from
 `usage.output_tokens_details.image_tokens` when the details are an object and the value is

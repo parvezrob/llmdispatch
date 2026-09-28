@@ -570,10 +570,30 @@ describe('refusal', () => {
     ['image_generation_user_error alone at 408', 408, USER_ERROR],
     ['image_generation_user_error alone at 429', 429, USER_ERROR],
     ['image_generation_user_error alone at 499', 499, USER_ERROR],
-  ])('returns refused with null usage for %s', async (_label, status, body) => {
+  ])('returns refused for %s', async (_label, status, body) => {
+    expect(await runImage(status, body)).toEqual({ kind: 'refused', text: '', usage: null })
+  })
+
+  it.each([
+    ['moderation_blocked', 400, { error: { code: 'moderation_blocked' } }],
+    ['image_generation_user_error alone', 400, USER_ERROR],
+    ['moderation_blocked at 500', 500, { error: { code: 'moderation_blocked' } }],
+  ])('keeps the usage a refusal reports, for %s', async (_label, status, body) => {
     const response = await runImage(status, {
       ...body,
       usage: { input_tokens: 10, output_tokens: 0 },
+    })
+    expect(response).toEqual({
+      kind: 'refused',
+      text: '',
+      usage: { inputTokens: 10, outputTokens: 0 },
+    })
+  })
+
+  it('reads the usage of a refusal by the usage rules, so an invalid one is null', async () => {
+    const response = await runImage(400, {
+      error: { code: 'moderation_blocked' },
+      usage: { input_tokens: -1, output_tokens: 0 },
     })
     expect(response).toEqual({ kind: 'refused', text: '', usage: null })
   })
