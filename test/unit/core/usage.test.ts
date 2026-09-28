@@ -5,8 +5,9 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { aggregateAttempts } from '../../../src/core/usage'
 import { ProviderError } from '../../../src/errors'
-import type { ProviderResponse } from '../../../src/types'
+import type { AttemptRecord, ProviderResponse } from '../../../src/types'
 import { expectCode, fixture } from './helpers'
 
 const INPUT = { input: { text: 'hi' } }
@@ -25,6 +26,31 @@ function completeWith(
 }
 
 describe('aggregation', () => {
+  // Number.MAX_VALUE: each is a finite reported cost, and their sum is not.
+  const LARGEST = 1.7976931348623157e308
+
+  it('makes the run cost null when the summed reported costs stop being finite', async () => {
+    const f = fixture({ config: PRICING })
+    f.p1.nextResolve({ kind: 'truncated', text: 'part', usage: null, costUsd: LARGEST })
+    f.p2.nextResolve({ ...completeWith({ inputTokens: 1, outputTokens: 1 }), costUsd: LARGEST })
+    const result = await f.ai.run('echo', INPUT)
+    expect(result.attempts.map((attempt) => attempt.costUsd)).toEqual([LARGEST, LARGEST])
+    expect(result.cost).toBeNull()
+  })
+
+  it('never aggregates a non-finite cost', () => {
+    const attempt = (costUsd: number): AttemptRecord => ({
+      provider: 'p1',
+      model: 'm1',
+      outcome: 'succeeded',
+      usage: null,
+      costUsd,
+      durationMs: 1,
+    })
+    expect(aggregateAttempts([attempt(LARGEST), attempt(LARGEST)]).cost).toBeNull()
+    expect(aggregateAttempts([attempt(LARGEST), attempt(0)]).cost).toBe(LARGEST)
+  })
+
   it('sums usage field-wise across both attempts and prices each by provider and model', async () => {
     const f = fixture({ config: PRICING })
     f.p1.nextReject(new ProviderError('transient'))

@@ -88,7 +88,9 @@ export interface UsageAggregate {
  * clamped field-wise to `Number.MAX_SAFE_INTEGER`. `usageComplete` is true iff every
  * dispatched attempt has usage and no base-field clamp fired. `imageOutputTokens` is
  * present iff at least one attempt has usage and every such attempt reports it. `cost` is
- * the summed per-attempt cost, `null` if any dispatched attempt lacks usage or a price.
+ * the summed per-attempt cost, `null` if any dispatched attempt's cost is `null` or if the
+ * sum stops being finite: two reported costs near `Number.MAX_VALUE` overflow to
+ * `Infinity`, which no run ever cost.
  */
 export function aggregateAttempts(attempts: readonly AttemptRecord[]): UsageAggregate {
   let inputTokens = 0
@@ -112,6 +114,7 @@ export function aggregateAttempts(attempts: readonly AttemptRecord[]): UsageAggr
     if (attempt.costUsd === null) cost = null
     else if (cost !== null) cost += attempt.costUsd
   }
+  if (cost !== null && !Number.isFinite(cost)) cost = null
   if (inputTokens > Number.MAX_SAFE_INTEGER) {
     inputTokens = Number.MAX_SAFE_INTEGER
     clamped = true
