@@ -89,7 +89,7 @@ describe('commit recovery', () => {
 
   it('counts a commit deadline timeout as a transport failure and retries', async () => {
     const f = quotaFixture()
-    const gate = f.s.commit.nextHang()
+    f.s.commit.nextHang() // the first commit call stays pending, silently
     const run = observe(f.ai.run('echo', ARGS))
     await flushMicrotasks()
     expect(f.s.commit.calls.length).toBe(1)
@@ -100,7 +100,6 @@ describe('commit recovery', () => {
     await flushMicrotasks()
     expect(run.state).toBe('resolved') // … and the healthy retry recovered the run
     expect(f.s.settle.calls.length).toBe(1)
-    void gate // the first commit call is still pending, silently
   })
 })
 
@@ -388,7 +387,7 @@ describe('settlement detachment and retries', () => {
   it('gives each detached retry its own 10 s deadline, in unreferenced mode', async () => {
     const f = quotaFixture()
     f.s.settle.nextReject(new Error('settle 1'))
-    const gate = f.s.settle.nextHang()
+    f.s.settle.nextHang()
     await f.ai.run('echo', ARGS)
     await f.runtime.advance(1000) // the first retry starts and hangs
     expect(f.s.settle.calls.length).toBe(2)
@@ -397,7 +396,6 @@ describe('settlement detachment and retries', () => {
     expect(f.runtime.pending('referenced')).toBe(0)
     await f.runtime.advance(10_000) // the deadline fires; the next retry is scheduled
     expect(f.runtime.pendingDelays('unreferenced')).toEqual([5000])
-    void gate
   })
 
   it('invokes the hook exactly once, after all four attempts failed, with the exact record, and logs once', async () => {
@@ -679,7 +677,7 @@ describe('changing a limit while runs are in flight (§4 rules 1–5)', () => {
 describe('§6a deadlines on the usage store', () => {
   it('bounds reserve at 10 s from the call', async () => {
     const f = quotaFixture()
-    const gate = f.s.reserve.nextHang()
+    f.s.reserve.nextHang()
     const run = observe(f.ai.run('echo', ARGS))
     await flushMicrotasks()
     await f.runtime.advance(9999)
@@ -687,19 +685,17 @@ describe('§6a deadlines on the usage store', () => {
     await f.runtime.advance(1)
     expect(run.state).toBe('rejected')
     expect((run.error as LLMDispatchError).code).toBe('USAGE_STORE_UNAVAILABLE')
-    void gate
   })
 
   it('bounds the initial settle at 10 s and moves on to the detached tail', async () => {
     const f = quotaFixture()
-    const gate = f.s.settle.nextHang()
+    f.s.settle.nextHang()
     const run = observe(f.ai.run('echo', ARGS))
     await flushMicrotasks()
     expect(run.state).toBe('pending') // the initial settle is awaited …
     await f.runtime.advance(10_000)
     expect(run.state).toBe('resolved') // … to its deadline, and never longer
     expect(f.runtime.pendingDelays('unreferenced')).toEqual([1000])
-    void gate
   })
 })
 

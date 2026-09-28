@@ -348,8 +348,8 @@ describe('request forwarding', () => {
 
   it('gives the fallback a fresh timeoutMs and its own composed signal', async () => {
     const f = fixture({ timeoutMs: 2000 })
-    const primaryHang = f.p1.nextHang()
-    const fallbackHang = f.p2.nextHang()
+    f.p1.nextHang()
+    f.p2.nextHang()
     const run = observe(f.ai.run('echo', INPUT))
     await flushMicrotasks()
     await f.runtime.advance(2000) // the primary times out; the fallback dispatches
@@ -369,8 +369,6 @@ describe('request forwarding', () => {
       'timeout',
       'timeout',
     ])
-    void primaryHang
-    void fallbackHang
   })
 })
 

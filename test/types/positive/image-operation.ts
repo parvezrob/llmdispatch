@@ -54,16 +54,22 @@ export async function pick(subject: string): Promise<GeneratedImage> {
   const output: ImageOutput = result.data
   const [first] = output.images
   if (first === undefined) throw new Error('unreachable: the schema requires one image')
-  const width: number = first.width
-  const height: number = first.height
-  void [width, height]
-  // A generated image is a file part: it goes back into a prompt without conversion.
-  const parts: readonly ContentPart[] = [{ type: 'text', text: 'refine this' }, first]
-  void parts
-  const usage: TokenUsage = result.usage
-  const split: number | undefined = usage.imageOutputTokens
-  void split
   return first
+}
+
+/** Both dimensions of a generated image are stated, neither left optional. */
+export function dimensionsOf(image: GeneratedImage): [width: number, height: number] {
+  return [image.width, image.height]
+}
+
+/** A generated image is a file part: it goes back into a prompt without conversion. */
+export function refinePrompt(image: GeneratedImage): readonly ContentPart[] {
+  return [{ type: 'text', text: 'refine this' }, image]
+}
+
+/** The image share of a run's output tokens, when the provider split it out. */
+export function imageTokensOf(usage: TokenUsage): number | undefined {
+  return usage.imageOutputTokens
 }
 
 /** What an adapter answers: dimensions both stated or both left to the core. */

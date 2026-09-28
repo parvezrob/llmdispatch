@@ -7,7 +7,6 @@ import {
   defineOperation,
   defineOperations,
   memoryStores,
-  ProviderError,
   type ContentPart,
   type FilePart,
   type Provider,
@@ -68,8 +67,6 @@ const ai = createSwitch({
   }),
   stores: memoryStores(),
 })
-
-void ProviderError
 
 const result = await ai.run('read', { input: { data: page.data } })
 export const summary: string = result.data.summary

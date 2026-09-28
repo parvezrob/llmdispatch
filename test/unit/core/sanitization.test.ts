@@ -272,7 +272,6 @@ describe('the sentinel sweep over the whole error matrix', () => {
 
   it('leaves unwrapped user exceptions outside the guarantee, object-identical', async () => {
     const bug = new Error(`my own bug: ${INPUT_SENTINEL}`)
-    const f = fixture()
     const operations = {
       echo: {
         input: ECHO_INPUT,
@@ -283,11 +282,10 @@ describe('the sentinel sweep over the whole error matrix', () => {
         defaultRoute: { provider: 'p1', model: 'm1' },
       },
     } as unknown as OperationsMap
-    const f2 = fixture({ operations })
-    void f
+    const f = fixture({ operations })
     let caught: unknown
     try {
-      await f2.ai.run('echo', { input: { text: 'x' } })
+      await f.ai.run('echo', { input: { text: 'x' } })
     } catch (error) {
       caught = error
     }
