@@ -236,10 +236,10 @@ below, and a 2xx body that is not an object throws `ProviderError('malformed_res
 before the elements, and apply to every image: `output_format` absent or `null` →
 `image/png` (the default), `'png'`, `'jpeg'` and `'webp'` → `image/png`, `image/jpeg` and
 `image/webp`, any other value → `malformed_response`; a `size` of exactly
-`<width>x<height>`, both positive safe integers, gives every image that `width` and
-`height`, and anything else (`'auto'`, absent, any other string or type) states none, so the
-core reads both from the header (§3 point 4b) and a pair is never half stated. Each `data[]`
-element, in order, becomes one
+`<width>x<height>`, two positive safe integers written without leading zeros, gives every
+image that `width` and `height`, and anything else (`'auto'`, absent, any other string or
+type) states none, so the core reads both from the header (§3 point 4b) and a pair is never
+half stated. Each `data[]` element, in order, becomes one
 `ProviderImage` from its `b64_json`. The two §3 point 4b caps come before the grammar
 check: the count is checked before any element is read, as in the core, and each element's
 length before its scan, so an oversized response costs a length read rather than a scan the
