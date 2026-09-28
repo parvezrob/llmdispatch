@@ -684,8 +684,13 @@ describe('refusal and embedded errors on a 2xx', () => {
     expect(Object.hasOwn(response, 'costUsd')).toBe(false)
   })
 
-  it('returns refused for a moderation envelope beside data', async () => {
-    const response = await runImage(200, imagesBody({ error: { type: 'moderation' } }))
+  it.each([
+    ['absent', {}],
+    ['empty', { data: [] }],
+    ['not an array', { data: 'x' }],
+    ['null', { data: null }],
+  ])('returns refused for a moderation envelope when data is %s', async (_label, data) => {
+    const response = await runImage(200, { ...data, error: { type: 'moderation' } })
     expect(response).toEqual({ kind: 'refused', text: '', usage: null })
   })
 
@@ -715,11 +720,20 @@ describe('refusal and embedded errors on a 2xx', () => {
   ])(
     'throws the mapped kind for an embedded %s error, with the HTTP status',
     async (_l, error, kind) => {
-      const failure = await failureOf(runImage(200, imagesBody({ error })))
+      const failure = await failureOf(runImage(200, { error }))
       expect(ProviderError.is(failure) && failure.kind === kind).toBe(true)
       expect((failure as ProviderError).status).toBe(200)
     },
   )
+
+  it.each([
+    ['empty', { data: [] }],
+    ['not an array', { data: { 0: element() } }],
+  ])('throws an embedded error when data is %s', async (_label, data) => {
+    const failure = await failureOf(runImage(201, { ...data, error: { type: 'credit' } }))
+    expect(ProviderError.is(failure) && failure.kind === 'rate_limit').toBe(true)
+    expect((failure as ProviderError).status).toBe(201)
+  })
 
   it("throws transient for a first choice with finish_reason 'error' and no error object", async () => {
     const failure = await failureOf(runImage(200, { choices: [{ finish_reason: 'error' }] }))
@@ -736,8 +750,50 @@ describe('refusal and embedded errors on a 2xx', () => {
   })
 
   it('reads an error that is not a record as no embedded error', async () => {
-    const response = await runImage(200, imagesBody({ error: 'moderation' }))
-    expect(response.kind).toBe('complete')
+    const response = await runImage(200, imagesBody({ error: 'moderation' }, []))
+    expect(response).toEqual({ kind: 'complete', text: '', images: [], usage: null })
+  })
+})
+
+describe('images win over an embedded error', () => {
+  // OpenRouter bills an image call all or nothing and answers a failed generation with a 502
+  // it does not bill: images in a 2xx are what was bought, whatever else the body says.
+  const IMAGE = { mediaType: 'image/png', data: PNG_DATA }
+
+  it.each([
+    ['a moderation envelope', { error: { type: 'moderation' } }],
+    ['the documented moderation metadata', MODERATION_METADATA_BODY],
+    ['a rate-limit word', { error: { metadata: { error_type: 'rate_limit_exceeded' } } }],
+    ['an auth word', { error: { error_type: 'permission_denied' } }],
+    ['an error naming nothing', { error: { code: 500, message: 'failed' } }],
+    ["a first choice with finish_reason 'error'", { choices: [{ finish_reason: 'error' }] }],
+  ])('reads the images beside %s as the answer', async (_label, extra) => {
+    const response = await runImage(200, {
+      ...imagesBody(),
+      ...extra,
+      usage: { prompt_tokens: 10, completion_tokens: 1200, cost: 0.04 },
+    })
+    expect(response).toEqual({
+      kind: 'complete',
+      text: '',
+      images: [IMAGE],
+      usage: { inputTokens: 10, outputTokens: 1200 },
+      costUsd: 0.04,
+    })
+  })
+
+  it('holds images beside an embedded error to every element rule', async () => {
+    await expectMalformed(
+      imagesBody({ error: { type: 'credit' } }, [element(), element('AAA')]),
+    )
+    await expectMalformed(
+      imagesBody({ error: { type: 'moderation' } }, [element(PNG_DATA, 'image/svg+xml')]),
+    )
+  })
+
+  it('applies the count cap to images beside an embedded error', async () => {
+    const tooMany = Array.from({ length: 33 }, () => element())
+    await expectMalformed(imagesBody({ error: { type: 'moderation' } }, tooMany))
   })
 })
 

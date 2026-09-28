@@ -620,19 +620,24 @@ apply; `maxOutputTokens` and `temperature` have no field on this wire and are dr
 when the route sets them (see the opening of §5c). A model that lacks a knob, or a value of
 one, answers its own error, classified by the rows below; the catalogue says so in advance.
 Response: a non-2xx status classifies by the errors below, and a 2xx body that is not an
-object throws `ProviderError('malformed_response')`. An error embedded in a 2xx body is read
-next (refusal and errors, below). Then `data` must be an array, and the §3 point 4b count
-cap is checked before any element is read. Each `data[]` element, in order, becomes one
-`ProviderImage` from its `b64_json` and its `media_type`, with no dimensions: the core reads
-both from the image header (§3 point 4b). Per element, in this order,
-`ProviderError('malformed_response')` is thrown for an element that is not an object, a
-`b64_json` that is absent or not a string, a `b64_json` over the §3 point 4b length cap, a
-`media_type` other than `image/png`, `image/jpeg` and `image/webp` (absent, any other string
-or type, and the `image/svg+xml` a vector model answers with, all included), and a
-`b64_json` outside the §6 base64 grammar. The length and the media type are cheap reads and
-come before the grammar, so an oversized image, or one in a type the core cannot take, costs
-no scan. An empty `data` is complete with no images, and §3 point 4b records the output
-rejection. Other fields are ignored, and `text` is always `''`.
+object throws `ProviderError('malformed_response')`. **Images win:** a non-empty `data`
+array is the answer, read by the element rules below, and an error embedded beside it is not
+consulted, since OpenRouter bills an image call all or nothing and answers a failed
+generation with a 502 it does not bill
+([image generation](https://openrouter.ai/docs/features/multimodal/image-generation)). Only
+when `data` is absent, not an array, or empty is an embedded error read (refusal and errors,
+below); with none, `data` must be an array. The §3 point 4b count cap is checked before any
+element is read. Each `data[]` element, in order, becomes one `ProviderImage` from its
+`b64_json` and its `media_type`, with no dimensions: the core reads both from the image
+header (§3 point 4b). Per element, in this order, `ProviderError('malformed_response')` is
+thrown for an element that is not an object, a `b64_json` that is absent or not a string, a
+`b64_json` over the §3 point 4b length cap, a `media_type` other than `image/png`,
+`image/jpeg` and `image/webp` (absent, any other string or type, and the `image/svg+xml` a
+vector model answers with, all included), and a `b64_json` outside the §6 base64 grammar.
+The length and the media type are cheap reads and come before the grammar, so an oversized
+image, or one in a type the core cannot take, costs no scan. An empty `data` with no
+embedded error is complete with no images, and §3 point 4b records the output rejection.
+Other fields are ignored, and `text` is always `''`.
 Usage: base counters `usage.prompt_tokens` and `usage.completion_tokens` REQUIRED
 (missing/invalid, or no `usage` object → `usage: null`). The API does not split out image
 tokens, so `imageOutputTokens` is never reported.
@@ -646,15 +651,16 @@ since this usage carries no image split, an image attempt with a non-zero output
 **Refusal and errors:** OpenRouter's error envelope as `openaiCompatible` defines it above
 (the error-type word read from its three `error_type` places, the moderation envelope, and
 the embedded-error mapping), unchanged, and applied whatever `baseUrl` this factory is
-given, since it speaks OpenRouter's envelope by definition. An embedded error that is a
-moderation envelope → `'refused'`, with `text: ''` and the body's usage and cost read as
-above; any other embedded error is thrown, classified by its error-type word as defined
-there, and carries the HTTP status. A non-2xx is never a refusal: a 403 whose body is a
-moderation envelope (as defined above) → `invalid_request` (the content's fault, not the
-key's); every other status by the shared rows, in this precedence: 401/403 → `auth`; 429 and
-402 → `rate_limit`; 404, or a model-not-found code on any other 4xx → `model_not_found`;
-408/5xx/498 → `transient`; 400/413/422 → `invalid_request`; any other 4xx by family;
-unparseable body → classify by status; unknown status → `transient`.
+given, since it speaks OpenRouter's envelope by definition. An embedded error, read only
+when the body carries no images (above), that is a moderation envelope → `'refused'`, with
+`text: ''` and the body's usage and cost read as above; any other embedded error is thrown,
+classified by its error-type word as defined there, and carries the HTTP status. A non-2xx
+is never a refusal: a 403 whose body is a moderation envelope (as defined above) →
+`invalid_request` (the content's fault, not the key's); every other status by the shared
+rows, in this precedence: 401/403 → `auth`; 429 and 402 → `rate_limit`; 404, or a
+model-not-found code on any other 4xx → `model_not_found`; 408/5xx/498 → `transient`;
+400/413/422 → `invalid_request`; any other 4xx by family; unparseable body → classify by
+status; unknown status → `transient`.
 
 ## 6. Public API (authoritative, self-contained, compiles under strict TS + Zod 4)
 
