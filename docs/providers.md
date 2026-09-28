@@ -20,12 +20,12 @@
 All built-ins: `fetch` with `redirect: 'error'`, JSON bodies, per-attempt signal.
 **Optional request fields (`maxOutputTokens`, `temperature`) are omitted from the wire body
 when unset, never defaulted**, with two exceptions, both below: Anthropic always sends
-`max_tokens`, and the two image adapters, `openaiImages` and `openrouterImages`, have no
-field for either and drop both even when set. Every mapping is fixed by recorded synthetic
-fixtures.
+`max_tokens`, and the two image-only adapters, `openaiImages` and `openrouterImages`, have
+no field for either and drop both even when set. Every mapping is fixed by recorded
+synthetic fixtures.
 **Universal status-family default (all built-ins, total by construction):** any status not
-explicitly mapped classifies by family: 401/403 → `auth` (except documented moderation
-envelopes → `refused`); 402/429 → `rate_limit`; 404 → `model_not_found`; 408 → `transient`;
+explicitly mapped classifies by family: 401/403 → `auth` (except the per-adapter
+moderation rows below); 402/429 → `rate_limit`; 404 → `model_not_found`; 408 → `transient`;
 any other 4xx (incl. 409/413/422) → `invalid_request`; any 5xx (incl. 504/529) →
 `transient`; network/DNS/TLS failures → `transient`. Implementers never invent a mapping.
 
@@ -322,16 +322,16 @@ generation with a 502 it does not bill
 when `data` is absent, not an array, or empty is an embedded error read (refusal and errors,
 below); with none, `data` must be an array. The §3 point 4b count cap is checked before any
 element is read. Each `data[]` element, in order, becomes one `ProviderImage` from its
-`b64_json` and its `media_type`, with no dimensions: the core reads both from the image
-header (§3 point 4b). Per element, in this order, `ProviderError('malformed_response')` is
-thrown for an element that is not an object, a `b64_json` that is absent or not a string, a
-`b64_json` over the §3 point 4b length cap, a `media_type` other than `image/png`,
-`image/jpeg` and `image/webp` (absent, any other string or type, and the `image/svg+xml` a
-vector model answers with, all included), and a `b64_json` outside the §6 base64 grammar.
-The length and the media type are cheap reads and come before the grammar, so an oversized
-image, or one in a type the core cannot take, costs no scan. An empty `data` with no
-embedded error is complete with no images, and §3 point 4b records the output rejection.
-Other fields are ignored, and `text` is always `''`.
+`b64_json` and its `media_type`, with no dimensions: the core reads width and height from
+the image header (§3 point 4b). Per element, in this order,
+`ProviderError('malformed_response')` is thrown for an element that is not an object, a
+`b64_json` that is absent or not a string, a `b64_json` over the §3 point 4b length cap, a
+`media_type` other than `image/png`, `image/jpeg` and `image/webp` (absent, any other string
+or type, and the `image/svg+xml` a vector model answers with, all included), and a
+`b64_json` outside the §6 base64 grammar. The length and the media type are cheap reads and
+come before the grammar, so an oversized image, or one in a type the core cannot take, costs
+no scan. An empty `data` with no embedded error is complete with no images, and §3 point 4b
+records the output rejection. Other fields are ignored, and `text` is always `''`.
 Usage: base counters `usage.prompt_tokens` and `usage.completion_tokens` REQUIRED
 (missing/invalid, or no `usage` object → `usage: null`). The API does not split out image
 tokens, so `imageOutputTokens` is never reported.
