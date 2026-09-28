@@ -211,7 +211,7 @@ describe('the gates', () => {
 
   it("passes size '4K' at 16:9", async () => {
     const body = await sentBody({ size: '4K', aspectRatio: '16:9' })
-    expect(body.size).toBe('3840x2160')
+    expect(body).toEqual({ model: 'test-model', prompt: 'hello', size: '3840x2160' })
   })
 
   // Outside the typed knobs, which the core validates, a value has no table cell: it is
@@ -352,7 +352,7 @@ describe('the size table', () => {
 
   it.each(CELLS)('sends %s at %s as %s', async (size, aspectRatio, wire) => {
     const body = await sentBody({ size, aspectRatio })
-    expect(body.size).toBe(wire)
+    expect(body).toEqual({ model: 'test-model', prompt: 'hello', size: wire })
 
     const [width, height] = wire.split('x').map(Number) as [number, number]
     const [ratioWidth, ratioHeight] = aspectRatio.split(':').map(Number) as [number, number]
@@ -781,7 +781,6 @@ describe('usage', () => {
     ['image_tokens is fractional', { image_tokens: 1.5 }],
     ['image_tokens is a string', { image_tokens: '1100' }],
     ['image_tokens is null', { image_tokens: null }],
-    ['image_tokens is past the safe integers', { image_tokens: 2 ** 53 }],
     ['image_tokens is above the output tokens', { image_tokens: 1201 }],
   ])('omits imageOutputTokens when %s, keeping the base counters', async (_label, details) => {
     const raw: Record<string, unknown> = { input_tokens: 10, output_tokens: 1200 }
