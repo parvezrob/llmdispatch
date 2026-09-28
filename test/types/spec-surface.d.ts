@@ -203,6 +203,7 @@ export declare function openaiImages(opts: {
   baseUrl?: string
   quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'  // sent verbatim when set; unset sends none (§5c)
 }): Provider
+export declare function openrouterImages(opts: { apiKey: ApiKeyResolver; baseUrl?: string }): Provider
 export type ApiKeyResolver = () => string | undefined | Promise<string | undefined>
 
 // --- stores ---
