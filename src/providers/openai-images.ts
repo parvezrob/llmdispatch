@@ -16,6 +16,7 @@ import type {
   ProviderImage,
   ProviderRequest,
   ProviderResponse,
+  TextPart,
   TokenUsage,
 } from '../types'
 import { classifyOpenAIStatus } from './openai-errors'
@@ -111,14 +112,14 @@ async function completeImages(
   quality: Quality,
   req: ProviderRequest,
 ): Promise<ProviderResponse> {
-  const { image, prompt, size } = readImageGate(req)
+  const { image, prompt, wireSize } = readImageGate(req)
   const http = await fetchJson(`${baseUrl}/images/generations`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify(imageBody(req.model, prompt, image, size, quality)),
+    body: JSON.stringify(imageBody(req.model, prompt, image, wireSize, quality)),
     signal: req.signal,
   })
 
@@ -136,38 +137,43 @@ async function completeImages(
 /**
  * The four gates (§5c), in order, all before any fetch: the endpoint makes only images, it
  * takes no reference images or documents, its one size field needs both knobs or neither,
- * and 4K is offered at 16:9 only. What passes is the image block, the prompt, and the pixel
- * size to send, `null` when neither knob is set.
+ * and 4K is offered at 16:9 only. What passes is the image block, the prompt, and the wire
+ * size: the pixel string sent as `size`, or `null` when neither knob is set.
  */
 function readImageGate(req: ProviderRequest): {
   image: ImageOptions
   prompt: string
-  size: string | null
+  wireSize: string | null
 } {
+  // 1. The endpoint makes only images.
   if (req.responseFormat.type !== 'image') invalid('only image output is supported')
   const image = req.responseFormat
-  const prompt = imagePrompt(req.parts)
+  // 2. It takes no reference images or documents: every part is text.
+  const parts = req.parts
+  if (!parts.every(isTextPart)) invalid('file parts are not supported')
+  const prompt = imagePrompt(parts)
+  // 3. Its one size field needs both knobs or neither; no half of a pair is invented.
   const { aspectRatio, size } = image
-  if (aspectRatio === undefined && size === undefined) return { image, prompt, size: null }
+  if (aspectRatio === undefined && size === undefined) return { image, prompt, wireSize: null }
   if (aspectRatio === undefined || size === undefined) {
     invalid('aspectRatio and size must be set together')
   }
+  // 4. 4K is offered at 16:9 only.
   if (size === '4K' && aspectRatio !== '16:9') invalid("size '4K' needs aspectRatio '16:9'")
-  const pixels = pixelSize(size, aspectRatio)
+  const wireSize = pixelSize(size, aspectRatio)
   // Unreachable for the typed knobs, which the core validates; a value outside them is
   // rejected here rather than sent as a size nobody pinned.
-  if (pixels === undefined) invalid('unsupported size or aspect ratio')
-  return { image, prompt, size: pixels }
+  if (wireSize === undefined) invalid('unsupported size or aspect ratio')
+  return { image, prompt, wireSize }
+}
+
+function isTextPart(part: ContentPart): part is TextPart {
+  return part.type === 'text'
 }
 
 /** The text parts joined with a newline; a lone part goes verbatim, `''` included (§5c). */
-function imagePrompt(parts: readonly ContentPart[]): string {
-  const texts: string[] = []
-  for (const part of parts) {
-    if (part.type !== 'text') invalid('file parts are not supported')
-    texts.push(part.text)
-  }
-  return texts.join('\n')
+function imagePrompt(parts: readonly TextPart[]): string {
+  return parts.map((part) => part.text).join('\n')
 }
 
 /** The table cell for a class and a ratio, read as own properties only. */
@@ -186,12 +192,12 @@ function imageBody(
   model: string,
   prompt: string,
   image: ImageOptions,
-  size: string | null,
+  wireSize: string | null,
   quality: Quality,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = { model, prompt }
   if (image.count !== undefined) body.n = image.count
-  if (size !== null) body.size = size
+  if (wireSize !== null) body.size = wireSize
   if (image.background !== undefined) body.background = image.background
   if (quality !== undefined) body.quality = quality
   return body
