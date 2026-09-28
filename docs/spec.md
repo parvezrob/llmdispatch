@@ -549,8 +549,9 @@ safe integers, gives every image that `width` and `height`, and anything else (`
 absent, any other string or type) states none, so the core reads both from the header (§3
 point 4b) and a pair is never half stated. Each `data[]` element, in order, becomes one
 `ProviderImage` from its `b64_json`. The two §3 point 4b caps come before the grammar
-check, as on the Gemini wire: the count before an element is taken, then the length, so an
-oversized image costs a length read rather than a scan the core would repeat.
+check: the count is checked before any element is read, as in the core, and each element's
+length before its scan, so an oversized response costs a length read rather than a scan the
+core would repeat.
 `ProviderError('malformed_response')` is thrown for `data` absent or not an array, an
 element that is not an object, a `b64_json` that is absent or not a string (a URL answer
 included), and one outside the §6 base64 grammar. An empty `data` is complete with no
