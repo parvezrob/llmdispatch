@@ -123,10 +123,9 @@ async function completeImages(
     signal: req.signal,
   })
 
-  // A refusal is read before anything else in the body, whatever the status: the Images API
-  // reports a blocked prompt as an error response, and that is a refusal (§5b), not a bad
-  // request.
-  if (isImageRefusal(http.body)) return { kind: 'refused', text: '', usage: null }
+  // A refusal is read before anything else in the body: the Images API reports a blocked
+  // prompt as an error response, and that is a refusal (§5b), not a bad request.
+  if (isImageRefusal(http.status, http.body)) return { kind: 'refused', text: '', usage: null }
   if (http.status < 200 || http.status >= 300) {
     throwForStatus(http.status, classifyOpenAIStatus(http.status, http.body))
   }
@@ -204,18 +203,16 @@ function imageBody(
 }
 
 /**
- * Whether a body is the Images API's refusal (§5c): an `error` object whose code is
- * `moderation_blocked` or the legacy `content_policy_violation`, or whose type is
- * `image_generation_user_error`.
+ * Whether an answer is the Images API's refusal (§5c): an `error` object whose code is
+ * `moderation_blocked` or the legacy `content_policy_violation`, at any status, or whose type
+ * alone is `image_generation_user_error`, on a 4xx only. Outside 4xx a type-only match would
+ * turn a retryable server failure into a terminal refusal, so there it classifies by status.
  */
-function isImageRefusal(body: unknown): boolean {
+function isImageRefusal(status: number, body: unknown): boolean {
   if (!isRecord(body) || !isRecord(body.error)) return false
   const { code, type } = body.error
-  return (
-    code === 'moderation_blocked' ||
-    code === 'content_policy_violation' ||
-    type === 'image_generation_user_error'
-  )
+  if (code === 'moderation_blocked' || code === 'content_policy_violation') return true
+  return type === 'image_generation_user_error' && status >= 400 && status < 500
 }
 
 /**
