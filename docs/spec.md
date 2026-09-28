@@ -335,7 +335,8 @@ tables.
 
 All built-ins: `fetch` with `redirect: 'error'`, JSON bodies, per-attempt signal.
 **Optional request fields (`maxOutputTokens`, `temperature`) are omitted from the wire body
-when unset, never defaulted** (single exception: Anthropic `max_tokens` below). Every
+when unset, never defaulted**, with two exceptions, both below: Anthropic always sends
+`max_tokens`, and `openaiImages` has no field for either and drops both even when set. Every
 mapping is fixed by recorded synthetic fixtures.
 **Universal status-family default (all built-ins, total by construction):** any status not
 explicitly mapped classifies by family: 401/403 → `auth` (except documented moderation
@@ -525,9 +526,9 @@ below (both knobs set; with neither, no size field is sent and the provider defa
 applies), `background` verbatim, and the factory's `quality`. `output_format` and
 `moderation` are never sent, so they stay at the provider defaults, png and the stricter
 `auto` filter; nor is `response_format`, which GPT Image models do not support: they always
-answer base64. **An exception to the opening rule of this section:** `maxOutputTokens` and
-`temperature` have no field on this wire, so they are dropped even when the route sets them.
-The `size` table, by class then ratio, each cell `<width>x<height>`:
+answer base64. **Unlike the other built-ins** (see the opening of §5c), `maxOutputTokens`
+and `temperature` have no field on this wire, so they are dropped even when the route sets
+them. The `size` table, by class then ratio, each cell `<width>x<height>`:
 
 - `1K`: `1:1` `1024x1024`, `3:2` `1536x1024`, `2:3` `1024x1536`, `16:9` `1536x864`,
   `9:16` `864x1536`, `4:3` `1024x768`, `3:4` `768x1024`.
@@ -538,7 +539,8 @@ The `size` table, by class then ratio, each cell `<width>x<height>`:
 Every cell is a multiple of 16 on both sides, exactly on its ratio, and within 1:3 to 3:1.
 Not every model accepts every cell: `1K` is the only class older GPT Image models accept,
 and only its first three cells. A model that rejects a `size`, `n`, `background` or
-`quality` value answers its own 400, which classifies `invalid_request` (errors below).
+`quality` value answers its own 400, which classifies `invalid_request` (errors below)
+unless the body is a refusal (below).
 Response: a refusal is read first (below); then a non-2xx status classifies by the errors
 below, and a 2xx body that is not an object throws `ProviderError('malformed_response')`.
 `data` must be an array. `output_format` and `size` are read once, from the top level,
@@ -556,8 +558,9 @@ core would repeat.
 `ProviderError('malformed_response')` is thrown for `data` absent or not an array, an
 element that is not an object, a `b64_json` that is absent or not a string (a URL answer
 included), and one outside the §6 base64 grammar. An empty `data` is complete with no
-images, and §3 point 4b records the output rejection. Other fields (`created`,
-`revised_prompt`, the echoed settings) are ignored, and `text` is always `''`.
+images, and §3 point 4b records the output rejection. Other fields (`created`, each
+element's `revised_prompt`, and the other echoed settings, `quality` and `background`) are
+ignored, and `text` is always `''`.
 **Refusal:** before any other reading of the body, an `error` object whose `code` is
 `moderation_blocked` (or the legacy `content_policy_violation`), at any status, or whose
 `type` alone is `image_generation_user_error`, on a 4xx only → `'refused'`, with `text: ''`
