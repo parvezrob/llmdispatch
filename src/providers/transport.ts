@@ -79,9 +79,11 @@ export function throwForStatus(status: number, kind?: ProviderErrorKind): never 
   throw new ProviderError(kind ?? classifyByStatusFamily(status), { status })
 }
 
-/** Non-negative safe integers only; otherwise `null`. */
+/** Non-negative safe integers only; otherwise `null`. A `-0` on the wire reads as `0`. */
 export function asTokenCount(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return null
+  // `-0` passes every check above, and a count never carries a sign.
+  return value === 0 ? 0 : value
 }
 
 /**
