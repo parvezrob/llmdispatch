@@ -705,6 +705,11 @@ export declare function openaiCompatible(opts: {
   tokenParam?: 'max_tokens' | 'max_completion_tokens'    // overrides the §5c host token-param rule
 }): Provider
 export declare function gemini(opts: { apiKey: ApiKeyResolver }): Provider
+export declare function openaiImages(opts: {
+  apiKey: ApiKeyResolver
+  baseUrl?: string
+  quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'  // sent verbatim when set; unset sends none (§5c)
+}): Provider
 export type ApiKeyResolver = () => string | undefined | Promise<string | undefined>
 
 // --- stores ---

@@ -19,6 +19,7 @@ describe('entry points', () => {
       'imageOutputSchema',
       'memoryStores',
       'openaiCompatible',
+      'openaiImages',
       'postgresStores',
     ])
     expect(Object.keys(postgres).sort()).toEqual([

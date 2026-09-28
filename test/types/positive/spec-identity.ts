@@ -91,6 +91,7 @@ export type SectionSixValues = [
   Holds<Identical<typeof Package.anthropic, typeof Spec.anthropic>>,
   Holds<Identical<typeof Package.openaiCompatible, typeof Spec.openaiCompatible>>,
   Holds<Identical<typeof Package.gemini, typeof Spec.gemini>>,
+  Holds<Identical<typeof Package.openaiImages, typeof Spec.openaiImages>>,
 ]
 
 export type SectionSixB = [
