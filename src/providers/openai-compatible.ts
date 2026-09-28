@@ -13,14 +13,9 @@ import type {
   ProviderRequest,
   ProviderResponse,
 } from '../types'
+import { classifyOpenAIStatus } from './openai-errors'
 import { soleTextPart } from './parts'
-import {
-  buildUsage,
-  classifyByStatusFamily,
-  fetchJson,
-  isRecord,
-  throwForStatus,
-} from './transport'
+import { buildUsage, fetchJson, isRecord, throwForStatus } from './transport'
 
 const DEFAULT_BASE = 'https://api.openai.com/v1'
 
@@ -201,34 +196,15 @@ function readOpenAIUsage(raw: unknown) {
   return buildUsage(raw.prompt_tokens, raw.completion_tokens)
 }
 
+/**
+ * The shared OpenAI rows (§5c), plus the one this transport adds: OpenRouter answers a
+ * moderation block with 403, which is the content's fault rather than the key's.
+ */
 function throwOpenAIError(status: number, body: unknown, host: string): never {
-  if (status === 401) throwForStatus(status, 'auth')
-  if (status === 403) {
-    if (isOpenRouterModeration(body, host)) throwForStatus(status, 'invalid_request')
-    throwForStatus(status, 'auth')
-  }
-  // Documented status rows beat a body code: a 429/5xx mentioning a model is still
-  // rate_limit/transient. `model_not_found` codes only reclassify other 4xx.
-  if (status === 429 || status === 402) throwForStatus(status, 'rate_limit')
-  if (status === 404 || (status >= 400 && status < 500 && isModelNotFound(body))) {
-    throwForStatus(status, 'model_not_found')
-  }
-  if (status === 408 || status >= 500 || status === 498) throwForStatus(status, 'transient')
-  if (status === 400 || status === 413 || status === 422) {
+  if (status === 403 && isOpenRouterModeration(body, host)) {
     throwForStatus(status, 'invalid_request')
   }
-  // Family buckets cover every 4xx/5xx; out-of-range leftovers are transient.
-  if (status >= 400 && status < 600) {
-    throwForStatus(status, classifyByStatusFamily(status))
-  }
-  throwForStatus(status, 'transient')
-}
-
-function isModelNotFound(body: unknown): boolean {
-  if (!isRecord(body)) return false
-  const error = body.error
-  if (!isRecord(error)) return false
-  return error.code === 'model_not_found' || error.type === 'model_not_found'
+  throwForStatus(status, classifyOpenAIStatus(status, body))
 }
 
 function isOpenRouterModeration(body: unknown, host: string): boolean {
