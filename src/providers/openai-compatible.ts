@@ -14,6 +14,7 @@ import type {
   ProviderResponse,
 } from '../types'
 import { classifyOpenAIStatus } from './openai-errors'
+import { classifyEmbeddedError, isOpenRouterModeration } from './openrouter-errors'
 import { soleTextPart } from './parts'
 import { buildUsage, fetchJson, isRecord, throwForStatus } from './transport'
 
@@ -162,14 +163,13 @@ async function completeOpenAI(
 
   const usage = readOpenAIUsage(http.body.usage)
 
-  const embedded = classifyEmbeddedError(http.body, host)
+  // Only an OpenRouter host embeds errors in a 2xx answer (§5c).
+  const embedded = host.includes('openrouter') ? classifyEmbeddedError(http.body) : null
   if (embedded !== null) {
-    if (embedded.kind === 'refused') {
+    if (embedded === 'refused') {
       return { kind: 'refused', text: '', usage }
     }
-    throw new ProviderError(embedded.kind, {
-      status: embedded.status ?? http.status,
-    })
+    throw new ProviderError(embedded, { status: http.status })
   }
 
   const choices = http.body.choices
@@ -197,64 +197,14 @@ function readOpenAIUsage(raw: unknown) {
 }
 
 /**
- * The shared OpenAI rows (§5c), plus the one this transport adds: OpenRouter answers a
- * moderation block with 403, which is the content's fault rather than the key's.
+ * The shared OpenAI rows (§5c), plus the one this transport adds for an OpenRouter host:
+ * OpenRouter answers a moderation block with 403, which is the content's fault rather than
+ * the key's. The envelope is recognised in `openrouter-errors.ts`; whether this host speaks
+ * it is decided here.
  */
 function throwOpenAIError(status: number, body: unknown, host: string): never {
-  if (status === 403 && isOpenRouterModeration(body, host)) {
+  if (status === 403 && host.includes('openrouter') && isOpenRouterModeration(body)) {
     throwForStatus(status, 'invalid_request')
   }
   throwForStatus(status, classifyOpenAIStatus(status, body))
-}
-
-function isOpenRouterModeration(body: unknown, host: string): boolean {
-  if (!host.includes('openrouter')) return false
-  return openRouterErrorType(body) === 'moderation'
-}
-
-function openRouterErrorType(body: unknown): string | undefined {
-  if (!isRecord(body)) return undefined
-  const fromChoice = firstChoiceError(body)
-  const error = fromChoice ?? (isRecord(body.error) ? body.error : null)
-  if (error === null) return undefined
-  const meta = isRecord(error.metadata) ? error.metadata : null
-  if (meta !== null) {
-    if (typeof meta.error_type === 'string') return meta.error_type
-    if (typeof meta.code === 'string') return meta.code
-  }
-  if (typeof error.code === 'string') return error.code
-  if (typeof error.type === 'string') return error.type
-  return undefined
-}
-
-function firstChoiceError(body: Record<string, unknown>): Record<string, unknown> | null {
-  if (!Array.isArray(body.choices) || body.choices.length === 0) return null
-  const first: unknown = body.choices[0]
-  if (!isRecord(first) || !isRecord(first.error)) return null
-  return first.error
-}
-
-function classifyEmbeddedError(
-  body: Record<string, unknown>,
-  host: string,
-): {
-  kind: 'refused' | 'auth' | 'rate_limit' | 'transient'
-  status?: number
-  message?: string
-} | null {
-  if (!host.includes('openrouter')) return null
-  const choices = body.choices
-  const choice = Array.isArray(choices) && isRecord(choices[0]) ? choices[0] : null
-  const hasErrorFinish = choice?.finish_reason === 'error'
-  const topError = isRecord(body.error) ? body.error : null
-  const choiceError = choice !== null && isRecord(choice.error) ? choice.error : null
-  if (!hasErrorFinish && topError === null && choiceError === null) return null
-
-  const type = openRouterErrorType(body)
-  if (type === 'moderation') return { kind: 'refused', message: 'moderation' }
-  if (type === 'auth' || type === 'authentication') return { kind: 'auth' }
-  if (type === 'credit' || type === 'rate_limit' || type === 'rate-limit') {
-    return { kind: 'rate_limit' }
-  }
-  return { kind: 'transient' }
 }
