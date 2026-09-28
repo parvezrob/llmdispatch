@@ -721,7 +721,7 @@ describe('refusal and embedded errors on a 2xx', () => {
     const response = await runImage(
       200,
       { error: { type: 'moderation' } },
-      { baseUrl: 'https://gateway.example.com/openrouter/v1' },
+      { baseUrl: 'https://example.com/openrouter/v1' },
     )
     expect(response.kind).toBe('refused')
   })
@@ -788,7 +788,7 @@ describe('error classification', () => {
 
   it('applies the 403 moderation rule behind a custom base URL', async () => {
     installFetch(() => jsonResponse(403, { error: { type: 'moderation' } }))
-    const run = await complete({ baseUrl: 'https://gateway.example.com/v1' })
+    const run = await complete({ baseUrl: 'https://example.com/gateway/v1' })
     await expect(run(imageRequest())).rejects.toSatisfy(isKind('invalid_request'))
   })
 

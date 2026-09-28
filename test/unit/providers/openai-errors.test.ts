@@ -1,7 +1,7 @@
 /**
- * The status rows both OpenAI adapters classify with (spec §5c), held directly: every row,
- * the precedence between a status row and a `model_not_found` body, and the statuses no row
- * names. The adapters' own tests prove each one routes through these rows.
+ * The status rows the OpenAI-shaped adapters classify with (spec §5c), held directly: every
+ * row, the precedence between a status row and a `model_not_found` body, and the statuses no
+ * row names. The adapters' own tests prove each one routes through these rows.
  */
 
 import { describe, expect, it } from 'vitest'
