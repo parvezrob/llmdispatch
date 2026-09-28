@@ -113,7 +113,7 @@
     "pg-connection-string": "^2.14.0",
     "prettier": "^3.9.6",
     "publint": "^0.3.24",
-    "tsdown": "^0.22.14",
+    "tsdown": "^0.23.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.10",
