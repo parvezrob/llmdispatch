@@ -9,10 +9,13 @@ import { base64, jpeg, png, webpVP8L } from '../core/image-fixtures'
 import {
   baseRequest,
   captureRequests,
+  inheritedValue,
   installFetch,
   jsonResponse,
   SENTINEL,
   textParts,
+  throwingGetter,
+  withInherited,
   withPrepared,
 } from './helpers'
 import {
@@ -969,4 +972,73 @@ describe("OpenRouter's documented error vocabulary", () => {
       'transient',
     )
   })
+})
+
+describe('an inherited envelope field', () => {
+  // Only the fields a body carries classify it: a polluted Object.prototype neither names an
+  // error nor runs a getter. The answer is prepared before the pollution and read after it.
+  const ENVELOPE_FIELDS = [
+    'error',
+    'error_type',
+    'choices',
+    'metadata',
+    'code',
+    'type',
+    'reasons',
+    'flagged_input',
+    'finish_reason',
+  ]
+
+  async function outcomeUnder(
+    fields: Record<string, PropertyDescriptor>,
+    status: number,
+    body: unknown,
+  ) {
+    const response = jsonResponse(status, body)
+    installFetch(() => response)
+    const run = await complete()
+    return withInherited(Object.prototype, fields, () => failureOf(run(imageRequest())))
+  }
+
+  it('keeps an embedded credit error rate_limit when Object.prototype names moderation', async () => {
+    const error = await outcomeUnder({ error_type: inheritedValue('moderation') }, 200, {
+      error: { type: 'credit' },
+    })
+    expect(ProviderError.is(error) && error.kind === 'rate_limit').toBe(true)
+    expect((error as ProviderError).status).toBe(200)
+  })
+
+  it('keeps a 403 without moderation auth when Object.prototype carries moderation', async () => {
+    const error = await outcomeUnder(
+      {
+        error_type: inheritedValue('moderation'),
+        metadata: inheritedValue({ reasons: ['violence'] }),
+      },
+      403,
+      { error: { code: 403, message: 'forbidden' } },
+    )
+    expect(ProviderError.is(error) && error.kind === 'auth').toBe(true)
+  })
+
+  it('keeps an answer with no images and no error complete when Object.prototype carries one', async () => {
+    const response = jsonResponse(200, { data: [] })
+    installFetch(() => response)
+    const run = await complete()
+    const answer = await withInherited(
+      Object.prototype,
+      { error: inheritedValue({ type: 'moderation' }) },
+      () => run(imageRequest()),
+    )
+    expect(answer).toEqual({ kind: 'complete', text: '', images: [], usage: null })
+  })
+
+  it.each(ENVELOPE_FIELDS)(
+    'never runs an inherited %s getter: the embedded error stays a ProviderError',
+    async (name) => {
+      const error = await outcomeUnder({ [name]: throwingGetter() }, 200, {
+        error: { type: 'credit' },
+      })
+      expect(ProviderError.is(error) && error.kind === 'rate_limit').toBe(true)
+    },
+  )
 })

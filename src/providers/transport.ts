@@ -127,6 +127,21 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * One field of a parsed wire body, read only when the body itself carries it. An ordinary
+ * read falls through to the prototype, so a polluted `Object.prototype` could name an error
+ * the body never sent, or run a throwing getter that escapes as a raw `Error`; a field the
+ * body does not own reads as absent instead. For a body `JSON.parse` built, where every
+ * field is an own data property, the answer is the one an ordinary read gives.
+ *
+ * @param value A parsed object or array.
+ * @param key The field name, or an array index written as a string.
+ * @returns The own field's value, or `undefined` when the body does not carry it.
+ */
+export function ownField(value: object, key: string): unknown {
+  return Object.hasOwn(value, key) ? (value as Record<string, unknown>)[key] : undefined
+}
+
 /** The raster types a generated image may come back as (spec §6). */
 export const GENERATED_IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
   'image/png',
