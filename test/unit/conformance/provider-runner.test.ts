@@ -6,6 +6,7 @@ import { anthropic } from '../../../src/providers/anthropic'
 import { gemini } from '../../../src/providers/gemini'
 import { openaiCompatible } from '../../../src/providers/openai-compatible'
 import { openaiImages } from '../../../src/providers/openai-images'
+import { openrouterImages } from '../../../src/providers/openrouter-images'
 import type {
   Provider,
   ProviderErrorKind,
@@ -623,6 +624,54 @@ describe('the built-in adapters, driven end to end through the runner', () => {
         image_output: step(() => installFetch(() => jsonResponse(200, imagesBody))),
       },
       requests: mediaRequests('gpt-image-x'),
+    })
+    expect(result).toEqual({
+      passed: true,
+      failures: [],
+      skipped: ['responseFormat', 'truncated', 'document', 'image'],
+    })
+  })
+
+  it('passes openrouterImages over scripted fetch, every request an image one', async () => {
+    const provider = openrouterImages({ apiKey: KEY })
+    const imagesBody = {
+      data: [{ b64_json: base64(png(1, 1)), media_type: 'image/png' }],
+      usage: { prompt_tokens: 1, completion_tokens: 12, cost: 0.04 },
+    }
+    // Like openaiImages, the endpoint makes only images: the text-mode duties (native JSON,
+    // truncation) and the input-media scenarios have nothing to run on.
+    const result = await runProviderConformance({
+      provider,
+      requestFactory: () =>
+        baseRequest({
+          model: 'vendor/image-x',
+          parts: [{ type: 'text', text: 'draw it' }],
+          responseFormat: { type: 'image' },
+        }),
+      scenarios: {
+        success: step(() => installFetch(() => jsonResponse(200, imagesBody))),
+        auth: step(() => installFetch(() => jsonResponse(401, {}))),
+        rate_limit: step(() => installFetch(() => jsonResponse(402, {}))),
+        model_not_found: step(() => installFetch(() => jsonResponse(404, {}))),
+        invalid_request: step(() =>
+          installFetch(() => jsonResponse(403, { error: { type: 'moderation' } })),
+        ),
+        transient: step(() => installFetch(() => jsonResponse(502, {}))),
+        malformed_response: step(() =>
+          installFetch(() =>
+            jsonResponse(200, {
+              data: [{ b64_json: base64(png(1, 1)), media_type: 'image/svg+xml' }],
+            }),
+          ),
+        ),
+        refused: step(() =>
+          installFetch(() =>
+            jsonResponse(200, { error: { metadata: { error_type: 'moderation' } } }),
+          ),
+        ),
+        image_output: step(() => installFetch(() => jsonResponse(200, imagesBody))),
+      },
+      requests: mediaRequests('vendor/image-x'),
     })
     expect(result).toEqual({
       passed: true,
