@@ -11,6 +11,7 @@ import {
   isOpenRouterModeration,
   openRouterErrorType,
 } from '../../../src/providers/openrouter-errors'
+import { inheritedValue, throwingGetter, withInherited } from './helpers'
 import {
   AUTH_WORDS,
   ERROR_TYPE_LOCATIONS,
@@ -343,5 +344,80 @@ describe("classifyEmbeddedError: OpenRouter's documented words", () => {
 
   it('finds no embedded error in a top-level error_type without an error object', () => {
     expect(classifyEmbeddedError({ error_type: 'refusal', data: [] })).toBeNull()
+  })
+})
+
+describe('inherited fields decide nothing', () => {
+  // Ordinary JSON bodies, each classified once on clean prototypes; a polluted prototype
+  // must change none of the answers.
+  const BODIES: readonly (readonly [string, Record<string, unknown>])[] = [
+    ['an embedded credit error', { error: { type: 'credit' } }],
+    ['an images answer', { data: [] }],
+    ['empty choices', { choices: [] }],
+    ['a choice with no error', { choices: [{ message: {} }] }],
+    ['an empty error', { error: {} }],
+    ['an error with empty metadata', { error: { metadata: {} } }],
+    ['a numeric code alone', { error: { code: 403, message: 'forbidden' } }],
+    ['the moderation answer', MODERATION_METADATA_BODY],
+    ['a permission error', typedErrorBody('metadata.error_type', 'permission_denied')],
+    ['an empty body', {}],
+  ]
+
+  function classifyAll() {
+    return BODIES.map(([, body]) => [
+      openRouterErrorType(body),
+      isOpenRouterModeration(body),
+      classifyEmbeddedError(body),
+    ])
+  }
+
+  const CLEAN = classifyAll()
+
+  const MODERATION_ERROR = { type: 'moderation', metadata: { reasons: ['violence'] } }
+  const POLLUTED_VALUES: readonly (readonly [string, object, string, unknown])[] = [
+    ['error_type', Object.prototype, 'error_type', 'moderation'],
+    ['error', Object.prototype, 'error', MODERATION_ERROR],
+    [
+      'choices',
+      Object.prototype,
+      'choices',
+      [{ finish_reason: 'error', error: MODERATION_ERROR }],
+    ],
+    ['metadata', Object.prototype, 'metadata', { error_type: 'moderation', reasons: [] }],
+    ['code', Object.prototype, 'code', 'moderation'],
+    ['type', Object.prototype, 'type', 'moderation'],
+    ['reasons', Object.prototype, 'reasons', ['violence']],
+    ['flagged_input', Object.prototype, 'flagged_input', 'a flagged prompt'],
+    ['finish_reason', Object.prototype, 'finish_reason', 'error'],
+    ['the first array element', Array.prototype, '0', { finish_reason: 'error' }],
+  ]
+
+  it.each(POLLUTED_VALUES)(
+    'ignores an inherited %s value',
+    async (_label, target, name, value) => {
+      const polluted = await withInherited(
+        target,
+        { [name]: inheritedValue(value) },
+        classifyAll,
+      )
+      expect(polluted).toEqual(CLEAN)
+    },
+  )
+
+  it.each(POLLUTED_VALUES)(
+    'never runs an inherited %s getter',
+    async (_label, target, name) => {
+      const polluted = await withInherited(target, { [name]: throwingGetter() }, classifyAll)
+      expect(polluted).toEqual(CLEAN)
+    },
+  )
+
+  it('keeps an embedded credit error rate_limit when Object.prototype names moderation', async () => {
+    const kind = await withInherited(
+      Object.prototype,
+      { error_type: inheritedValue('moderation') },
+      () => classifyEmbeddedError({ error: { type: 'credit' } }),
+    )
+    expect(kind).toBe('rate_limit')
   })
 })

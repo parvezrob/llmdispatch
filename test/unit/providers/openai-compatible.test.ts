@@ -5,10 +5,13 @@ import { openaiCompatible } from '../../../src/providers/openai-compatible'
 import {
   baseRequest,
   captureRequests,
+  inheritedValue,
   installFetch,
   jsonResponse,
   SENTINEL,
   textParts,
+  throwingGetter,
+  withInherited,
   withPrepared,
 } from './helpers'
 import {
@@ -542,4 +545,53 @@ describe("OpenRouter's documented error vocabulary, on an OpenRouter host", () =
       },
     )
   })
+})
+
+describe('an inherited envelope field, on an OpenRouter host', () => {
+  // Only the fields a body carries classify it: a polluted Object.prototype neither names an
+  // error nor runs a getter. The answer is prepared before the pollution and read after it.
+  async function outcomeUnder(
+    fields: Record<string, PropertyDescriptor>,
+    status: number,
+    body: unknown,
+  ) {
+    const response = jsonResponse(status, body)
+    installFetch(() => response)
+    const run = await complete({ apiKey: KEY, baseUrl: 'https://openrouter.ai/api/v1' })
+    return withInherited(Object.prototype, fields, () =>
+      run(baseRequest()).then(
+        () => null,
+        (thrown: unknown) => thrown,
+      ),
+    )
+  }
+
+  it('keeps an embedded credit error rate_limit when Object.prototype names moderation', async () => {
+    const error = await outcomeUnder({ error_type: inheritedValue('moderation') }, 200, {
+      error: { type: 'credit' },
+    })
+    expect(ProviderError.is(error) && error.kind === 'rate_limit').toBe(true)
+  })
+
+  it('keeps a 403 without moderation auth when Object.prototype carries moderation', async () => {
+    const error = await outcomeUnder(
+      {
+        error_type: inheritedValue('moderation'),
+        metadata: inheritedValue({ reasons: ['violence'] }),
+      },
+      403,
+      { error: { code: 403, message: 'forbidden' } },
+    )
+    expect(ProviderError.is(error) && error.kind === 'auth').toBe(true)
+  })
+
+  it.each(['error_type', 'metadata', 'reasons', 'flagged_input', 'code', 'type'])(
+    'never runs an inherited %s getter: the embedded error stays a ProviderError',
+    async (name) => {
+      const error = await outcomeUnder({ [name]: throwingGetter() }, 200, {
+        error: { type: 'credit' },
+      })
+      expect(ProviderError.is(error) && error.kind === 'rate_limit').toBe(true)
+    },
+  )
 })

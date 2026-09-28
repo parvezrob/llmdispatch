@@ -120,3 +120,46 @@ export async function withPrepared(provider: Provider): Promise<PreparedProvider
   const prepared = await provider.prepare()
   return prepared.complete.bind(prepared)
 }
+
+/**
+ * Runs `action` with `fields` defined on `target` (a prototype such as `Object.prototype`),
+ * then removes them however it ended. It shows an adapter reads only the fields a body
+ * owns. Each field is enumerable and configurable, as a polluting assignment would leave it;
+ * a field `target` already owns is refused, so the clean-up never removes a real one.
+ */
+export async function withInherited<T>(
+  target: object,
+  fields: Record<string, PropertyDescriptor>,
+  action: () => T | Promise<T>,
+): Promise<T> {
+  const entries = Object.entries(fields)
+  for (const [name] of entries) {
+    if (Object.hasOwn(target, name)) throw new Error(`refusing to shadow an own field: ${name}`)
+  }
+  try {
+    for (const [name, descriptor] of entries) {
+      Object.defineProperty(target, name, {
+        configurable: true,
+        enumerable: true,
+        ...descriptor,
+      })
+    }
+    return await action()
+  } finally {
+    for (const [name] of entries) Reflect.deleteProperty(target, name)
+  }
+}
+
+/** An inherited field that holds `value`. */
+export function inheritedValue(value: unknown): PropertyDescriptor {
+  return { value, writable: true }
+}
+
+/** An inherited getter that throws whenever anything reads it. */
+export function throwingGetter(): PropertyDescriptor {
+  return {
+    get(): never {
+      throw new Error('an inherited getter ran')
+    },
+  }
+}

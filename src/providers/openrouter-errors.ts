@@ -6,12 +6,14 @@
  *
  * The vocabulary is the one OpenRouter documents: `{ error: { code, message, metadata? } }`
  * with a numeric `code`, an `error_type` word in one of three places, and a moderation answer
- * that names no type at all but carries moderation metadata.
+ * that names no type at all but carries moderation metadata. Every field of the envelope is
+ * read as an own field (`ownField`), so an inherited property never decides a
+ * classification and an inherited getter never runs.
  *
  * @module
  */
 
-import { isRecord } from './transport'
+import { isRecord, ownField } from './transport'
 
 /** What an error OpenRouter embeds in a 2xx answer classifies as (§5c). */
 export type EmbeddedErrorKind = 'refused' | 'auth' | 'rate_limit' | 'transient'
@@ -48,14 +50,14 @@ const RATE_LIMIT_WORDS: ReadonlySet<string> = new Set([
 export function openRouterErrorType(body: unknown): string | undefined {
   if (!isRecord(body)) return undefined
   const error = selectedError(body)
-  const meta = error !== null && isRecord(error.metadata) ? error.metadata : null
+  const meta = recordField(error, 'metadata')
   const candidates = [
-    meta?.error_type,
-    error?.error_type,
-    body.error_type,
-    meta?.code,
-    error?.code,
-    error?.type,
+    field(meta, 'error_type'),
+    field(error, 'error_type'),
+    field(body, 'error_type'),
+    field(meta, 'code'),
+    field(error, 'code'),
+    field(error, 'type'),
   ]
   return candidates.find((value): value is string => typeof value === 'string')
 }
@@ -73,8 +75,7 @@ export function isOpenRouterModeration(body: unknown): boolean {
   if (!isRecord(body)) return false
   const type = openRouterErrorType(body)
   if (type !== undefined && MODERATION_WORDS.has(type)) return true
-  const error = selectedError(body)
-  return error !== null && isModerationMetadata(error.metadata)
+  return isModerationMetadata(field(selectedError(body), 'metadata'))
 }
 
 /**
@@ -84,20 +85,37 @@ export function isOpenRouterModeration(body: unknown): boolean {
  */
 function isModerationMetadata(value: unknown): boolean {
   if (!isRecord(value)) return false
-  return Array.isArray(value.reasons) || typeof value.flagged_input === 'string'
+  return (
+    Array.isArray(ownField(value, 'reasons')) ||
+    typeof ownField(value, 'flagged_input') === 'string'
+  )
 }
 
 /** The error object a body names: the first choice's, else the top-level one. */
 function selectedError(body: Record<string, unknown>): Record<string, unknown> | null {
-  return firstChoiceError(body) ?? (isRecord(body.error) ? body.error : null)
+  return recordField(firstChoice(body), 'error') ?? recordField(body, 'error')
 }
 
-/** The first choice's `error` object, when the body has choices and it has one. */
-function firstChoiceError(body: Record<string, unknown>): Record<string, unknown> | null {
-  if (!Array.isArray(body.choices) || body.choices.length === 0) return null
-  const first: unknown = body.choices[0]
-  if (!isRecord(first) || !isRecord(first.error)) return null
-  return first.error
+/** The body's first choice, when `choices` is an array that carries one as an object. */
+function firstChoice(body: Record<string, unknown>): Record<string, unknown> | null {
+  const choices = ownField(body, 'choices')
+  if (!Array.isArray(choices)) return null
+  const first = ownField(choices, '0')
+  return isRecord(first) ? first : null
+}
+
+/** An own field of an envelope object, or `undefined` when there is no object to read. */
+function field(record: Record<string, unknown> | null, key: string): unknown {
+  return record === null ? undefined : ownField(record, key)
+}
+
+/** An own field that is itself an object, or `null`. */
+function recordField(
+  record: Record<string, unknown> | null,
+  key: string,
+): Record<string, unknown> | null {
+  const value = field(record, key)
+  return isRecord(value) ? value : null
 }
 
 /**
@@ -112,11 +130,10 @@ function firstChoiceError(body: Record<string, unknown>): Record<string, unknown
  * @returns The classification, or `null` for an answer that embeds no error.
  */
 export function classifyEmbeddedError(body: Record<string, unknown>): EmbeddedErrorKind | null {
-  const choices = body.choices
-  const choice = Array.isArray(choices) && isRecord(choices[0]) ? choices[0] : null
-  const hasErrorFinish = choice?.finish_reason === 'error'
-  const topError = isRecord(body.error) ? body.error : null
-  const choiceError = choice !== null && isRecord(choice.error) ? choice.error : null
+  const choice = firstChoice(body)
+  const hasErrorFinish = field(choice, 'finish_reason') === 'error'
+  const topError = recordField(body, 'error')
+  const choiceError = recordField(choice, 'error')
   if (!hasErrorFinish && topError === null && choiceError === null) return null
 
   if (isOpenRouterModeration(body)) return 'refused'
