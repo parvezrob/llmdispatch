@@ -63,8 +63,11 @@ const PIXEL_SIZES: Readonly<Record<ImageSize, Readonly<Partial<Record<AspectRati
     '4K': Object.freeze({ '16:9': '3840x2160' }),
   })
 
-/** A stated response size: two positive decimal integers joined by `x`, nothing else. */
-const RESPONSE_SIZE = /^(\d+)x(\d+)$/
+/**
+ * A stated response size: two positive decimal integers without leading zeros, joined by
+ * `x`, nothing else. A zero-padded number is not how the provider writes a size.
+ */
+const RESPONSE_SIZE = /^([1-9]\d*)x([1-9]\d*)$/
 
 /** What the adapter throws for a request its wire cannot express, before any fetch (§5c). */
 function invalid(message: string): never {
@@ -276,21 +279,18 @@ function readImageMediaType(value: unknown, status: number): ProviderImage['medi
 
 /**
  * The response's `size` as dimensions for every image, when it states two positive safe
- * integers (§5c). Anything else, `'auto'` included, states none, and the core reads them
- * from the image header instead.
+ * integers without leading zeros (§5c). Anything else, `'auto'` included, states none, and
+ * the core reads them from the image header instead.
  */
 function readResponseSize(value: unknown): { width: number; height: number } | null {
   if (typeof value !== 'string') return null
   const match = RESPONSE_SIZE.exec(value)
   if (match === null) return null
+  // The pattern already rules out zero; a run of digits can still pass the safe integers.
   const width = Number(match[1])
   const height = Number(match[2])
-  if (!isDimension(width) || !isDimension(height)) return null
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) return null
   return { width, height }
-}
-
-function isDimension(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
 }
 
 /**
