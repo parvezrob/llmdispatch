@@ -216,8 +216,7 @@ async function runScenario(scenario: Scenario): Promise<void> {
   }
 
   // Providers.
-  f.p1.always((request) => {
-    void request
+  f.p1.always(() => {
     if (scenario.abortAt === 'primary') controller.abort()
     return scriptAttempt(scenario.primary, scenario)()
   })

@@ -341,7 +341,7 @@ describe('adapter-reported aborts and the composed signal', () => {
   it('aborts the provider-observed signal on caller abort alone, and ends ABORTED with the attempt recorded', async () => {
     const f = fixture()
     const controller = new AbortController()
-    const hang = f.p1.nextHang()
+    f.p1.nextHang() // never settled, deliberately
     const run = observe(f.ai.run('echo', INPUT, { signal: controller.signal }))
     await flushMicrotasks()
     const request = f.p1.requests[0]!
@@ -355,13 +355,12 @@ describe('adapter-reported aborts and the composed signal', () => {
     expect(error.code).toBe('ABORTED')
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['aborted'])
     expect(f.runtime.pending('referenced')).toBe(0) // the timeout timer was cancelled
-    void hang // never settled, deliberately
   })
 
   it('aborts the provider-observed signal on timeoutMs alone, with the caller quiescent', async () => {
     const f = fixture({ timeoutMs: 2000, fallback: false })
     const controller = new AbortController()
-    const hang = f.p1.nextHang() // non-cooperative: never settles
+    f.p1.nextHang() // non-cooperative: never settles
     const run = observe(f.ai.run('echo', INPUT, { signal: controller.signal }))
     await flushMicrotasks()
     const request = f.p1.requests[0]!
@@ -373,24 +372,22 @@ describe('adapter-reported aborts and the composed signal', () => {
     const error = run.error as LLMDispatchError
     expect(error.code).toBe('PROVIDER_FAILED')
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['timeout'])
-    void hang
   })
 
   it('classifies timeout on a non-cooperative provider and lets the fallback rescue', async () => {
     const f = fixture({ timeoutMs: 2000 })
-    const hang = f.p1.nextHang() // ignores its signal, never settles
+    f.p1.nextHang() // ignores its signal, never settles
     const run = observe(f.ai.run('echo', INPUT))
     await f.runtime.advance(2000)
     await flushMicrotasks()
     expect(run.state).toBe('resolved')
     expect(run.value?.usedFallback).toBe(true)
     expect(run.value?.attempts.map((a) => a.outcome)).toEqual(['timeout', 'succeeded'])
-    void hang
   })
 
   it('classifies timeout as the terminal code without a fallback', async () => {
     const f = fixture({ timeoutMs: 2000, fallback: false })
-    const hang = f.p1.nextHang()
+    f.p1.nextHang()
     const run = observe(f.ai.run('echo', INPUT))
     await f.runtime.advance(2000)
     await flushMicrotasks()
@@ -399,7 +396,6 @@ describe('adapter-reported aborts and the composed signal', () => {
     expect(error.code).toBe('PROVIDER_FAILED')
     expect(error.retryable).toBe(true)
     expect(error.attempts?.map((a) => a.outcome)).toEqual(['timeout'])
-    void hang
   })
 })
 

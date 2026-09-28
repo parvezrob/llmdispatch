@@ -181,7 +181,6 @@ export interface Scripted<A extends unknown[], T> {
 }
 
 export function scripted<A extends unknown[], T>(
-  name: string,
   log: string[],
   describeCall: (...args: A) => string,
   defaultHandler: Handler<A, T>,
@@ -210,7 +209,6 @@ export function scripted<A extends unknown[], T>(
   fn.always = (handler) => {
     fallback = handler
   }
-  void name
   return fn
 }
 
@@ -258,43 +256,36 @@ export interface ScriptedStores {
 export function scriptedStores(): ScriptedStores {
   const log: string[] = []
   const getAll = scripted<[], Record<string, unknown>>(
-    'getAll',
     log,
     () => 'getAll',
     () => ({}),
   )
   const set = scripted<[string, unknown], undefined>(
-    'set',
     log,
     (operation) => `set ${operation}`,
     () => undefined,
   )
   const del = scripted<[string], undefined>(
-    'delete',
     log,
     (operation) => `delete ${operation}`,
     () => undefined,
   )
   const reserve = scripted<[{ operation: string; subjectId: string }, number], unknown>(
-    'reserve',
     log,
     (key, limit) => `reserve ${key.subjectId} ${String(limit)}`,
     (key) => grantFor(key),
   )
   const commit = scripted<[string], unknown>(
-    'commit',
     log,
     (id) => `commit ${id}`,
     () => 'committed',
   )
   const settle = scripted<[unknown, string, AttemptRecord[]], undefined>(
-    'settle',
     log,
     (_reservation, outcome) => `settle ${outcome}`,
     () => undefined,
   )
   const snapshot = scripted<[{ operation: string; subjectId: string }], unknown>(
-    'snapshot',
     log,
     (key) => `snapshot ${key.subjectId}`,
     () => ({ used: 0, resetsAt: RESETS_AT }),

@@ -118,9 +118,7 @@ describe('the §2 resolution matrix and the cache', () => {
     // A Map or a class instance has no enumerable own rows: reading it as empty would
     // activate defaults during an outage-shaped answer: the exact §2 hazard.
     for (const container of [null, [], 42, 'rows', new Map(), new Date(0), new RowsLike()]) {
-      const { ai } = fixture()
       const f = fixture()
-      void ai
       f.s.getAll.nextResolve(container as never)
       const error = await expectCode(f.ai.run('echo', INPUT), 'CONFIG_STORE_UNAVAILABLE')
       expect(error.retryable).toBe(true)
@@ -269,8 +267,8 @@ describe('generation coherence', () => {
 describe('the mutation mutex', () => {
   it('releases at the deadline, and a queued store call gets its own full 10 s', async () => {
     const f = fixture()
-    const gateA = f.s.set.nextHang()
-    const gateB = f.s.set.nextHang()
+    f.s.set.nextHang() // A's store call, never settled
+    f.s.set.nextHang() // B's store call, never settled
     const a = observe(f.ai.setConfig('echo', { provider: 'p1', model: 'a' }))
     await flushMicrotasks()
     expect(f.s.set.calls.length).toBe(1) // A's store call started
@@ -292,8 +290,6 @@ describe('the mutation mutex', () => {
     await f.runtime.advance(1) // t = 20 s: 10 s after B's store call began
     expect(b.state).toBe('rejected')
     expect((b.error as LLMDispatchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
-    void gateA
-    void gateB
   })
 
   it('drains waiters FIFO: queued mutations reach the store in submission order', async () => {
@@ -321,14 +317,13 @@ describe('the mutation mutex', () => {
 
   it('keeps operations independent: one hung mutation never blocks another operation', async () => {
     const f = twoOps()
-    const gate = f.s.set.nextHang()
+    f.s.set.nextHang()
     const hung = observe(f.ai.setConfig('alpha', { provider: 'p1', model: 'a' }))
     await flushMicrotasks()
     expect(f.s.set.calls.length).toBe(1)
     await f.ai.setConfig('beta', { provider: 'p1', model: 'b' }) // proceeds immediately
     expect(f.s.set.calls.length).toBe(2)
     expect(hung.state).toBe('pending')
-    void gate
   })
 })
 
@@ -639,16 +634,15 @@ describe('getQuota', () => {
 
   it('spends its two §6a deadlines sequentially', async () => {
     const f = quotaFixture()
-    const configGate = f.s.getAll.nextHang()
+    f.s.getAll.nextHang()
     const slow = observe(f.ai.getQuota('echo', 'u'))
     await flushMicrotasks()
     await f.runtime.advance(5000) // the 5 s getAll deadline
     expect(slow.state).toBe('rejected')
     expect((slow.error as LLMDispatchError).code).toBe('CONFIG_STORE_UNAVAILABLE')
-    void configGate
 
     const f2 = quotaFixture()
-    const snapshotGate = f2.s.snapshot.nextHang()
+    f2.s.snapshot.nextHang()
     const slow2 = observe(f2.ai.getQuota('echo', 'u'))
     await flushMicrotasks()
     await f2.runtime.advance(9999)
@@ -656,7 +650,6 @@ describe('getQuota', () => {
     await f2.runtime.advance(1) // the 10 s snapshot deadline, started at the snapshot call
     expect(slow2.state).toBe('rejected')
     expect((slow2.error as LLMDispatchError).code).toBe('USAGE_STORE_UNAVAILABLE')
-    void snapshotGate
   })
 })
 
