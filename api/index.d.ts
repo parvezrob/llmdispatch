@@ -76,6 +76,13 @@ export declare function openaiImages(opts: {
   quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }): Provider;
 //#endregion
+//#region src/providers/openrouter-images.d.ts
+/** Builds an OpenRouter Image API provider. Keys resolve in `prepare()`. */
+export declare function openrouterImages(opts: {
+  apiKey: ApiKeyResolver;
+  baseUrl?: string;
+}): Provider;
+//#endregion
 //#region src/stores/memory/index.d.ts
 /**
  * Builds the in-memory config and usage stores (spec §6).

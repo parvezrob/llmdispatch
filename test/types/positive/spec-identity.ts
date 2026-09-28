@@ -92,6 +92,7 @@ export type SectionSixValues = [
   Holds<Identical<typeof Package.openaiCompatible, typeof Spec.openaiCompatible>>,
   Holds<Identical<typeof Package.gemini, typeof Spec.gemini>>,
   Holds<Identical<typeof Package.openaiImages, typeof Spec.openaiImages>>,
+  Holds<Identical<typeof Package.openrouterImages, typeof Spec.openrouterImages>>,
 ]
 
 export type SectionSixB = [
