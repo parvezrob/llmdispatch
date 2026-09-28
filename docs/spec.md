@@ -1118,8 +1118,9 @@ without `imageOutputPerM` → `null`; an `image`-format attempt whose usage has 
 split is unknown, and pricing image tokens at the text rate would be fabricated); usage
 without the field on any other format prices as before. Every dispatched attempt is
 potentially billable: if any dispatched attempt's cost is `null`, aggregate `cost` is
-`null`. Cached-token discounts, tiered pricing, input-side image tokens, and request fees
-are out of scope.
+`null`, and so is an aggregate whose sum is not finite (two reported costs near the largest
+double overflow to infinity, which no run ever cost). Cached-token discounts, tiered
+pricing, input-side image tokens, and request fees are out of scope.
 
 ## 8. Conformance suite (adopter-facing)
 
