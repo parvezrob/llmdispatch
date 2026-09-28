@@ -68,6 +68,14 @@ declare function gemini(opts: {
   apiKey: ApiKeyResolver;
 }): Provider;
 //#endregion
+//#region src/providers/openai-images.d.ts
+/** Builds an OpenAI Images API provider. Keys resolve in `prepare()`. */
+declare function openaiImages(opts: {
+  apiKey: ApiKeyResolver;
+  baseUrl?: string;
+  quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+}): Provider;
+//#endregion
 //#region src/stores/memory/index.d.ts
 /**
  * Builds the in-memory config and usage stores (spec §6).
@@ -152,5 +160,5 @@ declare const imageOutputSchema: z.ZodType<ImageOutput>;
  */
 declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
 //#endregion
-export { type ApiKeyResolver, type AspectRatio, type AttemptOutcome, type AttemptRecord, type ConfigStore, type ContentPart, type CreateSwitchConfig, type FilePart, type GeneratedImage, type GeneratedImageMediaType, type ImageOptions, type ImageOutput, type ImageSize, LLMDispatchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderImage, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TextPart, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, imageOutputSchema, memoryStores, openaiCompatible, postgresStores };
+export { type ApiKeyResolver, type AspectRatio, type AttemptOutcome, type AttemptRecord, type ConfigStore, type ContentPart, type CreateSwitchConfig, type FilePart, type GeneratedImage, type GeneratedImageMediaType, type ImageOptions, type ImageOutput, type ImageSize, LLMDispatchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderImage, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TextPart, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, imageOutputSchema, memoryStores, openaiCompatible, openaiImages, postgresStores };
 //# sourceMappingURL=index.d.ts.map
