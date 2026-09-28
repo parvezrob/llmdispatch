@@ -15,6 +15,15 @@ import {
   textParts,
   withPrepared,
 } from './helpers'
+import {
+  AUTH_WORDS,
+  ERROR_TYPE_LOCATIONS,
+  MODERATION_METADATA_BODY,
+  MODERATION_WORDS,
+  OTHER_WORDS,
+  RATE_LIMIT_WORDS,
+  typedErrorBody,
+} from './openrouter-fixtures'
 
 // The module keeps its real behaviour; the wrapper only makes the grammar scan observable,
 // so the cap tests can show what the adapter never reaches. Vitest hoists this above the
@@ -821,5 +830,87 @@ describe('error classification', () => {
     const error = await failureOf(run(imageRequest({}, { parts: textParts(SENTINEL) })))
     expect(ProviderError.is(error)).toBe(true)
     expect((error as Error).message).not.toContain(SENTINEL)
+  })
+})
+
+describe("OpenRouter's documented error vocabulary", () => {
+  const BILLED = { prompt_tokens: 10, completion_tokens: 0, cost: 0.001 }
+
+  function everyLocation(words: readonly string[]) {
+    return words.flatMap((word) =>
+      ERROR_TYPE_LOCATIONS.map((location) => [word, location] as const),
+    )
+  }
+
+  async function failureKind(status: number, body: unknown) {
+    const error = await failureOf(runImage(status, body))
+    expect(ProviderError.is(error)).toBe(true)
+    expect((error as ProviderError).status).toBe(status)
+    return (error as ProviderError).kind
+  }
+
+  it('classifies a 403 carrying moderation metadata, and no type, as invalid_request', async () => {
+    expect(await failureKind(403, MODERATION_METADATA_BODY)).toBe('invalid_request')
+  })
+
+  it.each(everyLocation(MODERATION_WORDS))(
+    'classifies a 403 naming %s by %s as invalid_request',
+    async (word, location) => {
+      expect(await failureKind(403, typedErrorBody(location, word, 403))).toBe(
+        'invalid_request',
+      )
+    },
+  )
+
+  it.each(ERROR_TYPE_LOCATIONS)(
+    'classifies a 403 naming permission_denied by %s as auth',
+    async (location) => {
+      expect(await failureKind(403, typedErrorBody(location, 'permission_denied', 403))).toBe(
+        'auth',
+      )
+    },
+  )
+
+  it('returns refused for moderation metadata embedded in a 200, keeping usage and cost', async () => {
+    const response = await runImage(200, { ...MODERATION_METADATA_BODY, usage: BILLED })
+    expect(response).toEqual({
+      kind: 'refused',
+      text: '',
+      usage: { inputTokens: 10, outputTokens: 0 },
+      costUsd: 0.001,
+    })
+  })
+
+  it.each(everyLocation(MODERATION_WORDS))(
+    'returns refused for an embedded %s named by %s, keeping usage and cost',
+    async (word, location) => {
+      const response = await runImage(200, { ...typedErrorBody(location, word), usage: BILLED })
+      expect(response).toEqual({
+        kind: 'refused',
+        text: '',
+        usage: { inputTokens: 10, outputTokens: 0 },
+        costUsd: 0.001,
+      })
+    },
+  )
+
+  it.each(everyLocation(AUTH_WORDS))(
+    'classifies an embedded %s named by %s as auth',
+    async (word, location) => {
+      expect(await failureKind(200, typedErrorBody(location, word))).toBe('auth')
+    },
+  )
+
+  it.each(everyLocation(RATE_LIMIT_WORDS))(
+    'classifies an embedded %s named by %s as rate_limit',
+    async (word, location) => {
+      expect(await failureKind(200, typedErrorBody(location, word))).toBe('rate_limit')
+    },
+  )
+
+  it.each(OTHER_WORDS)('classifies an embedded %s as transient', async (word) => {
+    expect(await failureKind(200, typedErrorBody('metadata.error_type', word))).toBe(
+      'transient',
+    )
   })
 })
