@@ -16,7 +16,7 @@ import { A as ReservationEnvelope, R as UsageStore, S as Provider, T as Provider
  * if (!result.passed) throw new Error(result.failures.join('\n'))
  * ```
  */
-declare function runConfigStoreConformance(opts: {
+export declare function runConfigStoreConformance(opts: {
   create(): Promise<{
     store: ConfigStore;
     reset(): Promise<void>;
@@ -43,7 +43,7 @@ declare function runConfigStoreConformance(opts: {
  * if (!result.passed) throw new Error(result.failures.join('\n'))
  * ```
  */
-declare function runUsageStoreConformance(opts: {
+export declare function runUsageStoreConformance(opts: {
   create(): Promise<{
     store: UsageStore;
     setTime(date: Date): Promise<void>;
@@ -78,7 +78,7 @@ interface ProviderConformanceControls {
  * A media scenario also needs its request in `requests`; either half absent and it is skipped.
  * `passed` is true exactly when `failures` is empty.
  */
-declare function runProviderConformance(opts: {
+export declare function runProviderConformance(opts: {
   provider: Provider;
   requestFactory: () => ProviderRequest;
   scenarios: {
@@ -88,5 +88,5 @@ declare function runProviderConformance(opts: {
   controls?: ProviderConformanceControls;
 }): Promise<ConformanceResult>;
 //#endregion
-export { type ConformanceResult, runConfigStoreConformance, runProviderConformance, runUsageStoreConformance };
+export type { ConformanceResult };
 //# sourceMappingURL=conformance.d.ts.map

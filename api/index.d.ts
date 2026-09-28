@@ -2,7 +2,7 @@ import { A as ReservationEnvelope, C as ProviderErrorKind, D as QualityVerdict, 
 import { z } from "zod";
 //#region src/errors/llmdispatch-error.d.ts
 /** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
-declare class LLMDispatchError extends Error {
+export declare class LLMDispatchError extends Error {
   private constructor();
   /** What went wrong, as a closed set (spec §5b). */
   readonly code: 'INVALID_INPUT' | 'MISSING_SUBJECT' | 'QUOTA_EXCEEDED' | 'USAGE_STORE_UNAVAILABLE' | 'CONFIG_STORE_UNAVAILABLE' | 'INVALID_CONFIG' | 'ABORTED' | 'PROVIDER_FAILED' | 'OUTPUT_REJECTED';
@@ -20,7 +20,7 @@ declare class LLMDispatchError extends Error {
 //#endregion
 //#region src/errors/provider-error.d.ts
 /** A provider failure, classified by the adapter that saw it (spec §5b). */
-declare class ProviderError extends Error {
+export declare class ProviderError extends Error {
   /**
    * Classifies a failed provider call.
    *
@@ -48,14 +48,14 @@ declare class ProviderError extends Error {
 //#endregion
 //#region src/providers/anthropic.d.ts
 /** Builds an Anthropic Messages provider. Keys resolve in `prepare()`, not at construction. */
-declare function anthropic(opts: {
+export declare function anthropic(opts: {
   apiKey: ApiKeyResolver;
   baseUrl?: string;
 }): Provider;
 //#endregion
 //#region src/providers/openai-compatible.d.ts
 /** Builds an OpenAI-compatible chat provider. Keys resolve in `prepare()`. */
-declare function openaiCompatible(opts: {
+export declare function openaiCompatible(opts: {
   apiKey: ApiKeyResolver;
   baseUrl?: string;
   jsonMode?: 'native' | 'prompt-only';
@@ -64,13 +64,13 @@ declare function openaiCompatible(opts: {
 //#endregion
 //#region src/providers/gemini.d.ts
 /** Builds a Gemini generateContent provider. Keys resolve in `prepare()`. */
-declare function gemini(opts: {
+export declare function gemini(opts: {
   apiKey: ApiKeyResolver;
 }): Provider;
 //#endregion
 //#region src/providers/openai-images.d.ts
 /** Builds an OpenAI Images API provider. Keys resolve in `prepare()`. */
-declare function openaiImages(opts: {
+export declare function openaiImages(opts: {
   apiKey: ApiKeyResolver;
   baseUrl?: string;
   quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -87,7 +87,7 @@ declare function openaiImages(opts: {
  * const stores = memoryStores()
  * ```
  */
-declare function memoryStores(): StorePair;
+export declare function memoryStores(): StorePair;
 //#endregion
 //#region src/stores/postgres/index.d.ts
 /**
@@ -100,7 +100,7 @@ declare function memoryStores(): StorePair;
  * @throws `RangeError` when `schema` is not a name llmdispatch may own, or `leaseMs` is outside
  * 5 000–600 000.
  */
-declare function postgresStores(opts: {
+export declare function postgresStores(opts: {
   pool: {
     query(sql: string, params?: unknown[]): Promise<{
       rows: unknown[];
@@ -121,7 +121,7 @@ declare function postgresStores(opts: {
  * @param definition The operation exactly as it will run.
  * @returns The same definition, its two schema types correlated.
  */
-declare function defineOperation<In extends z.ZodType, Out extends z.ZodType>(definition: OperationDefinition<In, Out>): OperationDefinition<In, Out>;
+export declare function defineOperation<In extends z.ZodType, Out extends z.ZodType>(definition: OperationDefinition<In, Out>): OperationDefinition<In, Out>;
 /**
  * Collects operations for `createSwitch`.
  *
@@ -131,7 +131,7 @@ declare function defineOperation<In extends z.ZodType, Out extends z.ZodType>(de
  * @param operations The map of operations, each wrapped in `defineOperation`.
  * @returns The same object.
  */
-declare function defineOperations<Ops extends OperationsMap>(operations: Ops): Ops;
+export declare function defineOperations<Ops extends OperationsMap>(operations: Ops): Ops;
 //#endregion
 //#region src/core/image-output.d.ts
 /**
@@ -139,7 +139,7 @@ declare function defineOperations<Ops extends OperationsMap>(operations: Ops): O
  * the text beside it. The one-image case is the default; `imageOutputSchema.refine(...)`
  * adds a count or a dimension floor.
  */
-declare const imageOutputSchema: z.ZodType<ImageOutput>;
+export declare const imageOutputSchema: z.ZodType<ImageOutput>;
 //#endregion
 //#region src/index.d.ts
 /**
@@ -158,7 +158,7 @@ declare const imageOutputSchema: z.ZodType<ImageOutput>;
  * const result = await ai.run('summarize', { input: { text }, subjectId: user.id })
  * ```
  */
-declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
+export declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
 //#endregion
-export { type ApiKeyResolver, type AspectRatio, type AttemptOutcome, type AttemptRecord, type ConfigStore, type ContentPart, type CreateSwitchConfig, type FilePart, type GeneratedImage, type GeneratedImageMediaType, type ImageOptions, type ImageOutput, type ImageSize, LLMDispatchError, type Logger, type ModelPrice, type OperationConfigView, type OperationDefinition, type OperationRoute, type OperationsMap, type PreparedProvider, type Provider, ProviderError, type ProviderErrorKind, type ProviderImage, type ProviderRequest, type ProviderResponse, type QualityVerdict, type QuotaKey, type QuotaView, type ReservationEnvelope, type RouteTarget, type RunResult, type SettlementFailure, type StorePair, type Switch, type TextPart, type TokenUsage, type UsageStore, anthropic, createSwitch, defineOperation, defineOperations, gemini, imageOutputSchema, memoryStores, openaiCompatible, openaiImages, postgresStores };
+export type { ApiKeyResolver, AspectRatio, AttemptOutcome, AttemptRecord, ConfigStore, ContentPart, CreateSwitchConfig, FilePart, GeneratedImage, GeneratedImageMediaType, ImageOptions, ImageOutput, ImageSize, Logger, ModelPrice, OperationConfigView, OperationDefinition, OperationRoute, OperationsMap, PreparedProvider, Provider, ProviderErrorKind, ProviderImage, ProviderRequest, ProviderResponse, QualityVerdict, QuotaKey, QuotaView, ReservationEnvelope, RouteTarget, RunResult, SettlementFailure, StorePair, Switch, TextPart, TokenUsage, UsageStore };
 //# sourceMappingURL=index.d.ts.map

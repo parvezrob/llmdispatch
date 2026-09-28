@@ -10,7 +10,7 @@
  * @module
  */
 /** Every published migration, in the order they are applied. */
-declare const MIGRATIONS: readonly {
+export declare const MIGRATIONS: readonly {
   /** Which migration this is; the number the schema records. */
   version: number;
   /** The hash of the template, schema placeholder still in place. */
@@ -36,7 +36,7 @@ declare const MIGRATIONS: readonly {
  * @param opts `schema` defaults to `llmdispatch` and is validated, then quoted.
  * @throws `RangeError` when the schema is not a name llmdispatch may own.
  */
-declare function migrationSql(opts?: {
+export declare function migrationSql(opts?: {
   schema?: string;
 }): {
   sql: string;
@@ -59,7 +59,6 @@ declare function migrationSql(opts?: {
  * Test harnesses that can only reach the store through an adopter-shaped pool recognise the
  * four usage statements by this prefix and substitute that trailing `null`.
  */
-declare const USAGE_STORE_MARKER = "/* llmdispatch:usage-store */";
+export declare const USAGE_STORE_MARKER = "/* llmdispatch:usage-store */";
 //#endregion
-export { MIGRATIONS, USAGE_STORE_MARKER, migrationSql };
 //# sourceMappingURL=postgres.d.ts.map
