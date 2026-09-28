@@ -13,14 +13,16 @@
 - [`anthropic`](#anthropic)
 - [`gemini`](#gemini)
 - [`openaiImages`](#openaiimages)
+- [`openrouterImages`](#openrouterimages)
 
 ## All adapters
 
 All built-ins: `fetch` with `redirect: 'error'`, JSON bodies, per-attempt signal.
 **Optional request fields (`maxOutputTokens`, `temperature`) are omitted from the wire body
 when unset, never defaulted**, with two exceptions, both below: Anthropic always sends
-`max_tokens`, and `openaiImages` has no field for either and drops both even when set. Every
-mapping is fixed by recorded synthetic fixtures.
+`max_tokens`, and the two image adapters, `openaiImages` and `openrouterImages`, have no
+field for either and drop both even when set. Every mapping is fixed by recorded synthetic
+fixtures.
 **Universal status-family default (all built-ins, total by construction):** any status not
 explicitly mapped classifies by family: 401/403 → `auth` (except documented moderation
 envelopes → `refused`); 402/429 → `rate_limit`; 404 → `model_not_found`; 408 → `transient`;
@@ -217,9 +219,10 @@ below (both knobs set; with neither, no size field is sent and the provider defa
 applies), `background` verbatim, and the factory's `quality`. `output_format` and
 `moderation` are never sent, so they stay at the provider defaults, png and the stricter
 `auto` filter; nor is `response_format`, which GPT Image models do not support: they always
-answer base64. **Unlike the other built-ins** (see the opening of §5c), `maxOutputTokens`
-and `temperature` have no field on this wire, so they are dropped even when the route sets
-them. The `size` table, by class then ratio, each cell `<width>x<height>`:
+answer base64. **Like `openrouterImages` and unlike the other built-ins** (see the opening
+of §5c), `maxOutputTokens` and `temperature` have no field on this wire, so they are dropped
+even when the route sets them. The `size` table, by class then ratio, each cell
+`<width>x<height>`:
 
 - `1K`: `1:1` `1024x1024`, `3:2` `1536x1024`, `2:3` `1024x1536`, `16:9` `1536x864`,
   `9:16` `864x1536`, `4:3` `1024x768`, `3:4` `768x1024`.
@@ -269,3 +272,66 @@ Errors: the `openaiCompatible` status rows above, shared, in this precedence: 40
 `model_not_found`; 408/5xx/498 → `transient`; 400/413/422 → `invalid_request`; any other
 4xx by family; unparseable body → classify by status; unknown status → `transient`. There
 is no OpenRouter branch: a 403 that is not a refusal is `auth`.
+
+## `openrouterImages`
+
+**`openrouterImages({ apiKey, baseUrl? })`, OpenRouter's Image API.** Default `baseUrl`
+`https://openrouter.ai/api/v1`; `POST {baseUrl}/images`; `Authorization: Bearer`, the key
+resolved in `prepare()` like the other built-ins; synchronous, one request per attempt
+([OpenRouter Image API](https://openrouter.ai/docs/features/multimodal/image-generation)).
+One wire reaches every image model OpenRouter lists, by its OpenRouter model ID. The
+endpoint makes images only, so this adapter has no text or JSON mode. Which knobs a model
+honours, and with which values, is per model and not recorded here: the live catalogue
+(`GET https://openrouter.ai/api/v1/images/models`) lists each model's
+`supported_parameters`.
+**Gates**, in this order, each throwing `ProviderError('invalid_request')` before any fetch:
+a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here;
+any part that is not a text part, since reference images (the API's `input_references`) are
+an edit surface this adapter does not map. There is no pair or size gate: each knob travels
+alone, in its own field.
+Request: `model`; `prompt`, the text parts joined with `'\n'`, so a single part is sent
+verbatim, `''` included; then, each only when set and each verbatim, `n` from `count`,
+`aspect_ratio` from `aspectRatio`, `resolution` from `size` (`'1K'`, `'2K'` or `'4K'`; the
+API's smaller `512` class is not offered), and `background`. `quality`, `output_format`,
+`seed`, `stream` and `provider` are never sent, so the model's and the router's defaults
+apply; `maxOutputTokens` and `temperature` have no field on this wire and are dropped even
+when the route sets them (see the opening of §5c). A model that lacks a knob, or a value of
+one, answers its own error, classified by the rows below; the catalogue says so in advance.
+Response: a non-2xx status classifies by the errors below, and a 2xx body that is not an
+object throws `ProviderError('malformed_response')`. An error embedded in a 2xx body is read
+next (refusal and errors, below). Then `data` must be an array, and the §3 point 4b count
+cap is checked before any element is read. Each `data[]` element, in order, becomes one
+`ProviderImage` from its `b64_json` and its `media_type`, with no dimensions: the core reads
+both from the image header (§3 point 4b). Per element, in this order,
+`ProviderError('malformed_response')` is thrown for an element that is not an object, a
+`b64_json` that is absent or not a string, a `b64_json` over the §3 point 4b length cap, a
+`media_type` other than `image/png`, `image/jpeg` and `image/webp` (absent, any other string
+or type, and the `image/svg+xml` a vector model answers with, all included), and a
+`b64_json` outside the §6 base64 grammar. The length and the media type are cheap reads and
+come before the grammar, so an oversized image, or one in a type the core cannot take, costs
+no scan. An empty `data` is complete with no images, and §3 point 4b records the output
+rejection. Other fields are ignored, and `text` is always `''`.
+Usage: base counters `usage.prompt_tokens` and `usage.completion_tokens` REQUIRED
+(missing/invalid, or no `usage` object → `usage: null`). The API does not split out image
+tokens, so `imageOutputTokens` is never reported.
+Cost: `usage.cost`, OpenRouter's charge in USD for the call, becomes the response's
+`costUsd` when it is a finite non-negative number (`-0` reads as `0`); any other value, or
+none, leaves the property out. It is read even when the counters are invalid and rides on
+every response the adapter returns, a refusal included. By §7 a reported cost is the
+attempt's cost and the pricing table is not consulted; without one the table applies, and
+since this usage carries no image split, an image attempt with a non-zero output prices
+`null` (§7).
+**Refusal and errors:** the OpenRouter rules of `openaiCompatible` above, unchanged, and
+applied whatever `baseUrl` this factory is given, since it speaks OpenRouter's envelope by
+definition. A 2xx body carrying an `error` object at the top level or on its first choice,
+or a first choice with `finish_reason: 'error'`, is an embedded error, classified by its
+error-type word: the first string among `metadata.error_type`, `metadata.code`, `code` and
+`type` of the first choice's error, or of the top-level one when the first choice has none.
+Moderation → `'refused'`, with `text: ''` and the body's usage and cost read as above;
+`auth`/`authentication` → `auth`; `credit`/`rate_limit`/`rate-limit` → `rate_limit`; any
+other word, or none → `transient`; each thrown kind carries the HTTP status. A non-2xx is
+never a refusal: a 403 whose body carries moderation → `invalid_request` (the content's
+fault, not the key's); every other status by the shared rows, in this precedence: 401/403 →
+`auth`; 429 and 402 → `rate_limit`; 404, or a model-not-found code on any other 4xx →
+`model_not_found`; 408/5xx/498 → `transient`; 400/413/422 → `invalid_request`; any other 4xx
+by family; unparseable body → classify by status; unknown status → `transient`.
