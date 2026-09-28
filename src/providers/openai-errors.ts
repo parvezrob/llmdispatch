@@ -1,7 +1,7 @@
 /**
- * The status rows the OpenAI adapters share (spec §5c). `openaiCompatible` and `openaiImages`
- * classify a non-2xx answer the same way; the OpenRouter branch belongs to the compatible
- * transport alone and stays there.
+ * The status rows the OpenAI-shaped adapters share (spec §5c): each classifies a non-2xx
+ * answer the same way. OpenRouter's envelope, which an adapter speaking it reads before these
+ * rows, is recognised in `openrouter-errors.ts`.
  *
  * @module
  */
