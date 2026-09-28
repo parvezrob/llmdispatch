@@ -25,7 +25,7 @@ const SPEC = join(ROOT, 'docs', 'spec.md')
 const OUT = join(ROOT, 'docs', 'providers.md')
 const USAGE = 'usage: build-provider-reference.mjs [--check]\n'
 
-const FACTORY_COUNT = 3 // structural arity: a new adapter must extend this deliberately
+const FACTORY_COUNT = 4 // structural arity: a new adapter must extend this deliberately
 const LEAD = /^\*\*`([A-Za-z][A-Za-z0-9]*)\(/
 
 /** The §5c body, or `null` after reporting why it could not be sliced. */
