@@ -136,8 +136,8 @@ function imageBody(
 /**
  * A non-2xx answer (§5c): the OpenRouter rule `openaiCompatible` applies to an OpenRouter
  * host, for every base URL here, since this factory speaks OpenRouter's envelope by
- * definition. A 403 carrying moderation is the content's fault, `invalid_request`; every
- * other answer classifies by the shared status rows.
+ * definition. A 403 whose body is a moderation envelope is the content's fault,
+ * `invalid_request`; every other answer classifies by the shared status rows.
  */
 function throwImagesError(status: number, body: unknown): never {
   if (status === 403 && isOpenRouterModeration(body)) throwForStatus(status, 'invalid_request')

@@ -11,6 +11,14 @@ import {
   textParts,
   withPrepared,
 } from './helpers'
+import {
+  AUTH_WORDS,
+  ERROR_TYPE_LOCATIONS,
+  MODERATION_METADATA_BODY,
+  MODERATION_WORDS,
+  RATE_LIMIT_WORDS,
+  typedErrorBody,
+} from './openrouter-fixtures'
 
 const KEY = () => 'sk-test'
 
@@ -401,5 +409,137 @@ describe('usage normalization', () => {
     const run = await complete({ apiKey: KEY })
     const response = await run(baseRequest())
     expect(response.usage).toEqual({ inputTokens: 12, outputTokens: 34 })
+  })
+})
+
+describe("OpenRouter's documented error vocabulary, on an OpenRouter host", () => {
+  const OPENROUTER = 'https://openrouter.ai/api/v1'
+
+  async function answer(status: number, body: unknown, baseUrl = OPENROUTER) {
+    installFetch(() => jsonResponse(status, body))
+    const run = await complete({ apiKey: KEY, baseUrl })
+    return run(baseRequest())
+  }
+
+  async function failureKind(status: number, body: unknown, baseUrl = OPENROUTER) {
+    const error: unknown = await answer(status, body, baseUrl).then(
+      () => null,
+      (thrown: unknown) => thrown,
+    )
+    expect(ProviderError.is(error)).toBe(true)
+    expect((error as ProviderError).status).toBe(status)
+    return (error as ProviderError).kind
+  }
+
+  function everyLocation(words: readonly string[]) {
+    return words.flatMap((word) =>
+      ERROR_TYPE_LOCATIONS.map((location) => [word, location] as const),
+    )
+  }
+
+  it('classifies a 403 carrying moderation metadata, and no type, as invalid_request', async () => {
+    expect(await failureKind(403, MODERATION_METADATA_BODY)).toBe('invalid_request')
+  })
+
+  it.each(everyLocation(MODERATION_WORDS))(
+    'classifies a 403 naming %s by %s as invalid_request',
+    async (word, location) => {
+      expect(await failureKind(403, typedErrorBody(location, word, 403))).toBe(
+        'invalid_request',
+      )
+    },
+  )
+
+  it.each(ERROR_TYPE_LOCATIONS)(
+    'classifies a 403 naming permission_denied by %s as auth',
+    async (location) => {
+      expect(await failureKind(403, typedErrorBody(location, 'permission_denied', 403))).toBe(
+        'auth',
+      )
+    },
+  )
+
+  it('returns refused for the moderation metadata embedded in a 200', async () => {
+    const response = await answer(200, {
+      choices: [{ finish_reason: 'error', error: MODERATION_METADATA_BODY.error }],
+      usage: { prompt_tokens: 7, completion_tokens: 0 },
+    })
+    expect(response).toEqual({
+      kind: 'refused',
+      text: '',
+      usage: { inputTokens: 7, outputTokens: 0 },
+    })
+  })
+
+  it.each(everyLocation(MODERATION_WORDS))(
+    'returns refused for an embedded %s named by %s',
+    async (word, location) => {
+      expect((await answer(200, typedErrorBody(location, word))).kind).toBe('refused')
+    },
+  )
+
+  it.each(everyLocation(RATE_LIMIT_WORDS))(
+    'classifies an embedded %s named by %s as rate_limit',
+    async (word, location) => {
+      expect(await failureKind(200, typedErrorBody(location, word))).toBe('rate_limit')
+    },
+  )
+
+  it.each(everyLocation(AUTH_WORDS))(
+    'classifies an embedded %s named by %s as auth',
+    async (word, location) => {
+      expect(await failureKind(200, typedErrorBody(location, word))).toBe('auth')
+    },
+  )
+
+  it('reads the error_type of a choice-level error in a 200', async () => {
+    const body = {
+      choices: [
+        {
+          finish_reason: 'error',
+          error: {
+            code: 429,
+            message: 'slow down',
+            metadata: { error_type: 'rate_limit_exceeded' },
+          },
+        },
+      ],
+    }
+    expect(await failureKind(200, body)).toBe('rate_limit')
+  })
+
+  describe('a host that is not OpenRouter ignores all of it', () => {
+    const OTHER = 'https://api.openai.com/v1'
+
+    it.each([
+      ['moderation metadata', MODERATION_METADATA_BODY],
+      [
+        'content_policy_violation',
+        typedErrorBody('metadata.error_type', 'content_policy_violation', 403),
+      ],
+      ['refusal', typedErrorBody('error.error_type', 'refusal', 403)],
+    ])('classifies a 403 with %s as auth', async (_label, body) => {
+      expect(await failureKind(403, body, OTHER)).toBe('auth')
+    })
+
+    it.each([
+      ['moderation metadata', MODERATION_METADATA_BODY],
+      [
+        'content_policy_violation',
+        typedErrorBody('metadata.error_type', 'content_policy_violation'),
+      ],
+      ['rate_limit_exceeded', typedErrorBody('top-level error_type', 'rate_limit_exceeded')],
+      ['permission_denied', typedErrorBody('error.error_type', 'permission_denied')],
+    ])(
+      'reads a 200 carrying %s beside a completion as the completion',
+      async (_label, error) => {
+        const response = await answer(200, { ...error, ...OK_BODY }, OTHER)
+        expect(response).toEqual({
+          kind: 'complete',
+          text: 'hi',
+          usage: { inputTokens: 10, outputTokens: 5 },
+        })
+      },
+    )
   })
 })

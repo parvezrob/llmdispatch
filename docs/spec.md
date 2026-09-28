@@ -379,15 +379,31 @@ Response: `choices[0].message.content`; termination normalized to `ProviderRespo
 `stop` → `'complete'`; other/missing → throw `ProviderError('malformed_response')`.
 Usage: `usage.prompt_tokens`/`usage.completion_tokens`; **missing usage envelope or
 missing/invalid base counters → `usage: null`** (never zero-defaulted).
+**OpenRouter's error envelope** (an OpenRouter host only;
+[OpenRouter errors](https://openrouter.ai/docs/api_reference/errors-and-debugging)):
+`{ error: { code, message, metadata? } }`, where `code` is the HTTP status as a number, so
+it names nothing. The error read is the first choice's `error` object when there is one,
+else the top-level `error`. Its **error-type word** is the first string among, in this
+order, `error.metadata.error_type` (OpenRouter's Chat Completions shape), `error.error_type`
+(its Messages shape), the body's top-level `error_type` (its Responses shape), then
+`error.metadata.code`, `error.code` and `error.type`. A **moderation envelope** is a body
+whose error-type word is `moderation`, `content_policy_violation` or `refusal`, or whose
+error carries moderation metadata: `error.metadata.reasons` an array or
+`error.metadata.flagged_input` a string. That is the shape of OpenRouter's documented
+moderation answer: a 403 whose metadata also carries `provider_name` and `model_slug`, and
+which names no error type at all.
 **Embedded HTTP-200 errors (OpenRouter):** before completion parsing, a body carrying
-`finish_reason: 'error'` or a top-level/choice-level `error` object classifies from its
-`error.metadata.error_type`/`code` vocabulary (moderation → `refused`; auth/credit/rate →
-`auth`/`rate_limit`; otherwise `transient`), never treated as normal completion.
+`finish_reason: 'error'` on its first choice, or a top-level/choice-level `error` object, is
+an embedded error, never treated as normal completion. A moderation envelope → `refused`;
+for any other, the error-type word decides: `authentication`, `auth` or
+`permission_denied` → `auth`; `payment_required`, `rate_limit_exceeded`, `credit`,
+`rate_limit` or `rate-limit` → `rate_limit`; any other word (the documented 400-class ones
+such as `context_length_exceeded` included), or none → `transient`.
 Errors ([OpenAI error codes](https://developers.openai.com/api/docs/guides/error-codes),
 [OpenRouter errors](https://openrouter.ai/docs/api_reference/errors-and-debugging)):
-401 → `auth`; **403: for OpenRouter envelopes carrying moderation metadata →
-`invalid_request` (content), otherwise `auth`**; 404/model-not-found codes →
-`model_not_found`; 429 and 402 → `rate_limit`; 408/5xx/498 → `transient`; other
+401 → `auth`; **403: on an OpenRouter host, a 403 whose body is a moderation envelope
+(as defined above) → `invalid_request` (content), otherwise `auth`**; 404/model-not-found
+codes → `model_not_found`; 429 and 402 → `rate_limit`; 408/5xx/498 → `transient`; other
 400/413/422 → `invalid_request`; unparseable body → classify by status; unknown status →
 `transient` (a real HTTP outcome, unlike unclassified thrown values).
 Image output: chat completions has no image wire, so a request whose `responseFormat.type`
@@ -627,20 +643,18 @@ every response the adapter returns, a refusal included. By §7 a reported cost i
 attempt's cost and the pricing table is not consulted; without one the table applies, and
 since this usage carries no image split, an image attempt with a non-zero output prices
 `null` (§7).
-**Refusal and errors:** the OpenRouter rules of `openaiCompatible` above, unchanged, and
-applied whatever `baseUrl` this factory is given, since it speaks OpenRouter's envelope by
-definition. A 2xx body carrying an `error` object at the top level or on its first choice,
-or a first choice with `finish_reason: 'error'`, is an embedded error, classified by its
-error-type word: the first string among `metadata.error_type`, `metadata.code`, `code` and
-`type` of the first choice's error, or of the top-level one when the first choice has none.
-Moderation → `'refused'`, with `text: ''` and the body's usage and cost read as above;
-`auth`/`authentication` → `auth`; `credit`/`rate_limit`/`rate-limit` → `rate_limit`; any
-other word, or none → `transient`; each thrown kind carries the HTTP status. A non-2xx is
-never a refusal: a 403 whose body carries moderation → `invalid_request` (the content's
-fault, not the key's); every other status by the shared rows, in this precedence: 401/403 →
-`auth`; 429 and 402 → `rate_limit`; 404, or a model-not-found code on any other 4xx →
-`model_not_found`; 408/5xx/498 → `transient`; 400/413/422 → `invalid_request`; any other 4xx
-by family; unparseable body → classify by status; unknown status → `transient`.
+**Refusal and errors:** OpenRouter's error envelope as `openaiCompatible` defines it above
+(the error-type word read from its three `error_type` places, the moderation envelope, and
+the embedded-error mapping), unchanged, and applied whatever `baseUrl` this factory is
+given, since it speaks OpenRouter's envelope by definition. An embedded error that is a
+moderation envelope → `'refused'`, with `text: ''` and the body's usage and cost read as
+above; any other embedded error is thrown, classified by its error-type word as defined
+there, and carries the HTTP status. A non-2xx is never a refusal: a 403 whose body is a
+moderation envelope (as defined above) → `invalid_request` (the content's fault, not the
+key's); every other status by the shared rows, in this precedence: 401/403 → `auth`; 429 and
+402 → `rate_limit`; 404, or a model-not-found code on any other 4xx → `model_not_found`;
+408/5xx/498 → `transient`; 400/413/422 → `invalid_request`; any other 4xx by family;
+unparseable body → classify by status; unknown status → `transient`.
 
 ## 6. Public API (authoritative, self-contained, compiles under strict TS + Zod 4)
 
