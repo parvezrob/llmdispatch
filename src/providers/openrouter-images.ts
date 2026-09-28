@@ -7,7 +7,6 @@
 import { ProviderError } from '../errors'
 import type {
   ApiKeyResolver,
-  ContentPart,
   GeneratedImageMediaType,
   ImageOptions,
   PreparedProvider,
@@ -15,11 +14,11 @@ import type {
   ProviderImage,
   ProviderRequest,
   ProviderResponse,
-  TextPart,
   TokenUsage,
 } from '../types'
 import { classifyOpenAIStatus } from './openai-errors'
 import { classifyEmbeddedError, isOpenRouterModeration } from './openrouter-errors'
+import { imagePrompt, isTextPart } from './parts'
 import {
   buildUsage,
   fetchJson,
@@ -113,15 +112,6 @@ function readImageGate(req: ProviderRequest): { image: ImageOptions; prompt: str
   const parts = req.parts
   if (!parts.every(isTextPart)) invalid('file parts are not supported')
   return { image, prompt: imagePrompt(parts) }
-}
-
-function isTextPart(part: ContentPart): part is TextPart {
-  return part.type === 'text'
-}
-
-/** The text parts joined with a newline; a lone part goes verbatim, `''` included (§5c). */
-function imagePrompt(parts: readonly TextPart[]): string {
-  return parts.map((part) => part.text).join('\n')
 }
 
 /**

@@ -8,7 +8,6 @@ import { ProviderError } from '../errors'
 import type {
   ApiKeyResolver,
   AspectRatio,
-  ContentPart,
   ImageOptions,
   ImageSize,
   PreparedProvider,
@@ -16,10 +15,10 @@ import type {
   ProviderImage,
   ProviderRequest,
   ProviderResponse,
-  TextPart,
   TokenUsage,
 } from '../types'
 import { classifyOpenAIStatus } from './openai-errors'
+import { imagePrompt, isTextPart } from './parts'
 import {
   asTokenCount,
   buildUsage,
@@ -171,15 +170,6 @@ function readImageGate(req: ProviderRequest): {
   // rejected here rather than sent as a size nobody pinned.
   if (wireSize === undefined) invalid('unsupported size or aspect ratio')
   return { image, prompt, wireSize }
-}
-
-function isTextPart(part: ContentPart): part is TextPart {
-  return part.type === 'text'
-}
-
-/** The text parts joined with a newline; a lone part goes verbatim, `''` included (§5c). */
-function imagePrompt(parts: readonly TextPart[]): string {
-  return parts.map((part) => part.text).join('\n')
 }
 
 /** The table cell for a class and a ratio, read as own properties only. */
