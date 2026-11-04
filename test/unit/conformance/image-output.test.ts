@@ -62,7 +62,7 @@ describe('image_output', () => {
       requests: { image_output: imageRequest },
     })
     expect(withoutScenario.skipped).toContain('image_output')
-    expect(withoutScenario.skipped.at(-1)).toBe('image_output')
+    expect(withoutScenario.skipped.slice(-2)).toEqual(['image_output', 'svg_output'])
   })
 
   it('fails a request that does not ask for images, before dispatching', async () => {

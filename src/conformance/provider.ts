@@ -39,17 +39,19 @@ const OPTIONAL: readonly OptionalScenario[] = [
 
 /**
  * Optional media scenarios: success-class conditions dispatching their own request, one
- * carrying a file of the named class or, for `image_output`, asking for images back.
+ * carrying a file of the named class or, for `image_output` and `svg_output`, asking for
+ * images or SVG documents back.
  */
-type MediaScenario = 'document' | 'image' | 'image_output'
+type MediaScenario = 'document' | 'image' | 'image_output' | 'svg_output'
 
-const MEDIA: readonly MediaScenario[] = ['document', 'image', 'image_output']
+const MEDIA: readonly MediaScenario[] = ['document', 'image', 'image_output', 'svg_output']
 
 /** What each media scenario's request has to carry, in the words its failure message uses. */
 const MEDIA_EXPECTATION: Readonly<Record<MediaScenario, string>> = {
   document: "an 'application/pdf' file part",
   image: 'an image file part',
   image_output: "responseFormat.type 'image'",
+  svg_output: "responseFormat.type 'svg'",
 }
 
 const IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
@@ -59,6 +61,16 @@ const IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
 ])
 const BASE64_ALPHABET = /^[A-Za-z0-9+/]+$/
 const TRAILING_PADDING = /={1,2}$/
+
+/**
+ * The core's three response-side svg caps (`core/svg-document.ts`), copied because
+ * conformance may not import core (`.dependency-cruiser.cjs`); a unit test holds each copy
+ * to its original. An adapter that answers beyond any of them would classify
+ * `malformed_response`.
+ */
+export const MAX_CONFORMANT_SVGS = 16
+export const MAX_CONFORMANT_SVG_CHARACTERS = 10_000_000
+export const MAX_CONFORMANT_SVG_RESPONSE_CHARACTERS = 40_000_000
 
 /** Controls that let the suite verify responseFormat and capability without guessing. */
 export interface ProviderConformanceControls {
@@ -191,6 +203,7 @@ export async function runProviderConformance(opts: {
       const response = await dispatch(req)
       assertSuccess(response, failures, name)
       if (name === 'image_output') assertImages(response, failures, name)
+      if (name === 'svg_output') assertSvgs(response, failures, name)
     } catch (error) {
       failures.push(`${name}: ${thrown(error)}`)
     }
@@ -202,6 +215,7 @@ export async function runProviderConformance(opts: {
 /** Whether a request carries a file part of the scenario's media class (spec §6b). */
 function carriesMedia(name: MediaScenario, req: ProviderRequest): boolean {
   if (name === 'image_output') return req.responseFormat.type === 'image'
+  if (name === 'svg_output') return req.responseFormat.type === 'svg'
   return req.parts.some(
     (part) =>
       part.type === 'file' &&
@@ -248,6 +262,74 @@ function providerImageProblem(image: unknown): string | null {
     return 'width and height must both be positive safe integers or both be absent'
   }
   return null
+}
+
+/**
+ * The `ProviderSvg` contract (spec §6, §8): at least one document and no more than the
+ * core's count cap, each with the one media type and §6-grammar base64 within the core's
+ * per-document cap, and all of them within its per-response cap. The caps are read in the
+ * core's order, element by element before any grammar scan: the count, then each one's
+ * length and the running total. The core's document check (UTF-8, prolog, root) is not
+ * reachable from here, so it is core behaviour, tested internally, not part of the
+ * adapter's contract.
+ */
+function assertSvgs(response: ProviderResponse, failures: string[], label: string): void {
+  if (response.kind !== 'complete') return
+  const svgs = (response as { svgs?: unknown }).svgs
+  if (!Array.isArray(svgs) || svgs.length === 0) {
+    failures.push(`${label}: expected svgs to be a non-empty array`)
+    return
+  }
+  const length: number = svgs.length
+  if (length > MAX_CONFORMANT_SVGS) {
+    failures.push(
+      `${label}: expected at most ${String(MAX_CONFORMANT_SVGS)} svgs but got ${String(length)}`,
+    )
+    return
+  }
+  // First the bounds, each element read once by index (a sparse slot is a missing
+  // document, not a skipped one); then the media type and the grammar on what was read.
+  const read: ({ mediaType: unknown; data: string } | null)[] = []
+  let total = 0
+  for (let index = 0; index < length; index++) {
+    const svg: unknown = (svgs as unknown[])[index]
+    const at = `${label}: svgs[${String(index)}]`
+    if (typeof svg !== 'object' || svg === null || Array.isArray(svg)) {
+      failures.push(`${at} must be an object`)
+      read.push(null)
+      continue
+    }
+    const { mediaType, data } = svg as Record<string, unknown>
+    if (typeof data !== 'string') {
+      failures.push(`${at} data must be a string`)
+      read.push(null)
+      continue
+    }
+    if (data.length > MAX_CONFORMANT_SVG_CHARACTERS) {
+      failures.push(
+        `${at} data must be at most ${String(MAX_CONFORMANT_SVG_CHARACTERS)} characters`,
+      )
+      read.push(null)
+      continue
+    }
+    total += data.length
+    if (total > MAX_CONFORMANT_SVG_RESPONSE_CHARACTERS) {
+      failures.push(
+        `${label}: expected at most ${String(MAX_CONFORMANT_SVG_RESPONSE_CHARACTERS)} base64 characters across svgs`,
+      )
+      return
+    }
+    read.push({ mediaType, data })
+  }
+  for (const [index, svg] of read.entries()) {
+    if (svg === null) continue
+    const at = `${label}: svgs[${String(index)}]`
+    if (svg.mediaType !== 'image/svg+xml') {
+      failures.push(`${at} mediaType must be 'image/svg+xml'`)
+    } else if (!isBase64(svg.data)) {
+      failures.push(`${at} data must be non-empty standard-alphabet base64`)
+    }
+  }
 }
 
 function isBase64(data: string): boolean {

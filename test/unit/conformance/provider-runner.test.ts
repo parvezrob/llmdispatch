@@ -33,6 +33,7 @@ const OPTIONAL_ORDER = [
   'document',
   'image',
   'image_output',
+  'svg_output',
 ]
 
 /** Base64 short enough to read; no adapter here decodes it. */
@@ -485,7 +486,11 @@ describe('the built-in adapters, driven end to end through the runner', () => {
       requests: mediaRequests('gpt-x'),
       controls: { jsonCapability: 'native' },
     })
-    expect(result).toEqual({ passed: true, failures: [], skipped: ['image_output'] })
+    expect(result).toEqual({
+      passed: true,
+      failures: [],
+      skipped: ['image_output', 'svg_output'],
+    })
   })
 
   it('passes anthropic over scripted fetch, prompt-only json capability', async () => {
@@ -527,7 +532,7 @@ describe('the built-in adapters, driven end to end through the runner', () => {
     expect(result).toEqual({
       passed: true,
       failures: [],
-      skipped: ['responseFormat:native', 'image_output'],
+      skipped: ['responseFormat:native', 'image_output', 'svg_output'],
     })
   })
 
@@ -585,7 +590,7 @@ describe('the built-in adapters, driven end to end through the runner', () => {
     expect(result).toEqual({
       passed: true,
       failures: [],
-      skipped: ['responseFormat:native'],
+      skipped: ['responseFormat:native', 'svg_output'],
     })
   })
 
@@ -628,7 +633,7 @@ describe('the built-in adapters, driven end to end through the runner', () => {
     expect(result).toEqual({
       passed: true,
       failures: [],
-      skipped: ['responseFormat', 'truncated', 'document', 'image'],
+      skipped: ['responseFormat', 'truncated', 'document', 'image', 'svg_output'],
     })
   })
 
@@ -676,7 +681,7 @@ describe('the built-in adapters, driven end to end through the runner', () => {
     expect(result).toEqual({
       passed: true,
       failures: [],
-      skipped: ['responseFormat', 'truncated', 'document', 'image'],
+      skipped: ['responseFormat', 'truncated', 'document', 'image', 'svg_output'],
     })
   })
 })
