@@ -40,7 +40,7 @@ summarize: {
 }
 ```
 
-The exact pipeline is spec §3.
+The exact pipeline is spec §3. The [README](../README.md#generating-images) shows image and SVG operations end to end: the knobs, what comes back, which built-in to choose, and the quota and moderation advice.
 
 **An SVG document is active content.** For an `'svg'` operation, llmdispatch guarantees each document is SVG-rooted UTF-8 with no DTD (the root element is named `svg`; its namespace is not checked), and nothing more: not well-formed XML, and not safe content. Scripts, event handlers and external references pass through untouched. Sanitize every document with a maintained sanitizer, or rasterize it with a network-disabled, resource-bounded renderer; never inject it into a page or serve it as is (spec §6).
 
@@ -58,7 +58,7 @@ Classified llmdispatch failures throw `LLMDispatchError` with a stable `code`. E
 | `USAGE_STORE_UNAVAILABLE` | quota store unreachable, so the call is refused, fail-closed | yes | 503 |
 | `ABORTED` | your `AbortSignal` fired. No fallback attempted | no | 499 |
 | `PROVIDER_FAILED` | the final attempt failed at the provider level (see `error.attempts` for the full path) | per final classification (spec §5b) | 502 |
-| `OUTPUT_REJECTED` | the final attempt's output failed schema or quality validation, or was truncated by a token limit | yes | 502 |
+| `OUTPUT_REJECTED` | the final attempt's output failed schema or quality validation, was truncated by a token limit, or was an image or SVG response with nothing in it | yes | 502 |
 
 The table is ordered: pre-dispatch checks run top to bottom, config before quota, so a misconfigured operation never consumes quota. One nuance for an operation whose *code* declares no quota and gets one only from its route: llmdispatch can't know it is quota'd until config resolves, so for that case `CONFIG_STORE_UNAVAILABLE` and `INVALID_CONFIG` surface before `MISSING_SUBJECT`. An operation that declares a quota in code keeps the early check even when a route overrides the number. For post-dispatch failures the code reflects the **final attempt's** classification, with every attempt detailed in `error.attempts` (including token usage of failed runs). A fallback attempt can itself end in `INVALID_CONFIG` or `ABORTED`. The terminal-code mapping is spec §5b.
 
@@ -70,8 +70,8 @@ One fallback route per operation, one retry, decided by failure *classification*
 
 | Primary outcome | Fallback? |
 | --- | --- |
-| `transient` (network, 5xx), `rate_limit` (429), `malformed_response`, or attempt timeout | ✅ |
-| Output rejected (JSON, schema, quality) | ✅ |
+| `transient` (network, 5xx), `rate_limit` (429), `malformed_response` (including a generated image or SVG document the library cannot accept), or attempt timeout | ✅ |
+| Output rejected (JSON, schema, quality, no images or no SVG documents) | ✅ |
 | `truncated` (provider signaled a max-token or context cutoff) | ✅ |
 | `refused` (provider refusal or safety block, another model will likely refuse too) | ❌ `PROVIDER_FAILED` |
 | `auth`, `model_not_found` (config problems, retrying elsewhere hides them) | ❌ `INVALID_CONFIG` by default. Opt in via `fallbackOnAuthOrModelNotFound` |
@@ -82,7 +82,7 @@ One fallback route per operation, one retry, decided by failure *classification*
 
 `fallbackOnAuthOrModelNotFound: true` on `createSwitch` (off by default) lets a *primary* attempt that dies on bad credentials or an unrecognized model name fall back anyway. That buys availability over noise, for when a stale key shouldn't take an operation down. It's off by default because a broken route is worth finding out about immediately, rather than paying another provider to hide it. It changes nothing else: when the fallback *also* dies on credentials or an unknown model the terminal code is still `INVALID_CONFIG`, and otherwise the final attempt's own classification decides it, as always (spec §5b).
 
-Built-in adapters make exactly one client-side HTTP request per attempt. There are no retries in llmdispatch's own HTTP layer, so `timeoutMs` and `attempts[]` mean what they say (a gateway host may retry upstream internally, which is outside our boundary). Truncated responses and provider refusals are detected from termination metadata (`finish_reason`, `stop_reason`), never passed off as good data: truncation falls back, refusals don't. Timeouts and caller cancellation are classified by llmdispatch itself, not the adapter. A timeout is retry-worthy, a caller who hung up is not.
+Built-in adapters make exactly one client-side HTTP request per attempt. There are no retries in llmdispatch's own HTTP layer, so `timeoutMs` and `attempts[]` mean what they say (a gateway host may retry upstream internally, which is outside our boundary). Truncated responses and provider refusals are detected from termination metadata (`finish_reason`, `stop_reason`, Gemini's finish and block reasons), never passed off as good data: truncation falls back, refusals don't. Some providers report a policy block as an error body instead, and the adapters read those as refusals too: an OpenAI Images API error whose code is `moderation_blocked`, whatever its status, and an OpenRouter moderation error inside a successful response. OpenRouter also answers some blocks with a 403 carrying the same moderation envelope; that one classifies `invalid_request`, the content's fault rather than the key's, and is just as terminal (spec §5c). Timeouts and caller cancellation are classified by llmdispatch itself, not the adapter. A timeout is retry-worthy, a caller who hung up is not.
 
 ```ts
 operations: { summarize: { /* ... */ timeoutMs: 60_000 } }   // provider I/O timeout per attempt; default 60s
@@ -176,11 +176,15 @@ Whatever store you write it against, the strings llmdispatch hands a store (oper
 | --- | --- | --- |
 | `anthropic()` | Claude models | Anthropic API (live check each release) |
 | `openaiCompatible()` | OpenAI-shaped APIs (`baseUrl` for non-OpenAI hosts) | OpenAI, DeepSeek, OpenRouter; others best-effort |
-| `gemini()` | Google Gemini models | Gemini API (live check each release) |
+| `gemini()` | Google Gemini models, including image output | Gemini API (live check each release) |
+| `openaiImages()` | Image generation with OpenAI's GPT Image models | OpenAI Images API (live check each release) |
+| `openrouterImages()` | Image and SVG generation with any model OpenRouter's Image API lists | OpenRouter Image API (live check each release) |
+
+Image output (`format: 'image'`) is mapped by `gemini()`, `openaiImages()` and `openrouterImages()`; SVG output (`format: 'svg'`) by `openrouterImages()` alone, with a vector model: one whose catalogue entry lists `svg` output, such as `recraft/recraft-v4-vector`. `anthropic()` and `openaiCompatible()` reject both formats before making any request, `gemini()` rejects SVG the same way, and the two image factories reject text and JSON operations. The README's [Generating images](../README.md#generating-images) says which to choose for what.
 
 Built-in adapters are **zero-dependency**: plain `fetch` against pinned API versions (with redirects disabled, exactly one HTTP request per attempt), no vendor SDKs to install, ever. They're ordinary implementations of the same public `Provider` interface, including its optional `prepare()` readiness hook. Nothing built-in has special powers, so the package stays provider-agnostic by construction.
 
-Why two native adapters instead of routing everything through OpenAI-compatibility layers? Because we verified the compat layers break exactly what llmdispatch depends on. Anthropic's compat endpoint ignores `response_format` entirely (no JSON mode) and is documented by Anthropic as a testing tool, and Gemini's is beta with token totals that silently include unitemized "thinking" tokens, which would corrupt cost tracking. The exact wire contracts and error mappings for every built-in adapter are spec §5c, with sources, and are also published as a per-adapter reference in [providers.md](./providers.md).
+Why native Anthropic and Gemini adapters instead of routing everything through OpenAI-compatibility layers? Because we verified the compat layers break exactly what llmdispatch depends on. Anthropic's compat endpoint ignores `response_format` entirely (no JSON mode) and is documented by Anthropic as a testing tool, and Gemini's is beta with token totals that silently include unitemized "thinking" tokens, which would corrupt cost tracking. The exact wire contracts and error mappings for every built-in adapter are spec §5c, with sources, and are also published as a per-adapter reference in [providers.md](./providers.md).
 
 Register every provider you might ever want, on day one. It costs nothing: API keys resolve lazily, so a registered provider with no key only fails if you actually route to it. A `fallback` on a route counts as routed, so its key is checked before anything runs. Adding a provider later is then one env var and one route change in your admin screen, with no code push. `openaiCompatible` pointed at a gateway such as OpenRouter reaches a large model catalogue through a single registration.
 
@@ -211,11 +215,20 @@ createSwitch({
   pricing: {
     claude: { 'claude-sonnet-4-6': { inputPerM: 3, outputPerM: 15 } },
     openai: { 'gpt-4.1-mini': { inputPerM: 0.4, outputPerM: 1.6 } },
+    images: { 'gpt-image-2': { inputPerM: 5, outputPerM: 10, imageOutputPerM: 30 } },
   },
 })
 ```
 
-`result.cost` sums the per-attempt costs: a provider-reported cost where the adapter gave one, otherwise a **simple token estimate** from your prices (cached-token discounts and request fees are out of scope, spec §7). It is `null` whenever any dispatched attempt could not be priced. Explicitly unknown, never a misleading zero.
+The prices here are examples; use your provider's current ones. `result.cost` sums the per-attempt costs: a provider-reported cost where the adapter gave one, otherwise a **simple token estimate** from your prices (cached-token discounts and request fees are out of scope, spec §7). It is `null` whenever any dispatched attempt could not be priced. Explicitly unknown, never a misleading zero.
+
+Generated images and SVG documents are priced by the same rules, plus three that stop a guess from passing as a cost:
+
+- `imageOutputTokens` is the part of `outputTokens` the provider counted as images, raster or vector. Those tokens are priced at `imageOutputPerM` and the rest of the output at `outputPerM`. `gemini()` and `openaiImages()` report the split when the provider does.
+- An attempt whose usage reports a non-zero image token count, priced by a `ModelPrice` without `imageOutputPerM`, costs `null`.
+- An image attempt with output tokens but no split costs `null`: pricing image tokens at the text rate would be invented. So does an SVG attempt without a split, whatever its output tokens say, zero included, because vector models charge per document rather than per token.
+
+When an `openrouterImages()` response carries OpenRouter's own charge in `usage.cost`, that is the attempt's cost, used as it is with no price entry needed. A response without it is priced from your table by the rules above: an SVG attempt on it costs `null`, and so does an image attempt with any output tokens, since its usage never carries the split.
 
 ## TypeScript
 
