@@ -41,11 +41,14 @@ export function normalizeUsage(value: unknown): TokenUsage | null {
 
 /**
  * Prices one attempt (spec §7): tokens × per-million rates, by registered provider ID and
- * model, with image output tokens carved out of `outputTokens` at their own rate.
+ * model, with image output tokens, raster or vector, carved out of `outputTokens` at their
+ * own rate.
  *
- * `null` when there is no usage or no price, and under the three §7 rules: image tokens
- * reported against a price without an image rate; an image-format attempt whose usage has
- * output tokens but no split (pricing them at the text rate would be fabricated).
+ * `null` when there is no usage or no price, and under the §7 rules: image tokens reported
+ * against a price without an image rate; an image-format attempt whose usage has output
+ * tokens but no split (pricing them at the text rate would be fabricated); an svg-format
+ * attempt whose usage has no split, whatever its output tokens, since vector output is
+ * charged per document and an input-only price would understate it.
  */
 export function priceAttempt(
   pricing: PricingTable,
@@ -59,6 +62,7 @@ export function priceAttempt(
   if (price === undefined) return null
   const imageTokens = usage.imageOutputTokens
   if (imageTokens === undefined) {
+    if (format === 'svg') return null
     if (format === 'image' && usage.outputTokens > 0) return null
     return (
       (usage.inputTokens * price.inputPerM) / 1e6 +

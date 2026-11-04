@@ -22,6 +22,7 @@ describe('entry points', () => {
       'openaiImages',
       'openrouterImages',
       'postgresStores',
+      'svgOutputSchema',
     ])
     expect(Object.keys(postgres).sort()).toEqual([
       'MIGRATIONS',

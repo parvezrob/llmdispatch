@@ -24,6 +24,7 @@ import type {
   ProviderRequest,
   ProviderResponse,
   StorePair,
+  SvgOptions,
   Switch,
   UsageStore,
 } from '../../../src/types'
@@ -368,8 +369,9 @@ export const ECHO_OUTPUT = z.object({ answer: z.string() })
 export interface FixtureOptions {
   quota?: { perDay: number } | undefined
   timeoutMs?: number
-  format?: 'json' | 'json-any' | 'text' | 'image'
+  format?: 'json' | 'json-any' | 'text' | 'image' | 'svg'
   image?: ImageOptions
+  svg?: SvgOptions
   /** Replaces `ECHO_OUTPUT`; an image operation wants `imageOutputSchema` or a superset. */
   output?: z.ZodType
   quality?: OperationDefinition<typeof ECHO_INPUT, z.ZodType>['quality']
@@ -410,6 +412,7 @@ export function fixture(options: FixtureOptions = {}): Fixture {
   if (options.timeoutMs !== undefined) definition.timeoutMs = options.timeoutMs
   if (options.format !== undefined) definition.format = options.format
   if (options.image !== undefined) definition.image = options.image
+  if (options.svg !== undefined) definition.svg = options.svg
   if (options.output !== undefined) definition.output = options.output
   if (options.quality !== undefined) definition.quality = options.quality
   const operations = options.operations ?? {

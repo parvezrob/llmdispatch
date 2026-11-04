@@ -136,6 +136,40 @@ export interface ImageOutput {
   readonly text: string
 }
 
+// --- svg output ---
+
+/**
+ * The knobs an svg operation declares (§6). Every one is optional; an unset knob never
+ * reaches the wire. A vector has no pixel size, so there is no `size` and no `background`.
+ */
+export interface SvgOptions {
+  readonly count?: number // safe integer, 1–10; omitted = the provider's default (one)
+  readonly aspectRatio?: AspectRatio
+}
+
+/** One generated SVG document as an adapter hands it back (§6): the bytes, base64. */
+export interface ProviderSvg {
+  readonly mediaType: 'image/svg+xml'
+  readonly data: string
+}
+
+/**
+ * One generated SVG document as an adopter receives it (§6): base64 of the document bytes,
+ * exactly as the provider sent them. The core guarantees an SVG-rooted UTF-8 document with
+ * no DTD, not well-formed XML and not safe content: sanitize or rasterize it before use.
+ */
+export interface GeneratedSvg {
+  readonly type: 'svg'
+  readonly mediaType: 'image/svg+xml'
+  readonly data: string
+}
+
+/** What an svg operation's output schema receives (§3): the documents, and any text beside them. */
+export interface SvgOutput {
+  readonly svgs: readonly GeneratedSvg[]
+  readonly text: string
+}
+
 /** One operation: its schemas, its prompt, and the optional gates around them. */
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
@@ -143,8 +177,9 @@ export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType
   prompt: (
     input: z.output<In>,
   ) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
-  format?: 'json' | 'json-any' | 'text' | 'image' // default 'json' (§3)
+  format?: 'json' | 'json-any' | 'text' | 'image' | 'svg' // default 'json' (§3)
   image?: ImageOptions // only with format 'image' (§6)
+  svg?: SvgOptions // only with format 'svg' (§6)
   quality?: (ctx: {
     input: z.output<In>
     data: z.output<Out>
@@ -231,7 +266,7 @@ export interface AttemptRecord {
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
-  imageOutputTokens?: number // of which image tokens; at most outputTokens (§7)
+  imageOutputTokens?: number // of which visual (raster or vector) tokens; at most outputTokens (§7)
 }
 
 /** One model's price, per million tokens. Finite, ≥ 0. */
@@ -262,6 +297,7 @@ export interface ProviderRequest {
     | { type: 'text' }
     | { type: 'json'; topLevel: 'object' | 'any' }
     | ({ type: 'image' } & ImageOptions) // the operation's image block, copied through (§3)
+    | ({ type: 'svg' } & SvgOptions) // the operation's svg block, copied through (§3)
   maxOutputTokens?: number // omitted from the wire body when unset, never defaulted (§5c)
   temperature?: number // omitted from the wire body when unset, never defaulted (§5c)
   signal: AbortSignal
@@ -274,8 +310,9 @@ export interface ProviderRequest {
  * an error response (§5c), so they travel on the RESPONSE (usage retained), not as thrown
  * errors. `kind: 'complete'` proceeds to the output pipeline; `'truncated'` classifies
  * `truncated`; `'refused'` classifies `refused`. `images` is read only for an image-format
- * operation (§3). `costUsd` is the provider's own charge for the attempt and, when it is a
- * finite non-negative number, is authoritative over the pricing table (§7).
+ * operation and `svgs` only for an svg-format one (§3); an adapter omits either rather than
+ * setting it to `undefined`. `costUsd` is the provider's own charge for the attempt and,
+ * when it is a finite non-negative number, is authoritative over the pricing table (§7).
  */
 export type ProviderResponse =
   | {
@@ -283,6 +320,7 @@ export type ProviderResponse =
       text: string
       usage: TokenUsage | null
       images?: readonly ProviderImage[]
+      svgs?: readonly ProviderSvg[]
       costUsd?: number
     }
   | { kind: 'truncated'; text: string; usage: TokenUsage | null; costUsd?: number } // text may be partial

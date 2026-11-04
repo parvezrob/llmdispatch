@@ -182,9 +182,9 @@ describe('the image block at createSwitch', () => {
     ).not.toThrow()
   })
 
-  it('names the four formats when the format is unknown', () => {
-    expect(() => build({ format: 'svg' })()).toThrow(/'image'/)
-    expect(() => build({ format: 1 })()).toThrow(/'image'/)
+  it('names the five formats when the format is unknown', () => {
+    expect(() => build({ format: 'vector' })()).toThrow(/'image' or 'svg'/)
+    expect(() => build({ format: 1 })()).toThrow(/'image' or 'svg'/)
   })
 
   it('reads format and imageOutputPerM once, so a getter cannot change them after validation', async () => {

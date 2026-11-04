@@ -1,7 +1,7 @@
 // @targets spec, package
 // A custom adapter that switches on every `responseFormat.type`: the union is closed, so
-// `assertNever` compiles only while the adapter handles each member, and the image member
-// is one of them.
+// `assertNever` compiles only while the adapter handles each member, and the image and svg
+// members are among them.
 import { ProviderError, type Provider, type ProviderRequest } from 'llmdispatch'
 
 function assertNever(value: never): never {
@@ -21,6 +21,11 @@ function wireFormat(format: ProviderRequest['responseFormat']): string {
       const background: string = format.background ?? 'opaque'
       return `image:${String(count)}:${ratio}:${size}:${background}`
     }
+    case 'svg': {
+      const count: number = format.count ?? 1
+      const ratio: string = format.aspectRatio ?? '1:1'
+      return `svg:${String(count)}:${ratio}`
+    }
     default:
       return assertNever(format)
   }
@@ -34,6 +39,14 @@ export const exhaustive: Provider = {
         kind: 'complete',
         text: '',
         images: [{ mediaType: 'image/png', data: 'AAAA' }],
+        usage: null,
+      })
+    }
+    if (wire.startsWith('svg:')) {
+      return Promise.resolve({
+        kind: 'complete',
+        text: '',
+        svgs: [{ mediaType: 'image/svg+xml', data: 'PHN2Zy8+' }],
         usage: null,
       })
     }
