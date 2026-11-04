@@ -880,8 +880,8 @@ export type QualityVerdict = { ok: true } | { ok: false; reason?: string }
 
 // --- routing / views ---
 export interface OperationRoute {
-  provider: string                                       // non-empty registered provider ID
-  model: string                                          // non-empty
+  provider: string                                       // non-empty registered provider ID, no edge whitespace
+  model: string                                          // non-empty, no edge whitespace
   maxOutputTokens?: number                               // safe integer ≥ 1
   temperature?: number                                   // finite, 0–2 (profiles may clamp; §5c)
   quota?: { perDay: number }                             // safe integer, 0–1_000_000; overrides the declared quota (§2)
@@ -1175,6 +1175,18 @@ out-of-domain values as defence in depth. The bound is part of the contract beca
 relational store cannot hold every JavaScript string: PostgreSQL `text` and `jsonb` reject
 U+0000, lone surrogates do not survive a round trip, and index entries are size-capped, so a
 store that had to narrow the domain itself would not be substitutable.
+
+**Route names.** An `OperationRoute` or `RouteTarget` `provider` and `model` must also be
+non-empty and must not start or end with whitespace (any character `String.prototype.trim()`
+removes). A name that breaks either rule is rejected with the field and the rule in the
+message (`model must not start or end with whitespace`), never trimmed, since a stored value
+that differs from the one sent would be worse than an error: at `createSwitch` (a declared
+route or its fallback) and `setConfig` → `INVALID_CONFIG`; in a stored row → a malformed row
+under the §2 rules (`INVALID_CONFIG` for that operation, not cached, `stored: 'malformed'`
+in `getConfig()`, with `defaultRoute` never used in its place). Whitespace inside a name is accepted
+and sent as written, since provider model IDs are opaque. Provider registration IDs are held
+to the string domain only, so an ID that breaks a route-name rule, `''` included, can be
+registered but never routed to.
 
 ## 6a. Core-enforced store deadlines
 

@@ -658,6 +658,14 @@ describe('strict route validation at all three seats', () => {
     { name: 'an unknown field', route: { provider: 'p1', model: 'm', extra: 1 } },
     { name: 'an empty provider', route: { provider: '', model: 'm' } },
     { name: 'an empty model', route: { provider: 'p1', model: '' } },
+    { name: 'a model with a leading space', route: { provider: 'p1', model: ' m' } },
+    { name: 'a model with a trailing newline', route: { provider: 'p1', model: 'm\n' } },
+    { name: 'a model of whitespace only', route: { provider: 'p1', model: '\t' } },
+    { name: 'a provider with a trailing space', route: { provider: 'p1 ', model: 'm' } },
+    {
+      name: 'a fallback model with a leading no-break space',
+      route: { provider: 'p1', model: 'm', fallback: { provider: 'p1', model: '\u00a0m' } },
+    },
     {
       name: 'a malformed fallback',
       route: { provider: 'p1', model: 'm', fallback: { provider: 'p1' } },
@@ -738,6 +746,69 @@ describe('strict route validation at all three seats', () => {
       expect((await f.ai.getConfig()).echo).toEqual({ stored: 'malformed', effective: null })
     })
   }
+})
+
+describe('whitespace at either end of a route name (spec §6)', () => {
+  const PROBLEM = 'model must not start or end with whitespace'
+
+  it('names the problem at createSwitch, for the route and for its fallback', () => {
+    for (const [route, problem] of [
+      [{ provider: 'p1', model: ' gpt-image-2' }, PROBLEM],
+      [
+        { provider: 'p1', model: 'm', fallback: { provider: 'p1', model: 'm ' } },
+        `fallback.${PROBLEM}`,
+      ],
+      [{ provider: ' p1', model: 'm' }, 'provider must not start or end with whitespace'],
+    ] as const) {
+      expect(() =>
+        createSwitchCore(
+          {
+            providers: { p1: scriptedProvider().provider },
+            operations: {
+              echo: {
+                input: ECHO_INPUT,
+                output: ECHO_OUTPUT,
+                prompt: () => 'p',
+                defaultRoute: route,
+              },
+            },
+            stores: scriptedStores().stores,
+          },
+          fakeRuntime(),
+        ),
+      ).toThrow(`invalid configuration for "echo": defaultRoute ${problem}`)
+    }
+  })
+
+  it('names the problem at setConfig, and writes nothing', async () => {
+    const f = fixture()
+    const error = await expectCode(
+      f.ai.setConfig('echo', { provider: 'p1', model: 'gpt-image-2 ' }),
+      'INVALID_CONFIG',
+    )
+    expect(error.message).toBe(`invalid configuration for "echo": route ${PROBLEM}`)
+    expect(f.s.set.calls.length).toBe(0)
+  })
+
+  it('reads a stored row carrying it as malformed: no defaultRoute, no dispatch, no cache', async () => {
+    const f = fixture()
+    f.s.getAll.always(() => ({ echo: { provider: 'p1', model: ' gpt-image-2' } }))
+    const error = await expectCode(f.ai.run('echo', INPUT), 'INVALID_CONFIG')
+    expect(error.message).toBe(`invalid configuration for "echo": stored route ${PROBLEM}`)
+    expect(error.detectedAt).toBe('local')
+    await expectCode(f.ai.run('echo', INPUT), 'INVALID_CONFIG') // re-read, never cached
+    expect(f.s.log).toEqual(['getAll', 'getAll'])
+    expect(f.p1.requests.length).toBe(0)
+    expect((await f.ai.getConfig()).echo).toEqual({ stored: 'malformed', effective: null })
+  })
+
+  it('accepts whitespace inside a model id and sends it as written', async () => {
+    const f = fixture({ fallback: false })
+    await f.ai.setConfig('echo', { provider: 'p1', model: 'my model v2' })
+    f.s.getAll.always(() => ({ echo: { provider: 'p1', model: 'my model v2' } }))
+    await f.ai.run('echo', INPUT)
+    expect(f.p1.requests.map((request) => request.model)).toEqual(['my model v2'])
+  })
 })
 
 describe('effective-quota precedence (spec §2 / §8)', () => {

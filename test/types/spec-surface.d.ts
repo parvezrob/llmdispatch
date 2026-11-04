@@ -129,8 +129,8 @@ export type QualityVerdict = { ok: true } | { ok: false; reason?: string }
 
 // --- routing / views ---
 export interface OperationRoute {
-  provider: string                                       // non-empty registered provider ID
-  model: string                                          // non-empty
+  provider: string                                       // non-empty registered provider ID, no edge whitespace
+  model: string                                          // non-empty, no edge whitespace
   maxOutputTokens?: number                               // safe integer ≥ 1
   temperature?: number                                   // finite, 0–2 (profiles may clamp; §5c)
   quota?: { perDay: number }                             // safe integer, 0–1_000_000; overrides the declared quota (§2)
