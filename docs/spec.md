@@ -121,15 +121,18 @@ Per-operation resolution matrix:
 
 1. Each operation declares `format`: **`'json'`** (the default: a top-level JSON **object**),
    **`'json-any'`** (arbitrary JSON; native provider JSON modes never enabled),
-   **`'text'`**, or **`'image'`** (generated images, §3 point 4b). No schema introspection:
-   text-shaped output schemas MUST set `'text'`.
+   **`'text'`**, **`'image'`** (generated raster images, §3 point 4b), or **`'svg'`**
+   (generated SVG documents, §3 point 4c). No schema introspection: text-shaped output
+   schemas MUST set `'text'`.
 2. The adapter receives `responseFormat: { type: 'text' } | { type: 'json'; topLevel:
-   'object' | 'any' } | { type: 'image'; count?; aspectRatio?; size?; background? }` and
-   enables native generic JSON mode only per its §5c capability rule AND `topLevel:
-   'object'`. Schema-constrained structured output is NOT in this contract; the prompt
-   carries the shape. The image variant carries the operation's declared `image` block
-   verbatim: an unset knob is absent, never defaulted, and an adapter whose wire cannot
-   express a request throws `ProviderError('invalid_request')` before dispatching (§5c).
+   'object' | 'any' } | { type: 'image'; count?; aspectRatio?; size?; background? } | {
+   type: 'svg'; count?; aspectRatio? }` and enables native generic JSON mode only per its
+   §5c capability rule AND `topLevel: 'object'`. Schema-constrained structured output is NOT
+   in this contract; the prompt carries the shape. The image variant carries the
+   operation's declared `image` block verbatim, and the svg variant its `svg` block: an unset
+   knob is absent, never defaulted, and an adapter whose wire cannot express a request (for
+   example an `'svg'` request on an adapter with no vector output) throws
+   `ProviderError('invalid_request')` before dispatching (§5c).
 3. **Termination is checked before content**: adapters normalize termination metadata
    into `ProviderResponse.kind` (§5c). `'truncated'` classifies `truncated`; `'refused'`
    classifies `refused`; unknown terminal states are the ADAPTER'S job to map (unmappable →
@@ -156,10 +159,25 @@ Per-operation resolution matrix:
    any transfer limit. The frozen array is the candidate → `output.parseAsync`. **Zero images
    is an output rejection**
    (fallback-eligible), the image analogue of a JSON parse failure. `images` is never read
-   for a `text`/`json`/`json-any` operation.
-5. `JSON.parse` failure, object-shape failure, zero images, or `ZodError` → output rejection
-   (fallback-eligible). A non-Zod exception from user transform code → `output_schema_error`
-   (settled, unwrapped, no fallback).
+   for a `text`/`json`/`json-any`/`svg` operation.
+   4c. `svg`: the candidate is `{ svgs, text }` built from the response's `svgs` (absent
+   counts as none) and `text`. Three response-side caps come first, all before any document
+   is decoded: the count before any element is read, then, element by element, each one's
+   `data` length and the running total across the response. More than **16** documents, one
+   document's `data` over **10 000 000** base64 characters (7.5 MB decoded), or more than
+   **40 000 000** base64 characters across the response classifies `malformed_response`.
+   Like the raster caps they are payload bounds on what came back (the count sits above the
+   `svg.count` knob's 10) and bound the core's scan and decode, not the download or the
+   transport's JSON parse. Each element's `mediaType` must be exactly `image/svg+xml`; then
+   each document, one at a time and in order, must pass the §6 SVG document check (base64
+   grammar, strict UTF-8, prolog, root). Any failure classifies `malformed_response`. Each
+   element is read once into an owned, frozen `GeneratedSvg` whose `data` is the provider's
+   base64, unchanged. The frozen array is the candidate → `output.parseAsync`. **Zero svgs is
+   an output rejection** (fallback-eligible), as zero images is. `svgs` is never read for a
+   `text`/`json`/`json-any`/`image` operation, and `images` is never read for an `svg` one.
+5. `JSON.parse` failure, object-shape failure, zero images, zero svgs, or `ZodError` →
+   output rejection (fallback-eligible). A non-Zod exception from user transform code →
+   `output_schema_error` (settled, unwrapped, no fallback).
 6. Quality gate: `quality({ input, data })` (raced with abort). `{ ok:false }` → output
    rejection. A malformed verdict (neither `{ok:true}` nor `{ok:false,...}`) or a thrown
    exception → `quality_error` (settled, unwrapped, no additional fallback spend).
@@ -297,10 +315,10 @@ implementing exactly this.
 |---|---|---|---|
 | `transient` (network, 5xx, 408, overload) | ✅ | `PROVIDER_FAILED` | `true` |
 | `rate_limit` (429; billing-exhaustion via 429/402 included; cross-provider fallback is the remedy) | ✅ | `PROVIDER_FAILED` | `true` |
-| `malformed_response` (unusable body/shape/unknown terminal state) | ✅ | `PROVIDER_FAILED` | `true` |
+| `malformed_response` (unusable body/shape/unknown terminal state; a generated image or SVG document the core cannot accept, §3 points 4b and 4c) | ✅ | `PROVIDER_FAILED` | `true` |
 | `timeout` (core-assigned) | ✅ | `PROVIDER_FAILED` | `true` |
 | `truncated` (`ProviderResponse.kind: 'truncated'`, max-token/length/context termination per §5c) | ✅ | `OUTPUT_REJECTED` | `true` |
-| `output_rejected` (JSON parse / object-shape / zero-image image output / `ZodError` / quality `{ok:false}`) | ✅ | `OUTPUT_REJECTED` | `true` |
+| `output_rejected` (JSON parse / object-shape / zero-image image output / zero-svg svg output / `ZodError` / quality `{ok:false}`) | ✅ | `OUTPUT_REJECTED` | `true` |
 | `refused` (`ProviderResponse.kind: 'refused'`, a refusal/safety/policy block the adapter normalizes from a success or an error response per §5c) | ❌ | `PROVIDER_FAILED` | `false` |
 | `auth` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
 | `model_not_found` | ❌ default; with `fallbackOnAuthOrModelNotFound: true` → ✅ (primary attempt only) | `INVALID_CONFIG` (provider) | `false` |
@@ -330,6 +348,22 @@ tables.
 - Cancellation: adapters receive one composed signal and must honor it (§8); the core
   stops waiting and classifies from its own flags regardless. A caller's abort that wins
   while the provider call is still pending records the attempt outcome as `'aborted'`.
+- **Malformed SVG:** an svg document the core refuses (§3 point 4c: a cap, the media type,
+  or the §6 SVG document check) classifies `malformed_response`, never `output_rejected`: the
+  provider answered, and the answer is unusable. It is fallback-eligible like any other
+  malformed body. No document is repaired, trimmed or re-encoded.
+- **Visual output mismatches.** There is no capability model: a route aimed at a model
+  that cannot produce what the operation asks for fails by what the provider actually
+  answers, and an ordinary 4xx is never remapped. Choosing a route of SVG-capable models is
+  the adopter's job.
+
+  | What happens | Classified | Falls back? |
+  |---|---|---|
+  | svg request, 2xx raster answer | `malformed_response` (adapter) | ✅ |
+  | image request, 2xx SVG answer | `malformed_response` (adapter) | ✅ |
+  | raster-only model refuses an svg request with a 4xx | `invalid_request` | ❌ |
+  | svg operation, custom provider returns only `images` | `output_rejected` (zero svgs) | ✅ |
+  | built-in adapter with no svg wire | `invalid_request`, before any fetch | ❌ |
 
 ### 5c. Built-in adapter wire contracts (research-verified 2026-09-15; primary sources linked)
 
@@ -407,7 +441,8 @@ codes → `model_not_found`; 429 and 402 → `rate_limit`; 408/5xx/498 → `tran
 400/413/422 → `invalid_request`; unparseable body → classify by status; unknown status →
 `transient` (a real HTTP outcome, unlike unclassified thrown values).
 Image output: chat completions has no image wire, so a request whose `responseFormat.type`
-is `'image'` throws `ProviderError('invalid_request')` before any fetch.
+is `'image'` throws `ProviderError('invalid_request')` before any fetch. SVG output: nor an
+svg wire, so an `'svg'` request throws the same way, before any fetch.
 
 **`anthropic({ apiKey, baseUrl? })`, native Messages API.** Default `baseUrl`
 `https://api.anthropic.com`; `POST {baseUrl}/v1/messages`; **`x-api-key`** + required
@@ -437,7 +472,8 @@ Errors (envelope `{type:'error', error:{type,message}}`): `authentication_error`
 `auth`; `not_found_error` → `model_not_found`; `rate_limit_error`/429 → `rate_limit`;
 `overloaded_error`/529/5xx → `transient`; `invalid_request_error`/400 → `invalid_request`.
 Image output: the Messages API has no image wire, so a request whose `responseFormat.type`
-is `'image'` throws `ProviderError('invalid_request')` before any fetch.
+is `'image'` throws `ProviderError('invalid_request')` before any fetch. SVG output: nor an
+svg wire, so an `'svg'` request throws the same way, before any fetch.
 
 **`gemini({ apiKey })`, native generateContent.** `POST
 https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`;
@@ -481,6 +517,9 @@ image-generation wire of the same endpoint
 **Gate:** `background: 'transparent'` throws `ProviderError('invalid_request')` before any
 fetch, since no model in this family produces an alpha channel; `'opaque'` and an absent
 value send nothing extra.
+SVG output: generateContent has no vector output, so a request whose `responseFormat.type`
+is `'svg'` throws `ProviderError('invalid_request')` before any fetch, ahead of every other
+mapping, rather than falling into text mode.
 Request, all inside `generationConfig`: `responseModalities: ['TEXT','IMAGE']`;
 `imageConfig: { aspectRatio?, imageSize? }` only when at least one knob is set, each value
 sent verbatim (`size` is `imageSize`); `candidateCount` only when `count` is set; **never
@@ -533,10 +572,10 @@ makes images only, so this adapter has no text or JSON mode. The factory option 
 `quality` when set; unset sends nothing and the provider default applies. Like `jsonMode`
 and `tokenParam`, it is typed, not checked at runtime.
 **Gates**, in this order, each throwing `ProviderError('invalid_request')` before any fetch:
-a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here; any
-part that is not a text part, since the generations endpoint takes no reference images or
-documents; exactly one of `aspectRatio` and `size` set, since the wire has one size field
-and no half of it is invented; `size: '4K'` with any `aspectRatio` other than `'16:9'`.
+a `responseFormat.type` other than `'image'`, since text, JSON and svg runs have no wire
+here; any part that is not a text part, since the generations endpoint takes no reference
+images or documents; exactly one of `aspectRatio` and `size` set, since the wire has one
+size field and no half of it is invented; `size: '4K'` with any `aspectRatio` other than `'16:9'`.
 Request: `model`; `prompt`, the text parts joined with `'\n'`, so a single part is sent
 verbatim, `''` included; then, each only when set, `n` from `count`, `size` from the table
 below (both knobs set; with neither, no size field is sent and the provider default
@@ -607,7 +646,8 @@ honours, and with which values, is per model and not recorded here: the live cat
 (`GET https://openrouter.ai/api/v1/images/models`) lists each model's
 `supported_parameters`.
 **Gates**, in this order, each throwing `ProviderError('invalid_request')` before any fetch:
-a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here;
+a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here and
+this adapter does not yet map the API's svg output, so it rejects `'svg'` before any fetch;
 any part that is not a text part, since reference images (the API's `input_references`) are
 an edit surface this adapter does not map. There is no pair or size gate: each knob travels
 alone, in its own field.
@@ -1018,6 +1058,62 @@ from the header through a pure, dependency-free reader with this contract:
   signature, or adapter-stated dimensions that disagree with the header →
   `malformed_response`. A dimension is never guessed.
 
+**SVG output (§3 point 4c).** An operation with `format: 'svg'` may declare an `svg` block,
+validated at `createSwitch` like the `image` block: an object whose only keys are `count` (a
+safe integer, 1 to 10, the same provider-neutral bound as images; a model's own lower limit
+answers as that model's error) and `aspectRatio` (one of the seven `AspectRatio` values; no
+`'auto'`, since an unset knob already means the provider chooses). A vector has no pixel
+size, so there is no `size` and no `background`. An `svg` block on any other format, or an
+`image` block on `'svg'`, is `INVALID_CONFIG`. The validated knobs are snapshotted and
+copied into `responseFormat: { type: 'svg', ...svg }`, unset knobs absent.
+
+A complete response carries the documents in `svgs` as `ProviderSvg { mediaType:
+'image/svg+xml'; data }`, the document bytes in §6-grammar base64; `images` stays raster
+only. The core normalizes each into a frozen `GeneratedSvg { type: 'svg'; mediaType:
+'image/svg+xml'; data }` whose `data` is the provider's base64, unchanged: the bytes are
+handed back losslessly, with no width or height, which a vector does not have.
+`svgOutputSchema` is the schema of that already-normalized output (at least one document,
+then shape only); it is not an SVG parser, sanitizer or validator of a provider's response.
+
+The three response caps (§3 point 4c: 16 documents, 10 000 000 base64 characters per
+document, 40 000 000 across the response) are read before any decode. They bound the core's
+scan and decode, not network transfer or the transport's JSON parse, which have finished by
+the time they apply. The check below is synchronous and linear in the document's length, so
+its worst case for one response is bounded by the 40 000 000-character cap.
+
+**SVG document check.** Per document, one at a time, in order, over bytes and never over a
+decoded string; any failure → `malformed_response`:
+
+1. The base64 grammar above, over the whole string, then a decode of the whole document.
+2. **Strict UTF-8** over every byte (RFC 3629, no replacement characters): a stray
+   continuation byte, an overlong form, a surrogate (U+D800 to U+DFFF), a code point above
+   U+10FFFF, or a truncated sequence is refused, and so is a NUL (0x00) anywhere. A UTF-16
+   document fails here, with or without its byte order mark (`FE FF`, `FF FE`).
+3. **The prolog, tokenized** (never a substring search): an optional UTF-8 byte order mark
+   (`EF BB BF`); then an optional XML declaration, only at the very start after the mark:
+   `<?xml` S `version` Eq a quoted `1.` and one or more ASCII digits, then optionally S
+   `encoding` Eq a quoted `UTF-8` (ASCII case-insensitive; any other encoding refused), then
+   optionally S `standalone` Eq a quoted `yes` or `no`, then S? `?>`, where S is one or more
+   of space, tab, CR and LF (not JavaScript's `\s`), Eq is S? `=` S?, and both quote styles
+   are accepted when they match; then any mix of S and comments `<!--` … `-->` whose body
+   contains no `--`. An unterminated comment or declaration is refused.
+4. **The root:** the first token after the prolog must be exactly the bytes `<svg` followed
+   by S, `>` or `/>`. Anything else there is refused: a DOCTYPE in any case, any other `<!`,
+   any processing instruction (`<?xml-stylesheet …?>` included), text, another element,
+   `<svgx`, `<SVG`, a prefixed `<svg:svg`. The scan stops at the root.
+
+A DOCTYPE can only legally appear in the prolog, so this refuses every real DTD, and with it
+custom entities, without false hits on text inside the document (a comment or CDATA section
+inside the root that mentions `<!DOCTYPE` or `<!ENTITY` is content). Nothing after the root
+is checked: there is no denylist of scripts, event handlers, `foreignObject`, CSS or external
+`href`/`url()` references, because a partial scanner would read as a sanitizer it is not.
+
+**The promise, in full:** the library guarantees an SVG-rooted UTF-8 document with no DTD:
+the root element is named `svg`, and its namespace is not checked. It does not guarantee
+well-formed XML, and it does not guarantee safe content. **SVG is
+active content:** sanitize it with a maintained sanitizer, or rasterize it with a
+network-disabled, resource-bounded renderer; never inject it into a page or serve it as is.
+
 **String domain.** Every string that reaches a store (operation names, provider
 registration IDs, `OperationRoute`/`RouteTarget` `provider` and `model`, `subjectId`,
 `ReservationEnvelope.reservationId`, and `AttemptRecord.provider`/`model`) is well-formed
@@ -1127,9 +1223,10 @@ only on pass.
 Normalization formulas are fixed per adapter in §5c. The universal rule: **required base
 counters missing or invalid → the attempt's usage is `null`** (never a fabricated zero);
 only explicitly additive-optional categories (Anthropic cache fields, Gemini thought
-tokens) default to 0. The optional `imageOutputTokens` is an "of which" count inside
-`outputTokens`: present and a non-negative safe integer at most `outputTokens`, or absent;
-present and invalid → the whole usage is `null`. Raw provider usage is not exposed.
+tokens) default to 0. The optional `imageOutputTokens` is an "of which" count of visual
+output (raster images and SVG documents) inside `outputTokens`: present and a non-negative
+safe integer at most `outputTokens`, or absent; present and invalid → the whole usage is
+`null`. Raw provider usage is not exposed.
 **Aggregates (normative):** `result.usage` = field-wise sum over attempts with non-null
 usage (`{0,0}` when none); `usageComplete` = true iff every dispatched attempt has non-null
 usage AND neither base aggregate field overflowed (field-wise clamp to
@@ -1141,11 +1238,16 @@ non-negative number is authoritative and the pricing table is not consulted; an 
 reported value is treated as absent (it never fails the attempt). Otherwise, with `textOut
 = outputTokens − (imageOutputTokens ?? 0)`, `cost = inputTokens × inputPerM/1e6 + textOut ×
 outputPerM/1e6 + imageOutputTokens × imageOutputPerM/1e6`, priced by registered provider
-ID + model, under three rules: usage carrying `imageOutputTokens > 0` against a price
+ID + model, under four rules: usage carrying `imageOutputTokens > 0` against a price
 without `imageOutputPerM` → `null`; an `image`-format attempt whose usage has `outputTokens
 > 0` and no `imageOutputTokens` → `null`, whatever the response kind or image count (the
-split is unknown, and pricing image tokens at the text rate would be fabricated); usage
-without the field on any other format prices as before. Every dispatched attempt is
+split is unknown, and pricing image tokens at the text rate would be fabricated); an
+`svg`-format attempt whose usage has no `imageOutputTokens` → `null`, whatever
+`outputTokens` says, zero included, and whatever the response kind (vector models are
+charged per document, not per token, so an input-only price would understate the attempt);
+usage without the field on any other format prices as before. With an explicit split, an
+svg attempt prices by the same formula as an image one: `imageOutputTokens` counts visual
+output tokens, raster and vector alike. Every dispatched attempt is
 potentially billable: if any dispatched attempt's cost is `null`, aggregate `cost` is
 `null`, and so is an aggregate whose sum is not finite (two reported costs near the largest
 double overflow to infinity, which no run ever cost). Cached-token discounts, tiered
@@ -1179,12 +1281,12 @@ persists only a whitelist of route fields, needs updating. Coverage:
 - **Provider:** mandatory success dispatch (correct `kind`/text/usage shape); honors
   `signal`; classifies each supplied scenario via `ProviderResponse.kind` or
   `ProviderError`; respects `responseFormat` per its capability; normalizes usage or
-  returns `null`; and carries three optional media scenarios, `document`, `image` and
-  `image_output`. All three are success-class: the backend answers normally, and each is
-  verified by dispatching its own request from `requests` rather than the shared
-  `requestFactory`, because what is under test is the request's media. Each runs only when
-  BOTH its scenario callback and its matching request are supplied; with either absent it
-  is reported as unverified like any other unsupplied scenario. For `document` and `image`
+  returns `null`; and carries four optional media scenarios, `document`, `image`,
+  `image_output` and `svg_output`. All four are success-class: the backend answers
+  normally, and each is verified by dispatching its own request from `requests` rather than
+  the shared `requestFactory`, because what is under test is the request's media. Each runs
+  only when BOTH its scenario callback and its matching request are supplied; with either
+  absent it is reported as unverified like any other unsupplied scenario. For `document` and `image`
   the dispatched request must carry a file part of the scenario's media class —
   `application/pdf` for `document`, an `image/*` type for `image` — so a text-only request
   fails the scenario rather than passing it, and the dispatch must answer `kind:
@@ -1196,8 +1298,15 @@ persists only a whitelist of route fields, needs updating. Coverage:
   positive safe integers or both absent) and a usage that is `null` or well-formed,
   `imageOutputTokens` included when present. The suite dispatches to the adapter directly,
   so it asserts the adapter's contract; that every `GeneratedImage` an adopter receives is
-  dimensioned is core behaviour, tested internally. Skipped optional scenarios are reported
-  as unverified.
+  dimensioned is core behaviour, tested internally. For `svg_output` the dispatched request
+  must carry `responseFormat.type: 'svg'` (a request without it fails the scenario), and the
+  dispatch must answer `kind: 'complete'` with `svgs` holding one to 16 elements, each with
+  `mediaType` exactly `image/svg+xml` and `data` a string of at most 10 000 000 characters
+  under the §6 base64 grammar, at most 40 000 000 characters across them all, and a
+  well-formed or `null` usage. That is the `ProviderSvg` contract and all three §3 point 4c
+  caps (count, per document, per response), read in the core's order, nothing more: the SVG document
+  check (UTF-8, prolog, root) is core behaviour, tested internally, since the suite does not
+  run the core. Skipped optional scenarios are reported as unverified.
   Core-behavior
   checks are internal package tests, not part of this suite: state machine, matrices,
   sanitization, validation-on-read, default-restoration, effective-quota precedence
