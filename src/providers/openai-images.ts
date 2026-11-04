@@ -27,6 +27,7 @@ import {
   isWireBase64,
   MAX_GENERATED_IMAGE_CHARACTERS,
   MAX_GENERATED_IMAGES,
+  ownField,
   throwForStatus,
 } from './transport'
 
@@ -129,8 +130,8 @@ async function completeImages(
   // A refusal is read before anything else in the body: the Images API reports a blocked
   // prompt as an error response, and that is a refusal (§5b), not a bad request. Like any
   // refusal it keeps the usage the body reports, which is usually none.
-  if (body !== null && isImageRefusal(http.status, body)) {
-    return { kind: 'refused', text: '', usage: readImagesUsage(body.usage) }
+  if (body !== null && isImageRefusal(body)) {
+    return { kind: 'refused', text: '', usage: readImagesUsage(ownField(body, 'usage')) }
   }
   if (http.status < 200 || http.status >= 300) {
     throwForStatus(http.status, classifyOpenAIStatus(http.status, http.body))
@@ -200,16 +201,15 @@ function imageBody(
 }
 
 /**
- * Whether an answer is the Images API's refusal (§5c): an `error` object whose code is
- * `moderation_blocked` or the legacy `content_policy_violation`, at any status, or whose type
- * alone is `image_generation_user_error`, on a 4xx only. Outside 4xx a type-only match would
- * turn a retryable server failure into a terminal refusal, so there it classifies by status.
+ * Whether an answer is the Images API's refusal (§5c): an `error` object whose own `code` is
+ * `moderation_blocked` or the legacy `content_policy_violation`, at any status. The type
+ * alone is not one: a rejected size or background carries it too.
  */
-function isImageRefusal(status: number, body: Record<string, unknown>): boolean {
-  if (!isRecord(body.error)) return false
-  const { code, type } = body.error
-  if (code === 'moderation_blocked' || code === 'content_policy_violation') return true
-  return type === 'image_generation_user_error' && status >= 400 && status < 500
+function isImageRefusal(body: Record<string, unknown>): boolean {
+  const error = ownField(body, 'error')
+  if (!isRecord(error)) return false
+  const code = ownField(error, 'code')
+  return code === 'moderation_blocked' || code === 'content_policy_violation'
 }
 
 /**
@@ -218,7 +218,7 @@ function isImageRefusal(status: number, body: Record<string, unknown>): boolean 
  * images, which the core records as the output rejection. There is never any text.
  */
 function readImagesResponse(body: Record<string, unknown>, status: number): ProviderResponse {
-  const usage = readImagesUsage(body.usage)
+  const usage = readImagesUsage(ownField(body, 'usage'))
   const data: unknown = body.data
   if (!Array.isArray(data)) malformed(status)
   const mediaType = readImageMediaType(body.output_format, status)
@@ -287,14 +287,15 @@ function readResponseSize(value: unknown): { width: number; height: number } | n
  * Usage (§5c): `input_tokens` and `output_tokens` are required. The image share is read from
  * `output_tokens_details.image_tokens` when it is a count no greater than the output tokens;
  * otherwise it is left absent, since assuming the total was all images would be a guess.
+ * Own fields only: an inherited getter that threw would unmake a refusal.
  */
 function readImagesUsage(raw: unknown): TokenUsage | null {
   if (!isRecord(raw)) return null
-  const usage = buildUsage(raw.input_tokens, raw.output_tokens)
+  const usage = buildUsage(ownField(raw, 'input_tokens'), ownField(raw, 'output_tokens'))
   if (usage === null) return null
-  const details = raw.output_tokens_details
+  const details = ownField(raw, 'output_tokens_details')
   if (!isRecord(details)) return usage
-  const imageOutputTokens = asTokenCount(details.image_tokens)
+  const imageOutputTokens = asTokenCount(ownField(details, 'image_tokens'))
   if (imageOutputTokens === null || imageOutputTokens > usage.outputTokens) return usage
   return { ...usage, imageOutputTokens }
 }

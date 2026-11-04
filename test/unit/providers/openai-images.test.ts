@@ -15,10 +15,13 @@ import { base64, png } from '../core/image-fixtures'
 import {
   baseRequest,
   captureRequests,
+  inheritedValue,
   installFetch,
   jsonResponse,
   SENTINEL,
   textParts,
+  throwingGetter,
+  withInherited,
   withPrepared,
 } from './helpers'
 
@@ -572,18 +575,12 @@ describe('refusal', () => {
       200,
       { error: { code: 'moderation_blocked' }, data: [{ b64_json: PNG_DATA }] },
     ],
-    ['image_generation_user_error alone at 400', 400, USER_ERROR],
-    ['image_generation_user_error alone at 403', 403, USER_ERROR],
-    ['image_generation_user_error alone at 408', 408, USER_ERROR],
-    ['image_generation_user_error alone at 429', 429, USER_ERROR],
-    ['image_generation_user_error alone at 499', 499, USER_ERROR],
   ])('returns refused for %s', async (_label, status, body) => {
     expect(await runImage(status, body)).toEqual({ kind: 'refused', text: '', usage: null })
   })
 
   it.each([
     ['moderation_blocked', 400, { error: { code: 'moderation_blocked' } }],
-    ['image_generation_user_error alone', 400, USER_ERROR],
     ['moderation_blocked at 500', 500, { error: { code: 'moderation_blocked' } }],
   ])('keeps the usage a refusal reports, for %s', async (_label, status, body) => {
     const response = await runImage(status, {
@@ -605,12 +602,45 @@ describe('refusal', () => {
     expect(response).toEqual({ kind: 'refused', text: '', usage: null })
   })
 
-  // Outside 4xx the type alone is not enough: a server failure that happens to carry it stays
-  // retryable and can fall back, rather than ending the run as a refusal.
-  it.each([500, 502, 503, 529])(
-    'classifies image_generation_user_error alone at %i by its status, as transient',
-    async (status) => {
-      await expect(runImage(status, USER_ERROR)).rejects.toSatisfy(isKind('transient'))
+  // The type alone is not a refusal: the API gives it to a rejected setting as well, so an
+  // answer without a moderation code classifies by its status, whatever else it carries.
+  it.each([
+    ['at 400', 400, USER_ERROR, 'invalid_request'],
+    ['at 413', 413, USER_ERROR, 'invalid_request'],
+    ['at 499', 499, USER_ERROR, 'invalid_request'],
+    ['at 403', 403, USER_ERROR, 'auth'],
+    ['at 404', 404, USER_ERROR, 'model_not_found'],
+    ['at 408', 408, USER_ERROR, 'transient'],
+    ['at 429', 429, USER_ERROR, 'rate_limit'],
+    ['at 500', 500, USER_ERROR, 'transient'],
+    ['at 503', 503, USER_ERROR, 'transient'],
+    [
+      'with a null code and param',
+      400,
+      { error: { type: 'image_generation_user_error', code: null, param: null } },
+      'invalid_request',
+    ],
+    [
+      'with an unknown code',
+      400,
+      { error: { type: 'image_generation_user_error', code: 'unexpected_code', param: null } },
+      'invalid_request',
+    ],
+    [
+      'with a code that is not a string',
+      400,
+      { error: { type: 'image_generation_user_error', code: 400, param: null } },
+      'invalid_request',
+    ],
+  ])(
+    'classifies image_generation_user_error %s by its status',
+    async (_label, status, body, expectedKind) => {
+      const error = await runImage(status, body).then(
+        () => null,
+        (thrown: unknown) => thrown,
+      )
+      expect(ProviderError.is(error) && error.kind === expectedKind).toBe(true)
+      expect((error as ProviderError).status).toBe(status)
     },
   )
 
@@ -628,8 +658,95 @@ describe('refusal', () => {
     ['an unrelated code', { error: { code: 'invalid_value', type: 'invalid_request_error' } }],
     ['an error that is not a record', { error: 'moderation_blocked' }],
     ['the code outside error', { code: 'moderation_blocked' }],
+    ['the code in the message only', { error: { message: 'moderation_blocked' } }],
+    // The code is matched exactly: no case folding, no trimming, no prefix match.
+    ['the code in capitals', { error: { code: 'MODERATION_BLOCKED' } }],
+    ['the code with a leading space', { error: { code: ' moderation_blocked' } }],
+    ['a code that only starts with it', { error: { code: 'moderation_blocked_v2' } }],
+    ['the legacy code in capitals', { error: { code: 'CONTENT_POLICY_VIOLATION' } }],
   ])('classifies a 400 with %s as invalid_request', async (_label, body) => {
     await expect(runImage(400, body)).rejects.toSatisfy(isKind('invalid_request'))
+  })
+
+  it('never reads a moderation code the body does not own', async () => {
+    const response = jsonResponse(400, USER_ERROR)
+    installFetch(() => response)
+    const run = await complete()
+    const error = await withInherited(
+      Object.prototype,
+      { code: inheritedValue('moderation_blocked') },
+      () =>
+        run(imageRequest()).then(
+          () => null,
+          (thrown: unknown) => thrown,
+        ),
+    )
+    expect(ProviderError.is(error) && error.kind === 'invalid_request').toBe(true)
+  })
+
+  /** What a run ends with when Object.prototype carries `fields`; the answer is built first. */
+  async function outcomeUnder(
+    fields: Record<string, PropertyDescriptor>,
+    status: number,
+    body: unknown,
+  ) {
+    const response = jsonResponse(status, body)
+    installFetch(() => response)
+    const run = await complete()
+    return withInherited(Object.prototype, fields, () =>
+      run(imageRequest()).then(
+        (answer) => answer,
+        (thrown: unknown) => thrown,
+      ),
+    )
+  }
+
+  it('never reads a moderation error the body does not own', async () => {
+    const inherited = { error: inheritedValue({ code: 'moderation_blocked' }) }
+    const failed = await outcomeUnder(inherited, 400, {})
+    expect(ProviderError.is(failed) && failed.kind === 'invalid_request').toBe(true)
+    expect(await outcomeUnder(inherited, 200, imagesBody())).toEqual({
+      kind: 'complete',
+      text: '',
+      images: [{ mediaType: 'image/png', data: PNG_DATA }],
+      usage: null,
+    })
+  })
+
+  // A getter that ran and threw here would escape as a raw error: the refusal would become an
+  // unclassified failure, which an adopter may treat as transient and fall back on.
+  it.each(['input_tokens', 'output_tokens', 'output_tokens_details', 'image_tokens'])(
+    'never runs an inherited %s getter on a refusal or an answer',
+    async (name) => {
+      const fields = { [name]: throwingGetter() }
+      expect(
+        await outcomeUnder(fields, 400, { error: { code: 'moderation_blocked' }, usage: {} }),
+      ).toEqual({ kind: 'refused', text: '', usage: null })
+      expect(await outcomeUnder(fields, 200, imagesBody({ usage: {} }))).toEqual(
+        expect.objectContaining({ kind: 'complete', usage: null }),
+      )
+    },
+  )
+
+  it('keeps the base usage when only the inherited details getter would throw', async () => {
+    const fields = { output_tokens_details: throwingGetter() }
+    const usage = { input_tokens: 10, output_tokens: 1200 }
+    expect(
+      await outcomeUnder(fields, 400, { error: { code: 'moderation_blocked' }, usage }),
+    ).toEqual({ kind: 'refused', text: '', usage: { inputTokens: 10, outputTokens: 1200 } })
+    expect(await outcomeUnder(fields, 200, imagesBody({ usage }))).toEqual(
+      expect.objectContaining({ usage: { inputTokens: 10, outputTokens: 1200 } }),
+    )
+  })
+
+  it('never reads usage the body does not own, on a refusal or an answer', async () => {
+    const inherited = { usage: inheritedValue({ input_tokens: 10, output_tokens: 0 }) }
+    expect(
+      await outcomeUnder(inherited, 400, { error: { code: 'moderation_blocked' } }),
+    ).toEqual({ kind: 'refused', text: '', usage: null })
+    expect(await outcomeUnder(inherited, 200, imagesBody())).toEqual(
+      expect.objectContaining({ kind: 'complete', usage: null }),
+    )
   })
 })
 
