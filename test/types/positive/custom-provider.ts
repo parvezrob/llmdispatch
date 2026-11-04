@@ -1,5 +1,5 @@
 // @targets spec, package
-// The README's custom provider adapter, compiled as it is printed there. It is the shape
+// The guide's custom provider adapter, compiled as it is printed there. It is the shape
 // every adopter writing their own transport starts from, so both the interface it
 // implements and the error it throws have to be reachable from the package root.
 import { ProviderError, type Provider } from 'llmdispatch'

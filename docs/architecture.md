@@ -111,6 +111,43 @@ The public types live in one module and are re-exported from the entry points, s
 adopters can see is declared exactly once. That module arrives with the first
 implementation; the rules already name it.
 
+## Where image and SVG output sit
+
+An image or SVG operation runs through the same state machine as a text one: the same
+config, quota and fallback stages, the same single provider call per attempt. What differs
+is the attempt's output stage, spec §3 points 4b and 4c, and all of it is in `core/`:
+
+- `run.ts` builds the request, copying the operation's `image` or `svg` block into
+  `responseFormat` as it was declared. Reading the response, it looks at `images` only for
+  an image operation and at `svgs` only for an svg one, and turns each `ProviderImage` into
+  a frozen `GeneratedImage` with its dimensions (§3 point 4b).
+- `image-output.ts` owns what that raster stage reads against: the three media types, the
+  two response caps (32 images, and 30 000 000 base64 characters per image) and
+  `imageOutputSchema`.
+- `image-header.ts` is the header reader (§6). It reads width and height from a bounded
+  base64 prefix of a PNG, WebP or JPEG, never decoding the whole image, and answers
+  "unreadable" rather than guessing. Dimensions an adapter states are checked against it.
+- `svg-output.ts` is the vector stage (§3 point 4c), with `svgOutputSchema`, and
+  `svg-document.ts` holds the SVG document check (§6) and its three caps (16 documents,
+  10 000 000 base64 characters per document, 40 000 000 per response). The check decodes
+  one document at a time, validates strict UTF-8 by hand, tokenizes the prolog and stops
+  where the root element starts: it establishes an SVG-rooted UTF-8 document with no DTD,
+  and is neither an XML parser nor a sanitizer.
+- `output.ts` hands the resulting `{ images, text }` or `{ svgs, text }` to the output
+  schema and the quality gate, as it hands parsed JSON.
+
+Every cap is read before the work it bounds: the count before any element, a length before
+that element's scan. The caps bound the core's own decoding, not the download, which the
+transport has finished by then.
+
+The adapters never import `core/`, so a rule both sides apply exists twice. The media
+types, the base64 grammar and the response caps the image adapters apply before handing
+anything back are restated in `providers/transport.ts`, the conformance harness restates
+the SVG caps, and so does the live check's probe script. Unit tests hold each copy equal
+to the core's original, so a copy cannot drift. The header reader and the document check
+have no copy in `src/`: an adapter hands back bytes and a media type, and only the core
+decides whether they are an image or a document it accepts.
+
 ## Why the boundary is worth the trouble
 
 Two properties fall out of it, and both are things this package claims in its README.
