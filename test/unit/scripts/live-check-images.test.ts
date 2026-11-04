@@ -320,6 +320,50 @@ describe('the OpenAI image probe, dry', () => {
     expect(problems[0]).toMatch(/1024x1024, expected 2048x2048$/)
   })
 
+  it('passes an opaque 2K image when the probe asks for no alpha channel', async () => {
+    const opaque = {
+      label: 'one 2K image',
+      model: 'gpt-image-x',
+      format: 'image',
+      image: { aspectRatio: '1:1', size: '2K' },
+      adapterOptions: { quality: 'low' },
+      expect: { mediaType: 'image/png', pixels: '2048x2048', usage: true },
+    }
+    const { requests } = captureRequests(() =>
+      jsonResponse(200, {
+        size: '2048x2048',
+        data: [{ b64_json: pngOf(2048, 2048, 2) }],
+        usage: { input_tokens: 9, output_tokens: 400 },
+      }),
+    )
+    const { lines, problems } = await probe('openai-images', [opaque])
+    expect(problems).toEqual([])
+    expect(requests[0]?.body).toEqual({
+      model: 'gpt-image-x',
+      prompt: expect.any(String) as string,
+      size: '2048x2048',
+      quality: 'low',
+    })
+    expect(lines[1]).toMatch(/image 1: image\/png 2048x2048, \d+ bytes, no alpha channel$/)
+  })
+
+  it('names a rejected setting as invalid_request with its status, not as a refusal', async () => {
+    captureRequests(() =>
+      jsonResponse(400, {
+        error: {
+          message: 'Transparent background is not supported for this model.',
+          type: 'image_generation_user_error',
+          param: 'background',
+          code: 'invalid_value',
+        },
+      }),
+    )
+    const { problems } = await probe('openai-images', [TRANSPARENT])
+    expect(problems).toEqual([
+      'gpt-image-x (two transparent 1K images): LLMDispatchError(PROVIDER_FAILED), final attempt invalid_request, HTTP 400',
+    ])
+  })
+
   it('names a classified failure by its code and outcome only', async () => {
     captureRequests(() =>
       jsonResponse(401, { error: { message: 'bad key', code: 'invalid_api_key' } }),

@@ -85,13 +85,15 @@ const IMAGE_PROVIDERS = [
         adapterOptions: { quality: 'low' },
         expect: { mediaType: 'image/png', alpha: true, pixels: '1024x1024', usage: true },
       },
+      // gpt-image-2 rejects a transparent background with a 400 (seen 2026-11-04), so this
+      // probe leaves the background unset and the alpha question to the older model above.
       {
-        label: 'one transparent 2K image',
+        label: 'one 2K image',
         model: 'gpt-image-2',
         format: 'image',
-        image: { aspectRatio: '1:1', size: '2K', background: 'transparent' },
+        image: { aspectRatio: '1:1', size: '2K' },
         adapterOptions: { quality: 'low' },
-        expect: { mediaType: 'image/png', alpha: true, pixels: '2048x2048', usage: true },
+        expect: { mediaType: 'image/png', pixels: '2048x2048', usage: true },
       },
     ],
   },
