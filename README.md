@@ -74,6 +74,8 @@ console.log(result.data)
 
 The fallback needs its own API key. Delete the `fallback` line and the second provider if you only have one.
 
+A key that resolves to `undefined` or `''` fails the run before any quota is used, as `INVALID_CONFIG` with the message `invalid configuration for "summarize": provider "openai" could not be prepared`. The reason is only in the error's `cause`, which is not sanitized (see the guide's [Errors](./docs/guide.md#errors)).
+
 ## Documents and images
 
 A prompt can return an array of content parts instead of a string, so an operation can send a PDF or an image alongside its text:
@@ -110,9 +112,9 @@ const ai = createSwitch({
     artwork: defineOperation({
       input: z.object({ subject: z.string().max(500) }),
       output: imageOutputSchema,
-      prompt: ({ subject }) => `A flat illustration of ${subject}, isolated, with nothing behind it`,
+      prompt: ({ subject }) => `A flat illustration of ${subject} on a plain white background`,
       format: 'image',
-      image: { count: 2, aspectRatio: '1:1', size: '2K', background: 'transparent' },
+      image: { count: 2, aspectRatio: '1:1', size: '2K' },
       quota: { perDay: 5 },
       timeoutMs: 120_000,
       defaultRoute: { provider: 'images', model: 'gpt-image-2' },
@@ -140,9 +142,15 @@ A model that does not take a value answers with its own error, which usually cla
 
 | Factory | Use it for | What to know |
 | --- | --- | --- |
-| `openaiImages()` | Artwork that needs a transparent background | OpenAI's Images API, whose GPT Image models take a transparent background natively. The adapter never asks for another format, so images come back as PNG. `aspectRatio` and `size` must be set together, and `4K` exists only at `16:9`; anything else fails before a request is made. |
-| `gemini()` | Opaque art such as posters and previews | The same factory as for text. Native 4K, and usage split by modality, so image tokens can be priced. `background: 'transparent'` fails before a request is made, since no Gemini image model produces an alpha channel. |
+| `openaiImages()` | Artwork, with a transparent background on the older models (as of 2026-11-04) | OpenAI's Images API. The adapter never asks for another format, so images come back as PNG. `aspectRatio` and `size` must be set together, and `4K` exists only at `16:9`; anything else fails before a request is sent (see below). |
+| `gemini()` | Opaque art such as posters and previews | The same factory as for text. Native 4K, and usage split by modality, so image tokens can be priced. `background: 'transparent'` fails before a request is sent, since no Gemini image model produces an alpha channel. |
 | `openrouterImages()` | Many image models with one key | OpenRouter's Image API. When a response carries OpenRouter's charge in `usage.cost`, that is the call's cost; when it does not, your price table applies, or the cost is `null` (see the guide's Cost section). Every knob is sent as it is, and which ones a model honours is listed per model in the catalogue at https://openrouter.ai/api/v1/images/models. |
+
+A setting an adapter refuses before sending (the `openaiImages` size rules, Gemini's transparent background) still fails inside the attempt, after the run's quota slot is committed: it uses the slot, and the run fails with `PROVIDER_FAILED`, its attempt `invalid_request` with no `status`. It does not fall back.
+
+`openaiImages({ apiKey, quality })` takes one more option, `quality`: `'low'`, `'medium'`, `'high'`, `'xhigh'` or `'max'`, sent to OpenAI as it is. The type is the whole check; which model takes which value is OpenAI's to decide, and a value a model does not take is its own 400. Left out, nothing is sent and OpenAI's default, `auto`, applies, which on 2026-11-04 chose high quality and cost about 20 times what `low` did for one 1K image. Set it to control the cost. It is a factory option, one value per registered provider, and has nothing to do with an operation's `quality` gate below.
+
+As of 2026-11-04, OpenAI's models differ in what they take. The older GPT Image models, `gpt-image-1` and `gpt-image-1-mini`, accept `size: '1K'` only, at `1:1`, `3:2` or `2:3`. `gpt-image-2` rejects `background: 'transparent'`. OpenAI answers either mistake with a 400, which ends the run as `PROVIDER_FAILED` with an `invalid_request` attempt carrying status 400, not as a refusal.
 
 Whether Gemini's image models honour `count` (sent as `candidateCount`) is not yet verified. A model may return fewer images than asked for, or reject the request with `invalid_request`. Until that is settled, ask Gemini for one image per run, and use `openaiImages` or `openrouterImages` when one run must return several.
 
@@ -150,19 +158,18 @@ Whether Gemini's image models honour `count` (sent as `candidateCount`) is not y
 
 An image costs tens of times what a text call does, and `count` multiplies it. **Give every image operation its own quota.** One run uses one quota slot whatever `count` says, so the quota limits runs, not images. **Set `timeoutMs` to around `120_000`** for image operations: a 2K image, a larger model or several images can take longer than the 60-second default.
 
-There are two places to screen content, and both are yours:
+Screening content is yours to do. Screen the prompt before calling `run()`, with your own check, so a rejected prompt costs nothing and you keep the reason. An input schema `.refine()` also runs before any quota is reserved, but it fails as `INVALID_INPUT` with a fixed message that does not say which rule failed.
+
+Screen what comes back either after `run()` returns, or in the quality gate. In the gate, throw rather than answer `{ ok: false }`:
 
 ```ts
-const blocked = /\b(?:logo|trademark)\b/i // your own list
-
-input: z.object({
-  subject: z.string().max(500).refine((subject) => !blocked.test(subject), 'not allowed'),
-}),
-quality: async ({ data }) =>
-  (await screenImages(data.images)) ? { ok: true } : { ok: false, reason: 'screened out' },
+quality: async ({ data }) => {
+  if (!(await screenImages(data.images))) throw new ScreenedOutError() // your own class
+  return { ok: true }
+},
 ```
 
-The input schema runs before any quota is reserved or any money is spent, so a prompt it rejects costs nothing and fails as `INVALID_INPUT`. The quality gate runs after the images have been generated and paid for. Its `{ ok: false }` is an output rejection, which falls back like any other.
+A throw is terminal: the attempt is recorded as `quality_error`, there is no fallback, and `run()` rejects with your own error rather than an `LLMDispatchError`. `{ ok: false }` is an output rejection, which falls back when the route has a fallback: that model generates, and bills, a second time, and it may be a more permissive one. The first images are paid for either way.
 
 When a provider's own policy blocks a request, the attempt ends `refused`. That is terminal: there is no fallback, the slot stays used, and the run fails with `PROVIDER_FAILED`, with the outcome in `error.attempts`. OpenRouter answers some blocks with a 403 instead, which classifies `invalid_request` and is just as terminal. `openaiImages` never lowers OpenAI's moderation setting.
 
