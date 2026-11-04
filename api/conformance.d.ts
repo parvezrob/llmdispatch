@@ -56,9 +56,10 @@ export declare function runUsageStoreConformance(opts: {
 type OptionalScenario = 'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient' | 'malformed_response' | 'truncated' | 'refused';
 /**
  * Optional media scenarios: success-class conditions dispatching their own request, one
- * carrying a file of the named class or, for `image_output`, asking for images back.
+ * carrying a file of the named class or, for `image_output` and `svg_output`, asking for
+ * images or SVG documents back.
  */
-type MediaScenario = 'document' | 'image' | 'image_output';
+type MediaScenario = 'document' | 'image' | 'image_output' | 'svg_output';
 /** Controls that let the suite verify responseFormat and capability without guessing. */
 interface ProviderConformanceControls {
   /** Declares whether the provider under test supports native JSON mode. */
