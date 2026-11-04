@@ -8,7 +8,7 @@
 /**
  * Every name a child may receive. Anything else is a mistake, not something to pass on.
  *
- * The three provider keys are here so a live check can hand one child exactly one of them:
+ * The four provider keys are here so a live check can hand one child exactly one of them:
  * the allowlist is what makes "only this provider's credential" a property of the code
  * rather than of whoever remembered to unset the others.
  */
@@ -21,6 +21,7 @@ const ALLOWED = new Set([
   'GEMINI_API_KEY',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
+  'OPENROUTER_API_KEY',
   'DATABASE_URL',
   'PORT',
   'HOST',
