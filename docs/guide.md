@@ -190,6 +190,7 @@ import { ProviderError, type Provider } from 'llmdispatch'
 const myProvider: Provider = {
   async complete(req) {
     if (req.responseFormat.type === 'image') throw new ProviderError('invalid_request') // unless you generate images
+    if (req.responseFormat.type === 'svg') throw new ProviderError('invalid_request')   // unless you generate SVG
     const res = await callMyBackend(req)                 // req.responseFormat tells you text vs JSON
     if (res.status === 429) throw new ProviderError('rate_limit', { status: 429 })
     if (res.status === 401) throw new ProviderError('auth', { status: 401 })

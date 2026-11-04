@@ -94,12 +94,32 @@ export interface ImageOutput { readonly images: readonly GeneratedImage[]; reado
 // A z.ZodType<ImageOutput> accepting at least one well-formed image; refine it for more.
 export declare const imageOutputSchema: z.ZodType<ImageOutput>
 
+// --- svg output ---
+export interface SvgOptions {
+  readonly count?: number                                // safe integer, 1–10; omitted = provider default (one)
+  readonly aspectRatio?: AspectRatio                     // a vector has no size class and no background
+}
+// As an adapter hands an SVG document back: its bytes, base64.
+export interface ProviderSvg { readonly mediaType: 'image/svg+xml'; readonly data: string }
+// As an adopter receives it: the provider's base64, unchanged. Guaranteed an SVG-rooted UTF-8
+// document with no DTD; NOT well-formed XML and NOT safe content (SVG document check below).
+export interface GeneratedSvg {
+  readonly type: 'svg'
+  readonly mediaType: 'image/svg+xml'
+  readonly data: string
+}
+export interface SvgOutput { readonly svgs: readonly GeneratedSvg[]; readonly text: string }
+// A z.ZodType<SvgOutput> accepting at least one document: the shape of normalized core
+// output, not an SVG parser, sanitizer or validator of a provider's response.
+export declare const svgOutputSchema: z.ZodType<SvgOutput>
+
 export interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In
   output: Out
   prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>
-  format?: 'json' | 'json-any' | 'text' | 'image'        // default 'json' (§3)
+  format?: 'json' | 'json-any' | 'text' | 'image' | 'svg'  // default 'json' (§3)
   image?: ImageOptions                                   // only with format 'image'; validated at createSwitch
+  svg?: SvgOptions                                       // only with format 'svg'; validated at createSwitch
   quality?: (ctx: { input: z.output<In>; data: z.output<Out> }) => QualityVerdict | Promise<QualityVerdict>
   quota?: { perDay: number }                             // safe integer, 0–1_000_000 (0 = halted)
   timeoutMs?: number                                     // provider I/O timeout; default 60_000; 1_000–600_000
@@ -163,7 +183,8 @@ export interface PreparedProvider {
 export interface ProviderRequest {
   parts: readonly ContentPart[]                          // normalized, non-empty, frozen
   model: string
-  responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' } | ({ type: 'image' } & ImageOptions)
+  responseFormat: { type: 'text' } | { type: 'json'; topLevel: 'object' | 'any' }
+    | ({ type: 'image' } & ImageOptions) | ({ type: 'svg' } & SvgOptions)
   maxOutputTokens?: number
   temperature?: number
   signal: AbortSignal
@@ -173,10 +194,12 @@ export interface ProviderRequest {
 // retained), not as thrown errors. `kind: 'complete'` proceeds to the output pipeline;
 // 'truncated' classifies `truncated`; 'refused' classifies `refused`. `text` may be partial
 // or empty for the non-complete kinds. `images` is read only for an image-format operation
-// (§3). `costUsd` is the provider's own charge and, when finite and non-negative, is
-// authoritative over the pricing table (§7).
+// and `svgs` only for an svg-format one (§3); an adapter omits either rather than setting it
+// to `undefined`. `costUsd` is the provider's own charge and, when finite and non-negative,
+// is authoritative over the pricing table (§7).
 export type ProviderResponse =
-  | { kind: 'complete';  text: string; usage: TokenUsage | null; images?: readonly ProviderImage[]; costUsd?: number }
+  | { kind: 'complete';  text: string; usage: TokenUsage | null; images?: readonly ProviderImage[]
+      svgs?: readonly ProviderSvg[]; costUsd?: number }
   | { kind: 'truncated'; text: string; usage: TokenUsage | null; costUsd?: number }  // text may be partial
   | { kind: 'refused';   text: string; usage: TokenUsage | null; costUsd?: number }  // text may be empty
 export type ProviderErrorKind = 'transient' | 'rate_limit' | 'auth' | 'model_not_found'

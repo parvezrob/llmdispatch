@@ -45,6 +45,10 @@ export type SectionSix = [
   Holds<Identical<Package.TextPart, Spec.TextPart>>,
   Holds<Identical<Package.FilePart, Spec.FilePart>>,
   Holds<Identical<Package.ContentPart, Spec.ContentPart>>,
+  Holds<Identical<Package.SvgOptions, Spec.SvgOptions>>,
+  Holds<Identical<Package.ProviderSvg, Spec.ProviderSvg>>,
+  Holds<Identical<Package.GeneratedSvg, Spec.GeneratedSvg>>,
+  Holds<Identical<Package.SvgOutput, Spec.SvgOutput>>,
   Holds<
     Identical<
       Package.OperationDefinition<z.ZodString, z.ZodNumber>,
@@ -93,6 +97,7 @@ export type SectionSixValues = [
   Holds<Identical<typeof Package.gemini, typeof Spec.gemini>>,
   Holds<Identical<typeof Package.openaiImages, typeof Spec.openaiImages>>,
   Holds<Identical<typeof Package.openrouterImages, typeof Spec.openrouterImages>>,
+  Holds<Identical<typeof Package.svgOutputSchema, typeof Spec.svgOutputSchema>>,
 ]
 
 export type SectionSixB = [

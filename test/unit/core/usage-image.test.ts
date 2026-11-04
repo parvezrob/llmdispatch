@@ -1,6 +1,7 @@
 /**
- * The §7 rules the image split adds: `imageOutputTokens` normalization, the three pricing
- * rules with the split carved out of `outputTokens`, and the aggregate presence rule.
+ * The §7 rules the image split adds: `imageOutputTokens` normalization, the pricing rules
+ * with the split carved out of `outputTokens` (the svg rule included), and the aggregate
+ * presence rule.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -82,6 +83,28 @@ describe('priceAttempt', () => {
     const usage = { inputTokens: 100, outputTokens: 0 }
     expect(priceAttempt(WITH_RATE, 'p', 'm', usage, 'image')).toBeCloseTo(
       (100 * 1000) / 1e6,
+      12,
+    )
+  })
+
+  it('answers null for an svg-format attempt with no split, whatever its output tokens', () => {
+    for (const outputTokens of [0, 30]) {
+      const usage = { inputTokens: 100, outputTokens }
+      expect(priceAttempt(WITH_RATE, 'p', 'm', usage, 'svg')).toBeNull()
+      expect(priceAttempt(WITHOUT_RATE, 'p', 'm', usage, 'svg')).toBeNull()
+    }
+  })
+
+  it('prices an svg-format attempt with a split by the image formula', () => {
+    const usage = { inputTokens: 100, outputTokens: 30, imageOutputTokens: 20 }
+    expect(priceAttempt(WITH_RATE, 'p', 'm', usage, 'svg')).toBeCloseTo(
+      (100 * 1000) / 1e6 + (10 * 2000) / 1e6 + (20 * 40_000) / 1e6,
+      12,
+    )
+    expect(priceAttempt(WITHOUT_RATE, 'p', 'm', usage, 'svg')).toBeNull()
+    const zero = { inputTokens: 100, outputTokens: 30, imageOutputTokens: 0 }
+    expect(priceAttempt(WITHOUT_RATE, 'p', 'm', zero, 'svg')).toBeCloseTo(
+      (100 * 1000) / 1e6 + (30 * 2000) / 1e6,
       12,
     )
   })

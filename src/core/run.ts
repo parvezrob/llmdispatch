@@ -28,6 +28,7 @@ import type {
   AttemptRecord,
   ContentPart,
   GeneratedImage,
+  GeneratedSvg,
   ImageOptions,
   Logger,
   OperationDefinition,
@@ -40,6 +41,7 @@ import type {
   RouteTarget,
   RunResult,
   SettlementFailure,
+  SvgOptions,
   UsageStore,
 } from '../types'
 import { AbortRaceLost, raceWithAbort } from './abort'
@@ -57,6 +59,7 @@ import {
   MAX_RESPONSE_IMAGES,
 } from './image-output'
 import { base64Problem, normalizePromptParts } from './parts'
+import { readSvgs } from './svg-output'
 import type { OutputFormat, PricingTable } from './usage'
 import { aggregateAttempts, normalizeUsage, priceAttempt } from './usage'
 import { isCount, isRecord, storeStringProblem } from './validate'
@@ -68,6 +71,8 @@ export interface ValidatedOperation {
   format: OutputFormat
   /** The validated image knobs, frozen, only the ones set; `undefined` outside image format. */
   image: Readonly<ImageOptions> | undefined
+  /** The validated svg knobs, frozen, only the ones set; `undefined` outside svg format. */
+  svg: Readonly<SvgOptions> | undefined
   quota: { perDay: number } | undefined
   timeoutMs: number
   defaultRoute: OperationRoute | undefined
@@ -427,6 +432,7 @@ type ReadResponse =
       kind: 'complete'
       text: string
       images: readonly GeneratedImage[] | undefined
+      svgs: readonly GeneratedSvg[] | undefined
     } & Billing)
   | ({ kind: 'truncated' | 'refused' } & Billing)
   | ({ kind: 'malformed' } & Billing)
@@ -440,7 +446,8 @@ const IMAGE_MEDIA_TYPE_SET: ReadonlySet<string> = new Set(IMAGE_MEDIA_TYPES)
  * pipeline, but `text: string` belongs to every variant of the union, so a non-string body
  * is still a §6 shape failure. Every property is read once behind a guard, so a hostile
  * response classifies `malformed_response` instead of throwing into the state machine.
- * `images` is read in image format only (§3 point 4b); `costUsd` on every kind (§7).
+ * `images` is read in image format only (§3 point 4b), `svgs` in svg format only (§3 point
+ * 4c); `costUsd` on every kind (§7).
  */
 function readResponse(response: unknown, format: OutputFormat): ReadResponse {
   // Billing is read first and kept outside the guard: a property that throws later in the
@@ -458,10 +465,17 @@ function readResponse(response: unknown, format: OutputFormat): ReadResponse {
     const text = response.text
     if (typeof text !== 'string') return { kind: 'malformed', usage, costUsd }
     if (kind !== 'complete') return { kind, usage, costUsd }
-    if (format !== 'image') return { kind, text, images: undefined, usage, costUsd }
-    const images = readImages(response.images)
-    if (images === null) return { kind: 'malformed', usage, costUsd }
-    return { kind, text, images, usage, costUsd }
+    if (format === 'image') {
+      const images = readImages(response.images)
+      if (images === null) return { kind: 'malformed', usage, costUsd }
+      return { kind, text, images, svgs: undefined, usage, costUsd }
+    }
+    if (format === 'svg') {
+      const svgs = readSvgs(response.svgs)
+      if (svgs === null) return { kind: 'malformed', usage, costUsd }
+      return { kind, text, images: undefined, svgs, usage, costUsd }
+    }
+    return { kind, text, images: undefined, svgs: undefined, usage, costUsd }
   } catch {
     return { kind: 'malformed', usage, costUsd }
   }
@@ -520,6 +534,7 @@ function readImages(value: unknown): readonly GeneratedImage[] | null {
 /** The §3 `responseFormat` for an operation, from the `createSwitch` snapshot. */
 function responseFormatOf(op: ValidatedOperation): ProviderRequest['responseFormat'] {
   if (op.format === 'image') return { type: 'image', ...op.image }
+  if (op.format === 'svg') return { type: 'svg', ...op.svg }
   if (op.format === 'text') return { type: 'text' }
   if (op.format === 'json-any') return { type: 'json', topLevel: 'any' }
   return { type: 'json', topLevel: 'object' }
@@ -646,7 +661,7 @@ async function executeAttempt(
   }
 
   const output = await processOutput(
-    { text: read.text, images: read.images },
+    { text: read.text, images: read.images, svgs: read.svgs },
     op.format,
     op.definition,
     shared.parsedInput,

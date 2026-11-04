@@ -26,6 +26,10 @@ export type {
   ProviderImage,
   GeneratedImage,
   ImageOutput,
+  SvgOptions,
+  ProviderSvg,
+  GeneratedSvg,
+  SvgOutput,
   OperationDefinition,
   QualityVerdict,
   OperationRoute,
@@ -63,6 +67,7 @@ export { memoryStores } from './stores/memory'
 export { postgresStores } from './stores/postgres'
 export { defineOperation, defineOperations } from './core/create-switch'
 export { imageOutputSchema } from './core/image-output'
+export { svgOutputSchema } from './core/svg-output'
 
 /**
  * Builds a configured switch: providers, operations and stores in; `run` plus the admin

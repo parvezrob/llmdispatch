@@ -103,13 +103,42 @@ interface ImageOutput {
   readonly images: readonly GeneratedImage[];
   readonly text: string;
 }
+/**
+ * The knobs an svg operation declares (§6). Every one is optional; an unset knob never
+ * reaches the wire. A vector has no pixel size, so there is no `size` and no `background`.
+ */
+interface SvgOptions {
+  readonly count?: number;
+  readonly aspectRatio?: AspectRatio;
+}
+/** One generated SVG document as an adapter hands it back (§6): the bytes, base64. */
+interface ProviderSvg {
+  readonly mediaType: 'image/svg+xml';
+  readonly data: string;
+}
+/**
+ * One generated SVG document as an adopter receives it (§6): base64 of the document bytes,
+ * exactly as the provider sent them. The core guarantees an SVG-rooted UTF-8 document with
+ * no DTD, not well-formed XML and not safe content: sanitize or rasterize it before use.
+ */
+interface GeneratedSvg {
+  readonly type: 'svg';
+  readonly mediaType: 'image/svg+xml';
+  readonly data: string;
+}
+/** What an svg operation's output schema receives (§3): the documents, and any text beside them. */
+interface SvgOutput {
+  readonly svgs: readonly GeneratedSvg[];
+  readonly text: string;
+}
 /** One operation: its schemas, its prompt, and the optional gates around them. */
 interface OperationDefinition<In extends z.ZodType, Out extends z.ZodType> {
   input: In;
   output: Out;
   prompt: (input: z.output<In>) => string | readonly ContentPart[] | Promise<string | readonly ContentPart[]>;
-  format?: 'json' | 'json-any' | 'text' | 'image';
+  format?: 'json' | 'json-any' | 'text' | 'image' | 'svg';
   image?: ImageOptions;
+  svg?: SvgOptions;
   quality?: (ctx: {
     input: z.output<In>;
     data: z.output<Out>;
@@ -214,7 +243,9 @@ interface ProviderRequest {
     topLevel: 'object' | 'any';
   } | ({
     type: 'image';
-  } & ImageOptions);
+  } & ImageOptions) | ({
+    type: 'svg';
+  } & SvgOptions);
   maxOutputTokens?: number;
   temperature?: number;
   signal: AbortSignal;
@@ -226,14 +257,16 @@ interface ProviderRequest {
  * an error response (§5c), so they travel on the RESPONSE (usage retained), not as thrown
  * errors. `kind: 'complete'` proceeds to the output pipeline; `'truncated'` classifies
  * `truncated`; `'refused'` classifies `refused`. `images` is read only for an image-format
- * operation (§3). `costUsd` is the provider's own charge for the attempt and, when it is a
- * finite non-negative number, is authoritative over the pricing table (§7).
+ * operation and `svgs` only for an svg-format one (§3); an adapter omits either rather than
+ * setting it to `undefined`. `costUsd` is the provider's own charge for the attempt and,
+ * when it is a finite non-negative number, is authoritative over the pricing table (§7).
  */
 type ProviderResponse = {
   kind: 'complete';
   text: string;
   usage: TokenUsage | null;
   images?: readonly ProviderImage[];
+  svgs?: readonly ProviderSvg[];
   costUsd?: number;
 } | {
   kind: 'truncated';
@@ -291,5 +324,5 @@ interface ConformanceResult {
   failures: string[];
   skipped: string[];
 }
-export { ReservationEnvelope as A, ProviderErrorKind as C, QualityVerdict as D, ProviderResponse as E, Switch as F, TextPart as I, TokenUsage as L, RunResult as M, SettlementFailure as N, QuotaKey as O, StorePair as P, UsageStore as R, Provider as S, ProviderRequest as T, OperationConfigView as _, ConfigStore as a, OperationsMap as b, CreateSwitchConfig as c, GeneratedImageMediaType as d, ImageOptions as f, ModelPrice as g, Logger as h, AttemptRecord as i, RouteTarget as j, QuotaView as k, FilePart as l, ImageSize as m, AspectRatio as n, ConformanceResult as o, ImageOutput as p, AttemptOutcome as r, ContentPart as s, ApiKeyResolver as t, GeneratedImage as u, OperationDefinition as v, ProviderImage as w, PreparedProvider as x, OperationRoute as y };
+export { QuotaKey as A, TextPart as B, Provider as C, ProviderResponse as D, ProviderRequest as E, SettlementFailure as F, UsageStore as H, StorePair as I, SvgOptions as L, ReservationEnvelope as M, RouteTarget as N, ProviderSvg as O, RunResult as P, SvgOutput as R, PreparedProvider as S, ProviderImage as T, TokenUsage as V, ModelPrice as _, ConfigStore as a, OperationRoute as b, CreateSwitchConfig as c, GeneratedImageMediaType as d, GeneratedSvg as f, Logger as g, ImageSize as h, AttemptRecord as i, QuotaView as j, QualityVerdict as k, FilePart as l, ImageOutput as m, AspectRatio as n, ConformanceResult as o, ImageOptions as p, AttemptOutcome as r, ContentPart as s, ApiKeyResolver as t, GeneratedImage as u, OperationConfigView as v, ProviderErrorKind as w, OperationsMap as x, OperationDefinition as y, Switch as z };
 //# sourceMappingURL=types.d.ts.map

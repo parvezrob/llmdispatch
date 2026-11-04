@@ -10,15 +10,24 @@
  */
 
 import { z } from 'zod'
-import type { GeneratedImage, OperationDefinition, QualityVerdict } from '../types'
+import type {
+  GeneratedImage,
+  GeneratedSvg,
+  OperationDefinition,
+  QualityVerdict,
+} from '../types'
 import { AbortRaceLost, raceWithAbort } from './abort'
 import type { OutputFormat } from './usage'
 import { isRecord } from './validate'
 
-/** A completed response as `readResponse` validated it; `images` only in image format. */
+/**
+ * A completed response as `readResponse` validated it; `images` only in image format, `svgs`
+ * only in svg format.
+ */
 export interface CompletedBody {
   readonly text: string
   readonly images: readonly GeneratedImage[] | undefined
+  readonly svgs: readonly GeneratedSvg[] | undefined
 }
 
 /** How processing one completed response ended. */
@@ -74,7 +83,7 @@ function isWellFormedVerdict(value: unknown): value is QualityVerdict {
 /**
  * Runs the §3 pipeline over a completed response.
  *
- * @param body The response text, plus the normalized images in image format.
+ * @param body The response text, plus the normalized images or svgs in their format.
  * @param format The operation's format as `createSwitch` snapshotted it.
  * @param definition The operation, for `output` and `quality`.
  * @param parsedInput What the input schema produced, handed to the quality gate.
@@ -98,6 +107,11 @@ export async function processOutput(
     const images = body.images ?? []
     if (images.length === 0) return { type: 'rejected' }
     candidate = Object.freeze({ images, text })
+  } else if (format === 'svg') {
+    // §3 point 4c: the svg analogue of the above. JSON.parse never sees svg output either.
+    const svgs = body.svgs ?? []
+    if (svgs.length === 0) return { type: 'rejected' }
+    candidate = Object.freeze({ svgs, text })
   } else {
     const unwrapped = unwrapWholeResponseFence(text)
     try {

@@ -22,6 +22,7 @@ import type {
   Provider,
   QuotaView,
   RunResult,
+  SvgOptions,
   Switch,
 } from '../types'
 import { createConfigService } from './config'
@@ -50,7 +51,7 @@ const DEFAULT_CONFIG_TTL_MS = 5000
 /** The label validation uses where no single operation is at fault. */
 const SWITCH_SCOPE = '*'
 
-const FORMATS: ReadonlySet<string> = new Set(['json', 'json-any', 'text', 'image'])
+const FORMATS: ReadonlySet<string> = new Set(['json', 'json-any', 'text', 'image', 'svg'])
 
 /** The §6 image knobs: every key an `image` block may carry, with its allowed values. */
 const IMAGE_KNOBS: ReadonlySet<string> = new Set(['count', 'aspectRatio', 'size', 'background'])
@@ -66,6 +67,10 @@ const ASPECT_RATIOS: ReadonlySet<string> = new Set([
 const IMAGE_SIZES: ReadonlySet<string> = new Set(['1K', '2K', '4K'])
 const BACKGROUNDS: ReadonlySet<string> = new Set(['transparent', 'opaque'])
 const MAX_IMAGE_COUNT = 10
+
+/** The §6 svg knobs: every key an `svg` block may carry. A vector has no size or background. */
+const SVG_KNOBS: ReadonlySet<string> = new Set(['count', 'aspectRatio'])
+const MAX_SVG_COUNT = 10
 
 /**
  * Ties one operation's schemas to its callbacks so inference flows between them.
@@ -208,10 +213,14 @@ function validateOperation(
     declaredFormat !== undefined &&
     (typeof declaredFormat !== 'string' || !FORMATS.has(declaredFormat))
   ) {
-    throw invalidConfigLocal(name, "format must be 'json', 'json-any', 'text' or 'image'")
+    throw invalidConfigLocal(
+      name,
+      "format must be 'json', 'json-any', 'text', 'image' or 'svg'",
+    )
   }
   const format = (declaredFormat ?? 'json') as OutputFormat
   const image = validateImageOptions(name, format, definition.image)
+  const svg = validateSvgOptions(name, format, definition.svg)
   if (definition.quality !== undefined && typeof definition.quality !== 'function') {
     throw invalidConfigLocal(name, 'quality must be a function when present')
   }
@@ -236,7 +245,7 @@ function validateOperation(
     if (!checked.ok) throw invalidConfigLocal(name, `defaultRoute ${checked.problem}`)
     defaultRoute = checked.value
   }
-  return { definition, format, image, quota, timeoutMs, defaultRoute }
+  return { definition, format, image, svg, quota, timeoutMs, defaultRoute }
 }
 
 /**
@@ -292,6 +301,50 @@ function validateImageOptions(
       throw invalidConfigLocal(name, "image.background must be 'transparent' or 'opaque'")
     }
     copy.background = background as NonNullable<ImageOptions['background']>
+  }
+  return Object.freeze(copy)
+}
+
+/**
+ * Validates an operation's `svg` block (spec §6) the way {@link validateImageOptions} does
+ * the `image` block, and answers a frozen copy holding only the knobs that were set.
+ */
+function validateSvgOptions(
+  name: string,
+  format: OutputFormat,
+  value: unknown,
+): Readonly<SvgOptions> | undefined {
+  if (value === undefined) return undefined
+  if (format !== 'svg') {
+    throw invalidConfigLocal(name, "svg is only allowed when format is 'svg'")
+  }
+  if (!isRecord(value)) throw invalidConfigLocal(name, 'svg must be an object when present')
+  for (const key of Object.keys(value)) {
+    if (!SVG_KNOBS.has(key)) throw invalidConfigLocal(name, `svg.${key} is not a known field`)
+  }
+  const { count, aspectRatio } = value
+  const copy: { -readonly [K in keyof SvgOptions]: SvgOptions[K] } = {}
+  if (count !== undefined) {
+    if (
+      !Number.isSafeInteger(count) ||
+      (count as number) < 1 ||
+      (count as number) > MAX_SVG_COUNT
+    ) {
+      throw invalidConfigLocal(
+        name,
+        `svg.count must be an integer from 1 to ${String(MAX_SVG_COUNT)}`,
+      )
+    }
+    copy.count = count as number
+  }
+  if (aspectRatio !== undefined) {
+    if (typeof aspectRatio !== 'string' || !ASPECT_RATIOS.has(aspectRatio)) {
+      throw invalidConfigLocal(
+        name,
+        `svg.aspectRatio must be one of ${[...ASPECT_RATIOS].join(', ')}`,
+      )
+    }
+    copy.aspectRatio = aspectRatio as NonNullable<SvgOptions['aspectRatio']>
   }
   return Object.freeze(copy)
 }

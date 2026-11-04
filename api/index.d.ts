@@ -1,4 +1,4 @@
-import { A as ReservationEnvelope, C as ProviderErrorKind, D as QualityVerdict, E as ProviderResponse, F as Switch, I as TextPart, L as TokenUsage, M as RunResult, N as SettlementFailure, O as QuotaKey, P as StorePair, R as UsageStore, S as Provider, T as ProviderRequest, _ as OperationConfigView, a as ConfigStore, b as OperationsMap, c as CreateSwitchConfig, d as GeneratedImageMediaType, f as ImageOptions, g as ModelPrice, h as Logger, i as AttemptRecord, j as RouteTarget, k as QuotaView, l as FilePart, m as ImageSize, n as AspectRatio, p as ImageOutput, r as AttemptOutcome, s as ContentPart, t as ApiKeyResolver, u as GeneratedImage, v as OperationDefinition, w as ProviderImage, x as PreparedProvider, y as OperationRoute } from "./types.js";
+import { A as QuotaKey, B as TextPart, C as Provider, D as ProviderResponse, E as ProviderRequest, F as SettlementFailure, H as UsageStore, I as StorePair, L as SvgOptions, M as ReservationEnvelope, N as RouteTarget, O as ProviderSvg, P as RunResult, R as SvgOutput, S as PreparedProvider, T as ProviderImage, V as TokenUsage, _ as ModelPrice, a as ConfigStore, b as OperationRoute, c as CreateSwitchConfig, d as GeneratedImageMediaType, f as GeneratedSvg, g as Logger, h as ImageSize, i as AttemptRecord, j as QuotaView, k as QualityVerdict, l as FilePart, m as ImageOutput, n as AspectRatio, p as ImageOptions, r as AttemptOutcome, s as ContentPart, t as ApiKeyResolver, u as GeneratedImage, v as OperationConfigView, w as ProviderErrorKind, x as OperationsMap, y as OperationDefinition, z as Switch } from "./types.js";
 import { z } from "zod";
 /** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
 export declare class LLMDispatchError extends Error {
@@ -127,6 +127,13 @@ export declare function defineOperations<Ops extends OperationsMap>(operations: 
  */
 export declare const imageOutputSchema: z.ZodType<ImageOutput>;
 /**
+ * Accepts exactly what the §3 svg sub-stage produces: at least one document and the text
+ * beside it. It is the schema of the core's already-normalized output, not an SVG parser,
+ * sanitizer or validator of a provider's response: it checks shape only, and the document
+ * check has run before it sees anything. `svgOutputSchema.refine(...)` adds a count.
+ */
+export declare const svgOutputSchema: z.ZodType<SvgOutput>;
+/**
  * Builds a configured switch: providers, operations and stores in; `run` plus the admin
  * surface out (spec §6).
  *
@@ -143,5 +150,5 @@ export declare const imageOutputSchema: z.ZodType<ImageOutput>;
  * ```
  */
 export declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
-export type { ApiKeyResolver, AspectRatio, AttemptOutcome, AttemptRecord, ConfigStore, ContentPart, CreateSwitchConfig, FilePart, GeneratedImage, GeneratedImageMediaType, ImageOptions, ImageOutput, ImageSize, Logger, ModelPrice, OperationConfigView, OperationDefinition, OperationRoute, OperationsMap, PreparedProvider, Provider, ProviderErrorKind, ProviderImage, ProviderRequest, ProviderResponse, QualityVerdict, QuotaKey, QuotaView, ReservationEnvelope, RouteTarget, RunResult, SettlementFailure, StorePair, Switch, TextPart, TokenUsage, UsageStore };
+export type { ApiKeyResolver, AspectRatio, AttemptOutcome, AttemptRecord, ConfigStore, ContentPart, CreateSwitchConfig, FilePart, GeneratedImage, GeneratedImageMediaType, GeneratedSvg, ImageOptions, ImageOutput, ImageSize, Logger, ModelPrice, OperationConfigView, OperationDefinition, OperationRoute, OperationsMap, PreparedProvider, Provider, ProviderErrorKind, ProviderImage, ProviderRequest, ProviderResponse, ProviderSvg, QualityVerdict, QuotaKey, QuotaView, ReservationEnvelope, RouteTarget, RunResult, SettlementFailure, StorePair, SvgOptions, SvgOutput, Switch, TextPart, TokenUsage, UsageStore };
 //# sourceMappingURL=index.d.ts.map

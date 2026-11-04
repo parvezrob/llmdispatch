@@ -1,4 +1,4 @@
-import { A as ReservationEnvelope, R as UsageStore, S as Provider, T as ProviderRequest, a as ConfigStore, i as AttemptRecord, o as ConformanceResult } from "./types.js";
+import { C as Provider, E as ProviderRequest, H as UsageStore, M as ReservationEnvelope, a as ConfigStore, i as AttemptRecord, o as ConformanceResult } from "./types.js";
 /**
  * Checks a `ConfigStore` against the behaviour spec §8 requires of one.
  *
