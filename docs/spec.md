@@ -641,7 +641,7 @@ is no OpenRouter branch: a 403 that is not a refusal is `auth`.
 resolved in `prepare()` like the other built-ins; synchronous, one request per attempt
 ([OpenRouter Image API](https://openrouter.ai/docs/features/multimodal/image-generation)).
 One wire reaches every image model OpenRouter lists, by its OpenRouter model ID. The
-endpoint makes images only, raster images and, from a vectorization model, SVG documents,
+endpoint makes images only, raster images and, from a vector model, SVG documents,
 so this adapter has an image mode and an svg mode and no text or JSON mode. Which knobs a
 model honours, and with which values, is per model and not recorded here: the live
 catalogue (`GET https://openrouter.ai/api/v1/images/models`) lists each model's
@@ -663,14 +663,19 @@ Request, svg: `model`; `prompt`, built as for an image request; `output_format: 
 always; then, each only when set and each verbatim, `n` from `count` and `aspect_ratio`
 from `aspectRatio`. An svg block has no size and no background, so `resolution` and
 `background` are never sent, and neither are `quality`, `seed`, `stream` or `provider`;
-`maxOutputTokens` and `temperature` are dropped as for an image request. Only a
-vectorization model accepts `output_format: 'svg'`, and the catalogue lists which: as of
-2026-11-04, six Recraft vector models, whose only output format is `svg`, taking `n` from 1
-to 6 and no `resolution` or `background`. Of the `aspect_ratio` values the catalogue lists
-for them, this library can send `1:1`, `4:3`, `3:4`, `16:9` and `9:16`; the catalogue also
-lists `auto`, which an unset knob already covers. A knob value such a model lacks (a
-`count` above 6, a `3:2` or `2:3` ratio) may answer the model's own error, classified by
-the rows below. A model that rejects `output_format: 'svg'` with a 4xx is classified by the
+`maxOutputTokens` and `temperature` are dropped as for an image request. Only a vector
+model, one whose catalogue entry lists `svg` among its `output_format` values, accepts
+`output_format: 'svg'`. As of 2026-11-04 the catalogue lists six, all Recraft, whose only
+output format is `svg`, taking `n` from 1 to 6 and no `resolution` or `background`. Four of
+them (`recraft/recraft-v4-vector`, `recraft/recraft-v4-pro-vector`,
+`recraft/recraft-v4.1-vector` and `recraft/recraft-v4.1-pro-vector`) take a text prompt
+alone. Of the `aspect_ratio` values the catalogue lists for those four, this library can
+send `1:1`, `4:3`, `3:4`, `16:9` and `9:16`; the catalogue also lists `auto`, which an unset
+knob already covers. A knob value one of the four lacks (a `count` above 6, a `3:2` or `2:3`
+ratio) may answer the model's own error, classified by the rows below. The other two
+(`recraft/recraft-v4-styles-vector` and `recraft/recraft-v4-styles-pro-vector`) require at
+least one `input_references` entry, which this adapter never sends, so they answer with an
+error, classified by the same rows. A model that rejects `output_format: 'svg'` with a 4xx is classified by the
 same rows (a 400 is `invalid_request`), never remapped, and does not fall back; one that
 answers with a raster image instead is `malformed_response` and falls back (§5b, visual
 output mismatches).
