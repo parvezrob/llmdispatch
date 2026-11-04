@@ -491,15 +491,27 @@ describe('the response-side caps (spec §3 point 4c)', () => {
     expect(svgDocumentProblem).not.toHaveBeenCalled()
   })
 
+  // About the caps only: the document check is stubbed to pass, so the run does not decode
+  // 40 000 000 characters. The calls are counted, so the documents did reach the check.
   it('accepts documents totalling exactly the response cap', async () => {
     const data = paddedSvg(MAX_SVG_CHARACTERS)
     const count = MAX_RESPONSE_SVG_CHARACTERS / MAX_SVG_CHARACTERS
-    const f = svgFixture({ fallback: false })
-    f.p1.nextResolve(
-      complete(Array.from({ length: count }, () => ({ mediaType: 'image/svg+xml', data }))),
-    )
-    const result = await f.ai.run('echo', INPUT)
-    expect((result.data as z.infer<typeof svgOutputSchema>).svgs).toHaveLength(count)
+    const check = vi.mocked(svgDocumentProblem)
+    check.mockClear()
+    for (let i = 0; i < count; i++) check.mockReturnValueOnce(null)
+    try {
+      const f = svgFixture({ fallback: false })
+      f.p1.nextResolve(
+        complete(Array.from({ length: count }, () => ({ mediaType: 'image/svg+xml', data }))),
+      )
+      const result = await f.ai.run('echo', INPUT)
+      expect((result.data as z.infer<typeof svgOutputSchema>).svgs).toHaveLength(count)
+      expect(check).toHaveBeenCalledTimes(count)
+    } finally {
+      // Drops any stub left unconsumed and restores the real check for every later test.
+      check.mockReset()
+    }
+    expect(check(b64('<x/>'))).toBe('root')
   })
 
   it('rejects a response over the total cap before any document is decoded', async () => {
