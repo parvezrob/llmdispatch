@@ -444,6 +444,13 @@ describe('the built-in adapters, driven end to end through the runner', () => {
         parts: [{ type: 'text', text: 'draw it' }],
         responseFormat: { type: 'image' },
       }),
+    // Likewise, only an adapter that maps a vector output wire gets `svg_output` beside it.
+    svg_output: () =>
+      baseRequest({
+        model,
+        parts: [{ type: 'text', text: 'trace it' }],
+        responseFormat: { type: 'svg' },
+      }),
   })
 
   it('passes openaiCompatible over scripted fetch, native json capability', async () => {
@@ -637,14 +644,18 @@ describe('the built-in adapters, driven end to end through the runner', () => {
     })
   })
 
-  it('passes openrouterImages over scripted fetch, every request an image one', async () => {
+  it('passes openrouterImages over scripted fetch, every request an image or svg one', async () => {
     const provider = openrouterImages({ apiKey: KEY })
     const imagesBody = {
       data: [{ b64_json: base64(png(1, 1)), media_type: 'image/png' }],
       usage: { prompt_tokens: 1, completion_tokens: 12, cost: 0.04 },
     }
-    // Like openaiImages, the endpoint makes only images: the text-mode duties (native JSON,
-    // truncation) and the input-media scenarios have nothing to run on.
+    const svgBody = {
+      data: [{ b64_json: 'PHN2Zy8+', media_type: 'image/svg+xml' }],
+      usage: { prompt_tokens: 0, completion_tokens: 4175, cost: 0.04 },
+    }
+    // Like openaiImages, the endpoint makes only images, raster or vector: the text-mode
+    // duties (native JSON, truncation) and the input-media scenarios have nothing to run on.
     const result = await runProviderConformance({
       provider,
       requestFactory: () =>
@@ -675,13 +686,14 @@ describe('the built-in adapters, driven end to end through the runner', () => {
           ),
         ),
         image_output: step(() => installFetch(() => jsonResponse(200, imagesBody))),
+        svg_output: step(() => installFetch(() => jsonResponse(200, svgBody))),
       },
       requests: mediaRequests('vendor/image-x'),
     })
     expect(result).toEqual({
       passed: true,
       failures: [],
-      skipped: ['responseFormat', 'truncated', 'document', 'image', 'svg_output'],
+      skipped: ['responseFormat', 'truncated', 'document', 'image'],
     })
   })
 })

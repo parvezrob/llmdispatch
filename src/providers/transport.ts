@@ -163,6 +163,24 @@ export const MAX_GENERATED_IMAGES = 32
  */
 export const MAX_GENERATED_IMAGE_CHARACTERS = 30_000_000
 
+/**
+ * The adapters' copy of the §3 point 4c count cap, read on the wire side before an adapter
+ * reads any generated SVG document. The core states all three svg caps in
+ * `core/svg-document.ts`, which a provider may not import (`.dependency-cruiser.cjs`); a
+ * unit test holds each copy to its original.
+ */
+export const MAX_GENERATED_SVGS = 16
+
+/** The per-document ceiling in base64 characters that goes with `MAX_GENERATED_SVGS`. */
+export const MAX_GENERATED_SVG_CHARACTERS = 10_000_000
+
+/**
+ * The ceiling in base64 characters across every document of one response. With the two
+ * above, it is read before any document is scanned, so an oversized answer costs length
+ * reads only.
+ */
+export const MAX_GENERATED_SVG_RESPONSE_CHARACTERS = 40_000_000
+
 const BASE64_ALPHABET = /^[A-Za-z0-9+/]+$/
 const TRAILING_PADDING = /={1,2}$/
 

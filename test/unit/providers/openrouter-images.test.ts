@@ -199,7 +199,7 @@ describe('the gates', () => {
     ['json object', { type: 'json', topLevel: 'object' } as const],
     ['json any', { type: 'json', topLevel: 'any' } as const],
   ])('rejects a %s request', async (_label, responseFormat) => {
-    await expectGate(baseRequest({ responseFormat }), 'only image output is supported')
+    await expectGate(baseRequest({ responseFormat }), 'only image or svg output is supported')
   })
 
   it.each([
@@ -213,7 +213,7 @@ describe('the gates', () => {
   it('checks the format before the parts', async () => {
     await expectGate(
       baseRequest({ parts: [PDF], responseFormat: { type: 'text' } }),
-      'only image output is supported',
+      'only image or svg output is supported',
     )
   })
 
