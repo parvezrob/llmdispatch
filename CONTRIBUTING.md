@@ -124,7 +124,7 @@ section.
 | `npm run audit:tarball -- <tgz>`                         | what a packed tarball contains and whether it would run anything             |
 | `npm run test:consumers -- <tgz>`                        | install that tarball into ESM, CommonJS and TypeScript projects              |
 | `npm run verify:release -- <tgz>`                        | install that tarball and run all three suites against a throwaway PostgreSQL |
-| `npm run live:providers`                                 | call every built-in adapter's real provider (needs your own keys)            |
+| `npm run live:providers`                                 | call every built-in adapter's real provider, image output too (four keys)    |
 
 Everything that takes a tarball takes one you produced with `npm pack`; they never pack one
 themselves, so what you audit is what you test.
@@ -135,11 +135,15 @@ creates a schema, writes to it and drops it, so it takes exactly one shape,
 out, and no query string or fragment. The header of `scripts/verify-release.mjs` has a
 container to run it against.
 
-`live:providers` spends money and depends on three services being up, so it is never part of
-`npm run check` and never runs in continuous integration. Each provider is called in a process
-of its own holding only that provider's key; use throwaway keys and revoke them afterwards. Run
+`live:providers` spends money, about $0.21 a run and nearly all of it on generated images and
+an SVG document, and depends on four services being up, so it is never part of
+`npm run check` and never runs in continuous integration. It needs `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, `GEMINI_API_KEY` and `OPENROUTER_API_KEY`. Each check runs in a process of
+its own holding only its provider's key; use throwaway keys and revoke them afterwards. With
+`OPENAI_BASE_URL` set, `OPENAI_API_KEY` belongs to that endpoint, so the OpenAI image probes,
+which only call OpenAI itself, are skipped. Run
 `npm run live:providers -- --release <tgz>` to check a packed tarball rather than your working
-tree, since that form requires every adapter to run, so a missing key is a failure instead of a
+tree, since that form requires every check to run, so a missing key is a failure instead of a
 skip. (The `--` is what stops npm from eating the arguments.)
 
 ## How changes land

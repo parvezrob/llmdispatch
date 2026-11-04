@@ -57,10 +57,22 @@ a throwaway database on this machine; `CONTRIBUTING.md` has the shape it accepts
 script's own header has a container to run it against.
 
 The second exercises every built-in adapter against its real provider endpoint, which is
-what the specification leans on for the pinned wire contracts. It needs live keys, so it is
-run by hand and never in continuous integration; in the `--release` form above a missing key
-is a failure rather than a skip. Use throwaway keys and revoke them when you stop, not only
-when you finish.
+what the specification leans on for the pinned wire contracts. The three text adapters get a
+plain, a JSON, an image-input and a PDF call each; the three image adapters get image probes,
+and `openrouterImages` an SVG probe as well, all run through `run()`, so the core's image
+header reader and SVG document check are part of what is checked. It needs four live keys,
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` and `OPENROUTER_API_KEY`, so it is run
+by hand and never in continuous integration; in the `--release` form above a missing key is a
+failure rather than a skip. A run costs about $0.21, nearly all of it the generated images.
+OpenAI may require the key's organization to be verified before its GPT Image models answer;
+an unverified one is refused with a 403, which the check reports as an `auth` failure. Use
+throwaway keys and revoke them when you stop, not only when you finish.
+
+A line starting `finding:` records something the run learned about a provider. Some stand
+alone: whether Gemini's image models honour a candidate count is reported whichever way it
+goes, and only an unsettled answer also fails the check. Others explain a failure: when the
+core refused a vector model's SVG document, the finding says why, and the check fails. Read
+them before approving, and bring the README and the specification in line with what they say.
 
 **When they run:** on the staged tarball, after the workflow has staged the release and
 before you approve it: that is the only moment the bytes are both final and not yet
