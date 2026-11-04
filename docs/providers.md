@@ -93,7 +93,8 @@ codes → `model_not_found`; 429 and 402 → `rate_limit`; 408/5xx/498 → `tran
 400/413/422 → `invalid_request`; unparseable body → classify by status; unknown status →
 `transient` (a real HTTP outcome, unlike unclassified thrown values).
 Image output: chat completions has no image wire, so a request whose `responseFormat.type`
-is `'image'` throws `ProviderError('invalid_request')` before any fetch.
+is `'image'` throws `ProviderError('invalid_request')` before any fetch. SVG output: nor an
+svg wire, so an `'svg'` request throws the same way, before any fetch.
 
 ## `anthropic`
 
@@ -125,7 +126,8 @@ Errors (envelope `{type:'error', error:{type,message}}`): `authentication_error`
 `auth`; `not_found_error` → `model_not_found`; `rate_limit_error`/429 → `rate_limit`;
 `overloaded_error`/529/5xx → `transient`; `invalid_request_error`/400 → `invalid_request`.
 Image output: the Messages API has no image wire, so a request whose `responseFormat.type`
-is `'image'` throws `ProviderError('invalid_request')` before any fetch.
+is `'image'` throws `ProviderError('invalid_request')` before any fetch. SVG output: nor an
+svg wire, so an `'svg'` request throws the same way, before any fetch.
 
 ## `gemini`
 
@@ -171,6 +173,9 @@ image-generation wire of the same endpoint
 **Gate:** `background: 'transparent'` throws `ProviderError('invalid_request')` before any
 fetch, since no model in this family produces an alpha channel; `'opaque'` and an absent
 value send nothing extra.
+SVG output: generateContent has no vector output, so a request whose `responseFormat.type`
+is `'svg'` throws `ProviderError('invalid_request')` before any fetch, ahead of every other
+mapping, rather than falling into text mode.
 Request, all inside `generationConfig`: `responseModalities: ['TEXT','IMAGE']`;
 `imageConfig: { aspectRatio?, imageSize? }` only when at least one knob is set, each value
 sent verbatim (`size` is `imageSize`); `candidateCount` only when `count` is set; **never
@@ -225,10 +230,10 @@ makes images only, so this adapter has no text or JSON mode. The factory option 
 `quality` when set; unset sends nothing and the provider default applies. Like `jsonMode`
 and `tokenParam`, it is typed, not checked at runtime.
 **Gates**, in this order, each throwing `ProviderError('invalid_request')` before any fetch:
-a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here; any
-part that is not a text part, since the generations endpoint takes no reference images or
-documents; exactly one of `aspectRatio` and `size` set, since the wire has one size field
-and no half of it is invented; `size: '4K'` with any `aspectRatio` other than `'16:9'`.
+a `responseFormat.type` other than `'image'`, since text, JSON and svg runs have no wire
+here; any part that is not a text part, since the generations endpoint takes no reference
+images or documents; exactly one of `aspectRatio` and `size` set, since the wire has one
+size field and no half of it is invented; `size: '4K'` with any `aspectRatio` other than `'16:9'`.
 Request: `model`; `prompt`, the text parts joined with `'\n'`, so a single part is sent
 verbatim, `''` included; then, each only when set, `n` from `count`, `size` from the table
 below (both knobs set; with neither, no size field is sent and the provider default
@@ -301,7 +306,8 @@ honours, and with which values, is per model and not recorded here: the live cat
 (`GET https://openrouter.ai/api/v1/images/models`) lists each model's
 `supported_parameters`.
 **Gates**, in this order, each throwing `ProviderError('invalid_request')` before any fetch:
-a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here;
+a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here and
+this adapter does not yet map the API's svg output, so it rejects `'svg'` before any fetch;
 any part that is not a text part, since reference images (the API's `input_references`) are
 an edit surface this adapter does not map. There is no pair or size gate: each knob travels
 alone, in its own field.

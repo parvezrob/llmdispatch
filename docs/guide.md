@@ -28,7 +28,7 @@ That cap bounds file payload only, and it is llmdispatch's own ceiling rather th
 
 ## Output: from model text to typed data
 
-Each operation declares its `format`: `'json'` (the default, a top-level JSON object), `'json-any'` (arrays and scalars), `'text'`, or `'image'` (generated images as dimensioned file parts, validated by the packaged `imageOutputSchema`; spec §3 and §6). Built-in adapters enable the provider's native JSON mode when the format is a top-level object and the provider genuinely supports it (verified per provider, spec §5c). Responses are unwrapped from a whole-response code fence if present, parsed, then validated with your Zod schema (async transforms supported). A parse or validation failure is an **output rejection**: fallback-eligible, never silently returned. An optional `quality` gate runs after validation:
+Each operation declares its `format`: `'json'` (the default, a top-level JSON object), `'json-any'` (arrays and scalars), `'text'`, `'image'` (generated images as dimensioned file parts, validated by the packaged `imageOutputSchema`; spec §3 and §6), or `'svg'` (generated SVG documents as base64, validated by the packaged `svgOutputSchema`; spec §3 and §6). Built-in adapters enable the provider's native JSON mode when the format is a top-level object and the provider genuinely supports it (verified per provider, spec §5c). Responses are unwrapped from a whole-response code fence if present, parsed, then validated with your Zod schema (async transforms supported). A parse or validation failure is an **output rejection**: fallback-eligible, never silently returned. An optional `quality` gate runs after validation:
 
 ```ts
 summarize: {
@@ -41,6 +41,8 @@ summarize: {
 ```
 
 The exact pipeline is spec §3.
+
+**An SVG document is active content.** For an `'svg'` operation, llmdispatch guarantees each document is SVG-rooted UTF-8 with no DTD (the root element is named `svg`; its namespace is not checked), and nothing more: not well-formed XML, and not safe content. Scripts, event handlers and external references pass through untouched. Sanitize every document with a maintained sanitizer, or rasterize it with a network-disabled, resource-bounded renderer; never inject it into a page or serve it as is (spec §6).
 
 ## Errors
 

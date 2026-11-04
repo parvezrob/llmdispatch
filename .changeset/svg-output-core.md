@@ -1,0 +1,7 @@
+---
+'llmdispatch': minor
+---
+
+SVG output through `run()`: an operation may declare `format: 'svg'` with an optional `svg` block (`count`, `aspectRatio`; an `svg` block on any other format is now `INVALID_CONFIG`, as `image` is on a non-image format), and a complete response's `svgs` become frozen `GeneratedSvg`s carrying the provider's base64 unchanged, handed to the output schema (the packaged `svgOutputSchema`) and the quality gate as `{ svgs, text }`. Each document must pass a byte-level check (strict UTF-8, no NUL, a tokenized prolog with no DTD, an exact `<svg` root) under caps of 16 documents, 10 000 000 base64 characters each and 40 000 000 per response, else `malformed_response`; that guarantees an SVG-rooted UTF-8 document with no DTD, not well-formed XML and not safe content, so sanitize or rasterize it before use. Without a reported cost an svg attempt prices `null` unless usage carries `imageOutputTokens`, the new `svg_output` conformance scenario checks the `ProviderSvg` contract, and no built-in adapter produces SVG yet: each rejects an `'svg'` request with `ProviderError('invalid_request')` before any fetch.
+
+Breaking for custom `Provider` implementations: `ProviderRequest.responseFormat.type` may now be `'svg'`. Exhaustive switches must add the case; providers without an SVG output wire must throw `ProviderError('invalid_request')` before dispatch. SVG-capable providers return complete responses with `svgs`; `images` stays raster.
