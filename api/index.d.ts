@@ -1,6 +1,5 @@
 import { A as ReservationEnvelope, C as ProviderErrorKind, D as QualityVerdict, E as ProviderResponse, F as Switch, I as TextPart, L as TokenUsage, M as RunResult, N as SettlementFailure, O as QuotaKey, P as StorePair, R as UsageStore, S as Provider, T as ProviderRequest, _ as OperationConfigView, a as ConfigStore, b as OperationsMap, c as CreateSwitchConfig, d as GeneratedImageMediaType, f as ImageOptions, g as ModelPrice, h as Logger, i as AttemptRecord, j as RouteTarget, k as QuotaView, l as FilePart, m as ImageSize, n as AspectRatio, p as ImageOutput, r as AttemptOutcome, s as ContentPart, t as ApiKeyResolver, u as GeneratedImage, v as OperationDefinition, w as ProviderImage, x as PreparedProvider, y as OperationRoute } from "./types.js";
 import { z } from "zod";
-//#region src/errors/llmdispatch-error.d.ts
 /** A classified failure: a stable `code`, a literal `retryable`, no dispatch content of its own. */
 export declare class LLMDispatchError extends Error {
   private constructor();
@@ -17,8 +16,6 @@ export declare class LLMDispatchError extends Error {
   /** Every dispatched attempt, in dispatch order. */
   readonly attempts?: AttemptRecord[];
 }
-//#endregion
-//#region src/errors/provider-error.d.ts
 /** A provider failure, classified by the adapter that saw it (spec §5b). */
 export declare class ProviderError extends Error {
   /**
@@ -45,15 +42,11 @@ export declare class ProviderError extends Error {
    */
   static is(value: unknown): value is ProviderError;
 }
-//#endregion
-//#region src/providers/anthropic.d.ts
 /** Builds an Anthropic Messages provider. Keys resolve in `prepare()`, not at construction. */
 export declare function anthropic(opts: {
   apiKey: ApiKeyResolver;
   baseUrl?: string;
 }): Provider;
-//#endregion
-//#region src/providers/openai-compatible.d.ts
 /** Builds an OpenAI-compatible chat provider. Keys resolve in `prepare()`. */
 export declare function openaiCompatible(opts: {
   apiKey: ApiKeyResolver;
@@ -61,29 +54,21 @@ export declare function openaiCompatible(opts: {
   jsonMode?: 'native' | 'prompt-only';
   tokenParam?: 'max_tokens' | 'max_completion_tokens';
 }): Provider;
-//#endregion
-//#region src/providers/gemini.d.ts
 /** Builds a Gemini generateContent provider. Keys resolve in `prepare()`. */
 export declare function gemini(opts: {
   apiKey: ApiKeyResolver;
 }): Provider;
-//#endregion
-//#region src/providers/openai-images.d.ts
 /** Builds an OpenAI Images API provider. Keys resolve in `prepare()`. */
 export declare function openaiImages(opts: {
   apiKey: ApiKeyResolver;
   baseUrl?: string;
   quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }): Provider;
-//#endregion
-//#region src/providers/openrouter-images.d.ts
 /** Builds an OpenRouter Image API provider. Keys resolve in `prepare()`. */
 export declare function openrouterImages(opts: {
   apiKey: ApiKeyResolver;
   baseUrl?: string;
 }): Provider;
-//#endregion
-//#region src/stores/memory/index.d.ts
 /**
  * Builds the in-memory config and usage stores (spec §6).
  *
@@ -95,8 +80,6 @@ export declare function openrouterImages(opts: {
  * ```
  */
 export declare function memoryStores(): StorePair;
-//#endregion
-//#region src/stores/postgres/index.d.ts
 /**
  * Builds the PostgreSQL config and usage stores (spec §6): no query runs at construction, the
  * schema is validated and the database is not touched.
@@ -116,8 +99,6 @@ export declare function postgresStores(opts: {
   schema?: string;
   leaseMs?: number;
 }): StorePair;
-//#endregion
-//#region src/core/create-switch.d.ts
 /**
  * Ties one operation's schemas to its callbacks so inference flows between them.
  *
@@ -139,16 +120,12 @@ export declare function defineOperation<In extends z.ZodType, Out extends z.ZodT
  * @returns The same object.
  */
 export declare function defineOperations<Ops extends OperationsMap>(operations: Ops): Ops;
-//#endregion
-//#region src/core/image-output.d.ts
 /**
  * Accepts exactly what the §3 image sub-stage produces: at least one well-formed image and
  * the text beside it. The one-image case is the default; `imageOutputSchema.refine(...)`
  * adds a count or a dimension floor.
  */
 export declare const imageOutputSchema: z.ZodType<ImageOutput>;
-//#endregion
-//#region src/index.d.ts
 /**
  * Builds a configured switch: providers, operations and stores in; `run` plus the admin
  * surface out (spec §6).
@@ -166,6 +143,5 @@ export declare const imageOutputSchema: z.ZodType<ImageOutput>;
  * ```
  */
 export declare function createSwitch<Ops extends OperationsMap>(config: CreateSwitchConfig<Ops>): Switch<Ops>;
-//#endregion
 export type { ApiKeyResolver, AspectRatio, AttemptOutcome, AttemptRecord, ConfigStore, ContentPart, CreateSwitchConfig, FilePart, GeneratedImage, GeneratedImageMediaType, ImageOptions, ImageOutput, ImageSize, Logger, ModelPrice, OperationConfigView, OperationDefinition, OperationRoute, OperationsMap, PreparedProvider, Provider, ProviderErrorKind, ProviderImage, ProviderRequest, ProviderResponse, QualityVerdict, QuotaKey, QuotaView, ReservationEnvelope, RouteTarget, RunResult, SettlementFailure, StorePair, Switch, TextPart, TokenUsage, UsageStore };
 //# sourceMappingURL=index.d.ts.map

@@ -1,5 +1,4 @@
 import { A as ReservationEnvelope, R as UsageStore, S as Provider, T as ProviderRequest, a as ConfigStore, i as AttemptRecord, o as ConformanceResult } from "./types.js";
-//#region src/conformance/config-store.d.ts
 /**
  * Checks a `ConfigStore` against the behaviour spec §8 requires of one.
  *
@@ -23,8 +22,6 @@ export declare function runConfigStoreConformance(opts: {
     seedRaw(operation: string, value: unknown): Promise<void>;
   }>;
 }): Promise<ConformanceResult>;
-//#endregion
-//#region src/conformance/usage-store.d.ts
 /**
  * Checks a `UsageStore` against the behaviour spec §8 requires of one.
  *
@@ -55,8 +52,6 @@ export declare function runUsageStoreConformance(opts: {
     } | null>;
   }>;
 }): Promise<ConformanceResult>;
-//#endregion
-//#region src/conformance/provider.d.ts
 /** Optional classification scenarios the harness can drive when the adopter supplies them. */
 type OptionalScenario = 'auth' | 'rate_limit' | 'model_not_found' | 'invalid_request' | 'transient' | 'malformed_response' | 'truncated' | 'refused';
 /**
@@ -87,6 +82,5 @@ export declare function runProviderConformance(opts: {
   requests?: Partial<Record<MediaScenario, () => ProviderRequest>>;
   controls?: ProviderConformanceControls;
 }): Promise<ConformanceResult>;
-//#endregion
 export type { ConformanceResult };
 //# sourceMappingURL=conformance.d.ts.map

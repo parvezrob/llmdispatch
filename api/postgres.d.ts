@@ -1,4 +1,3 @@
-//#region src/stores/postgres/migrations/index.d.ts
 /**
  * The packaged migrations (spec §6b).
  *
@@ -42,8 +41,6 @@ export declare function migrationSql(opts?: {
   sql: string;
   sha256: string;
 };
-//#endregion
-//#region src/stores/postgres/sql.d.ts
 /**
  * Every statement the PostgreSQL stores send, built once per schema.
  *
@@ -60,5 +57,4 @@ export declare function migrationSql(opts?: {
  * four usage statements by this prefix and substitute that trailing `null`.
  */
 export declare const USAGE_STORE_MARKER = "/* llmdispatch:usage-store */";
-//#endregion
 //# sourceMappingURL=postgres.d.ts.map

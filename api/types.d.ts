@@ -1,5 +1,4 @@
 import { z } from "zod";
-//#region src/types.d.ts
 /** The operations a switch is built from; every entry MUST be wrapped in `defineOperation`. */
 type OperationsMap = Record<string, OperationDefinition<z.ZodType, z.ZodType>>;
 /** A configured switch: one `run` method plus the admin surface for its runtime config. */
@@ -292,6 +291,5 @@ interface ConformanceResult {
   failures: string[];
   skipped: string[];
 }
-//#endregion
 export { ReservationEnvelope as A, ProviderErrorKind as C, QualityVerdict as D, ProviderResponse as E, Switch as F, TextPart as I, TokenUsage as L, RunResult as M, SettlementFailure as N, QuotaKey as O, StorePair as P, UsageStore as R, Provider as S, ProviderRequest as T, OperationConfigView as _, ConfigStore as a, OperationsMap as b, CreateSwitchConfig as c, GeneratedImageMediaType as d, ImageOptions as f, ModelPrice as g, Logger as h, AttemptRecord as i, RouteTarget as j, QuotaView as k, FilePart as l, ImageSize as m, AspectRatio as n, ConformanceResult as o, ImageOutput as p, AttemptOutcome as r, ContentPart as s, ApiKeyResolver as t, GeneratedImage as u, OperationDefinition as v, ProviderImage as w, PreparedProvider as x, OperationRoute as y };
 //# sourceMappingURL=types.d.ts.map
