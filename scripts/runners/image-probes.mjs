@@ -12,7 +12,8 @@
  * `fetch`. The runner hands in the package and Zod.
  *
  * What a probe prints: model names, counts, media types, pixel sizes, byte sizes, latency,
- * token counts and a reported cost. Never a prompt, an image, or a response body, with one
+ * token counts, a reported cost, and the shape of an SVG document as counts and yes-or-no
+ * answers (`describeSvgShape`). Never a prompt, an image, or a response body, with one
  * deliberate exception: when the core refuses an SVG document, the first 200 bytes of that
  * document are printed as a JSON string. Before printing, every run of 16 or more characters
  * from the base64, base64url and hex alphabets (`A-Z`, `a-z`, `0-9`, `+`, `/`, `=`, `_`, `-`)
@@ -243,6 +244,27 @@ function readWebp(bytes) {
 }
 
 /**
+ * The text with every closed comment (`<!--` to the next `-->`) removed, and an unclosed one
+ * left in place with everything after it: what `/<!--[\s\S]*?-->/g` removes, in one pass.
+ * The regular expression rescans to the end for every `<!--` it cannot close, so a document
+ * that opens many comments and closes none costs it quadratic time; this costs one scan.
+ */
+export function withoutComments(text) {
+  let kept = ''
+  let at = 0
+  for (;;) {
+    const open = text.indexOf('<!--', at)
+    if (open === -1) break
+    const close = text.indexOf('-->', open + 4)
+    // With no `-->` after this opening there is none after any later one either.
+    if (close === -1) break
+    kept += text.slice(at, open)
+    at = close + 3
+  }
+  return kept + text.slice(at)
+}
+
+/**
  * Why this script would refuse an SVG document, or `null` when it sees nothing wrong.
  *
  * A rough reading, for the report only; the core's tokenized check (spec §6) is the one that
@@ -257,7 +279,7 @@ export function diagnoseSvg(bytes) {
     return 'it is not valid UTF-8'
   }
   if (text.includes('\u0000')) return 'it carries a NUL character'
-  const uncommented = text.replace(/<!--[\s\S]*?-->/g, '')
+  const uncommented = withoutComments(text)
   const root = /<svg[\s/>]/.exec(uncommented)
   // Only the prolog is read, as the core stops at the root: a comment left open after it is
   // the document's business, not this check's.
@@ -274,6 +296,42 @@ export function diagnoseSvg(bytes) {
     return 'its XML declaration names an encoding other than UTF-8'
   }
   return null
+}
+
+/**
+ * The shape of an SVG document, for the report: how many elements it opens, how many subpaths
+ * its paths draw (each `M` or `m` in a `d` attribute), how many bytes of path data those
+ * attributes hold, and whether it uses `<style>`, `<text>` or `<use>`. Plain string scanning
+ * after comments are removed, so a rough count rather than a parse; what it answers is numbers
+ * and booleans, never any of the document's text.
+ */
+export function describeSvgShape(bytes) {
+  const text = withoutComments(new TextDecoder('utf-8').decode(bytes))
+  let subpaths = 0
+  let pathBytes = 0
+  for (const match of text.matchAll(/\sd\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+    const data = match[1] ?? match[2] ?? ''
+    pathBytes += Buffer.byteLength(data, 'utf8')
+    subpaths += (data.match(/[Mm]/g) ?? []).length
+  }
+  return {
+    elements: (text.match(/<[A-Za-z]/g) ?? []).length,
+    subpaths,
+    pathBytes,
+    style: /<style[\s/>]/.test(text),
+    text: /<text[\s/>]/.test(text),
+    use: /<use[\s/>]/.test(text),
+  }
+}
+
+/** The shape of one document as the finding line the SVG probe prints. */
+function svgShapeFinding(at, bytes) {
+  const shape = describeSvgShape(bytes)
+  const uses = ['style', 'text', 'use'].map((name) => `<${name}> ${shape[name] ? 'yes' : 'no'}`)
+  return (
+    `finding: ${at}: ${String(shape.elements)} elements, ${String(shape.subpaths)} subpaths, ` +
+    `${String(shape.pathBytes)} bytes of path data; ${uses.join(', ')}`
+  )
 }
 
 /** Something shaped like a provider key: an `sk-` style token or a Google API key. */
@@ -410,6 +468,7 @@ export function checkSvgs(label, svgs, probe, problems) {
       `document ${String(index + 1)}: ${String(bytes.length)} bytes ` +
         `(${String(length)} base64 characters)`,
     )
+    notes.push(svgShapeFinding(at, bytes))
   }
   if (total > SVG_CAPS.perResponse) problems.push(`${label}: over the per-response cap`)
   return notes

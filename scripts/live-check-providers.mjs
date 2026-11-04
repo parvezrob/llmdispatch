@@ -9,7 +9,7 @@
  * Gemini for two 1K images in one call (which also asks whether its image models take a
  * candidate count), OpenAI's Images API for two transparent 1K images and one 2K image at low
  * quality, and OpenRouter's Image API for one 1K raster image with its reported cost and one
- * SVG document from a vector model.
+ * SVG document from a vector model, whose shape is reported as a finding.
  *
  * Recorded fixtures prove the adapters read the shapes that were recorded; only this proves
  * the providers still send them. Manual by design: it spends money and needs keys, so it is

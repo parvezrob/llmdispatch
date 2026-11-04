@@ -15,11 +15,13 @@ import {
   SVG_CAPS,
   carriesKeyMaterial,
   decodeBase64,
+  describeSvgShape,
   diagnoseSvg,
   previewIfSafe,
   readProbes,
   readRasterHeader,
   runProbes,
+  withoutComments,
 } from '../../../scripts/runners/image-probes.mjs'
 import {
   MAX_RESPONSE_SVG_CHARACTERS,
@@ -141,6 +143,84 @@ describe('the probes reading an SVG document roughly', () => {
     expect(read('<svg/><!-- unterminated')).toBeNull()
     expect(read('<svg><g/></svg>\n<!-- trailing, never closed')).toBeNull()
     expect(diagnoseSvg(Buffer.from([0x3c, 0xff, 0x3e]))).toMatch(/UTF-8/)
+  })
+})
+
+describe('the probes removing comments', () => {
+  it('removes what the lazy comment pattern removes, and nothing else', () => {
+    for (const text of [
+      '',
+      '<svg/>',
+      '<!-- a --><svg/>',
+      '<!-- a --><svg><!-- b --></svg>',
+      '<!--><svg/>-->',
+      '<!---->x<!--',
+      '<!-- <!-- nested --> -->',
+      '<svg/><!-- never closed',
+      '<!-- one --> <!-- two',
+      '--><!--<!---->',
+    ]) {
+      expect(withoutComments(text)).toBe(text.replace(/<!--[\s\S]*?-->/g, ''))
+    }
+  })
+
+  // The lazy pattern rescans to the end for every opening it cannot close: on this document
+  // it ran for seconds, and on a few megabytes for minutes. A scan finishes at once.
+  it('reads a document that opens many comments and closes none in one pass', () => {
+    const document = Buffer.from(`<svg>${'<!--'.repeat(200_000)}</svg>`, 'utf8')
+    const started = performance.now()
+    expect(diagnoseSvg(document)).toBeNull()
+    expect(describeSvgShape(document)).toMatchObject({ elements: 1, subpaths: 0 })
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+})
+
+describe('the probes describing the shape of an SVG document', () => {
+  const shape = (text: string) => describeSvgShape(Buffer.from(text, 'utf8'))
+
+  /** Two paths, one with three subpaths in both cases and one in single quotes, and a <use>. */
+  const ICON = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!-- <style> and <text> in a comment are not counted -->',
+    '<svg xmlns="x" viewBox="0 0 24 24">',
+    '  <defs><path id="leaf" d="M2 2h4v4zm6 0h4v4zM14 2h4v4z"/></defs>',
+    "  <path d='M0 0L24 24'/>",
+    '  <use href="#leaf"/>',
+    '</svg>',
+  ].join('\n')
+
+  it('counts elements, subpaths and path bytes, and sees <use> only where it is used', () => {
+    expect(shape(ICON)).toEqual({
+      elements: 5,
+      subpaths: 4,
+      pathBytes: 'M2 2h4v4zm6 0h4v4zM14 2h4v4z'.length + 'M0 0L24 24'.length,
+      style: false,
+      text: false,
+      use: true,
+    })
+  })
+
+  it('sees <style> and <text>, and an empty document as nothing at all', () => {
+    expect(shape('<svg><style>path{fill:red}</style><text>hi</text></svg>')).toMatchObject({
+      elements: 3,
+      subpaths: 0,
+      pathBytes: 0,
+      style: true,
+      text: true,
+      use: false,
+    })
+    expect(shape('')).toEqual({
+      elements: 0,
+      subpaths: 0,
+      pathBytes: 0,
+      style: false,
+      text: false,
+      use: false,
+    })
+  })
+
+  it('counts path data in bytes, not characters', () => {
+    expect(shape('<svg><path d="M0 0é"/></svg>').pathBytes).toBe(6)
   })
 })
 
@@ -523,6 +603,20 @@ describe('the OpenRouter probes, dry', () => {
     expect(lines).toEqual([
       expect.stringMatching(/reported cost \$0\.0800$/),
       `  document 1: ${String(document.length)} bytes (${String(svg(document).length)} base64 characters)`,
+      'finding: recraft/recraft-vector-x (one SVG document), document 1: 1 elements, ' +
+        '0 subpaths, 0 bytes of path data; <style> no, <text> no, <use> no',
+    ])
+  })
+
+  it('reports the shape of each document it passes as one finding line', async () => {
+    const document =
+      '<svg xmlns="x" viewBox="0 0 2 2"><style>*{}</style><path d="M0 0h1zM1 1h1z"/></svg>'
+    captureRequests(() => answer(svg(document), 'image/svg+xml', 0.08))
+    const { lines, problems } = await probe('openrouter-images', [VECTOR])
+    expect(problems).toEqual([])
+    expect(lines.filter((line) => line.startsWith('finding:'))).toEqual([
+      'finding: recraft/recraft-vector-x (one SVG document), document 1: 3 elements, ' +
+        '2 subpaths, 14 bytes of path data; <style> yes, <text> no, <use> no',
     ])
   })
 
