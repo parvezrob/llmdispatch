@@ -119,11 +119,17 @@ export function isPlainRecord(value: unknown): value is Record<string, unknown> 
   return prototype === null || prototype === Object.prototype
 }
 
-/** A route field in the §6 string domain and non-empty, or the reason it is not. */
+/**
+ * A route field in the §6 string domain, non-empty and with no edge whitespace, or the reason
+ * it is not. Rejected, never trimmed (§6 route names): the name stored is the name sent.
+ */
 function routeStringProblem(value: unknown, field: string): string | null {
   const domain = storeStringProblem(value)
   if (domain !== null) return `${field} ${domain}`
   if (value === '') return `${field} must be non-empty`
+  if ((value as string).trim() !== value) {
+    return `${field} must not start or end with whitespace`
+  }
   return null
 }
 
