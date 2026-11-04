@@ -17,12 +17,20 @@ import {
 } from '../../../src/core/image-output'
 import { base64Problem } from '../../../src/core/parts'
 import {
+  MAX_RESPONSE_SVG_CHARACTERS,
+  MAX_RESPONSE_SVGS,
+  MAX_SVG_CHARACTERS,
+} from '../../../src/core/svg-document'
+import {
   asTokenCount,
   fetchJson,
   GENERATED_IMAGE_MEDIA_TYPES,
   isWireBase64,
   MAX_GENERATED_IMAGE_CHARACTERS,
   MAX_GENERATED_IMAGES,
+  MAX_GENERATED_SVG_CHARACTERS,
+  MAX_GENERATED_SVG_RESPONSE_CHARACTERS,
+  MAX_GENERATED_SVGS,
 } from '../../../src/providers/transport'
 
 afterEach(() => {
@@ -99,7 +107,7 @@ describe('asTokenCount', () => {
 })
 
 /**
- * The adapters keep their own copy of two rules the core also states, because a provider may
+ * The adapters keep their own copies of rules the core also states, because a provider may
  * not import core (`.dependency-cruiser.cjs`). These hold the copies to the originals, so a
  * change on one side cannot pass unnoticed on the other.
  */
@@ -111,6 +119,12 @@ describe('the response-side copies of the core rules', () => {
   it('caps a response at the same count and the same length as the core', () => {
     expect(MAX_GENERATED_IMAGES).toBe(MAX_RESPONSE_IMAGES)
     expect(MAX_GENERATED_IMAGE_CHARACTERS).toBe(MAX_RESPONSE_IMAGE_CHARACTERS)
+  })
+
+  it('caps an svg response at the same count, document length and total as the core', () => {
+    expect(MAX_GENERATED_SVGS).toBe(MAX_RESPONSE_SVGS)
+    expect(MAX_GENERATED_SVG_CHARACTERS).toBe(MAX_SVG_CHARACTERS)
+    expect(MAX_GENERATED_SVG_RESPONSE_CHARACTERS).toBe(MAX_RESPONSE_SVG_CHARACTERS)
   })
 
   const corpus: unknown[] = [

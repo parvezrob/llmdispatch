@@ -1,8 +1,10 @@
 /**
- * The svg gate (spec §5c): no built-in adapter has a vector output wire yet, so each one
- * rejects an svg request as `invalid_request` before any fetch, whatever its knobs. For
- * `gemini` this is what keeps an svg request out of text mode; for the two image-only
- * adapters it is their existing format gate, pinned here for the new member.
+ * The svg gate (spec §5c): `openrouterImages` is the one built-in adapter with a vector
+ * output wire. Each of the other four rejects an svg request as `invalid_request` before
+ * any fetch, whatever its knobs. For `gemini` this is what keeps an svg request out of text
+ * mode; for `openaiImages` it is its existing format gate, pinned here for the new member.
+ * The positive case below only shows `openrouterImages` reaching the wire;
+ * `openrouter-images-svg.test.ts` pins its body and its reading of the answer.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -14,7 +16,7 @@ import { openaiCompatible } from '../../../src/providers/openai-compatible'
 import { openaiImages } from '../../../src/providers/openai-images'
 import { openrouterImages } from '../../../src/providers/openrouter-images'
 import type { ProviderRequest } from '../../../src/types'
-import { baseRequest, captureRequests, withPrepared } from './helpers'
+import { baseRequest, captureRequests, jsonResponse, withPrepared } from './helpers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -27,11 +29,6 @@ const adapters = [
   ['openaiCompatible', () => openaiCompatible({ apiKey: KEY }), 'svg output is not supported'],
   ['gemini', () => gemini({ apiKey: KEY }), 'svg output is not supported'],
   ['openaiImages', () => openaiImages({ apiKey: KEY }), 'only image output is supported'],
-  [
-    'openrouterImages',
-    () => openrouterImages({ apiKey: KEY }),
-    'only image output is supported',
-  ],
 ] as const
 
 const requests: [string, ProviderRequest['responseFormat']][] = [
@@ -57,4 +54,21 @@ describe.each(adapters)('%s', (_name, make, message) => {
       expect(sent).toHaveLength(0)
     },
   )
+})
+
+describe('openrouterImages', () => {
+  it.each(requests)('dispatches %s, once', async (_label, responseFormat) => {
+    const answer = { data: [{ b64_json: 'PHN2Zy8+', media_type: 'image/svg+xml' }] }
+    const { requests: sent } = captureRequests(() => jsonResponse(200, answer))
+    const run = await withPrepared(openrouterImages({ apiKey: KEY }))
+    const response = await run(baseRequest({ responseFormat }))
+    expect(response).toEqual({
+      kind: 'complete',
+      text: '',
+      svgs: [{ mediaType: 'image/svg+xml', data: 'PHN2Zy8+' }],
+      usage: null,
+    })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.body).toMatchObject({ output_format: 'svg' })
+  })
 })
