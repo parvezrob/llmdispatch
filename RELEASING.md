@@ -70,9 +70,12 @@ throwaway keys and revoke them when you stop, not only when you finish.
 
 A line starting `finding:` records something the run learned about a provider. Some stand
 alone: whether Gemini's image models honour a candidate count is reported whichever way it
-goes, and only an unsettled answer also fails the check. Others explain a failure: when the
-core refused a vector model's SVG document, the finding says why, and the check fails. Read
-them before approving, and bring the README and the specification in line with what they say.
+goes, and only an unsettled answer also fails the check; the shape of each SVG document a
+vector model returns (its element and subpath counts, the bytes of path data, and whether it
+uses `<style>`, `<text>` or `<use>`) is reported and never fails it. Others explain a failure:
+when the core refused a vector model's SVG document, the finding says why, and the check
+fails. Read them before approving, and bring the README and the specification in line with
+what they say.
 
 **When they run:** on the staged tarball, after the workflow has staged the release and
 before you approve it: that is the only moment the bytes are both final and not yet
