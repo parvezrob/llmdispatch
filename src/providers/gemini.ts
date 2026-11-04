@@ -86,6 +86,11 @@ function geminiParts(parts: readonly ContentPart[]): unknown[] {
 }
 
 async function completeGemini(apiKey: string, req: ProviderRequest): Promise<ProviderResponse> {
+  // generateContent has no vector output (§5c): an svg request would otherwise fall into
+  // text mode, so it is rejected before any network call; the quota slot is still consumed.
+  if (req.responseFormat.type === 'svg') {
+    throw new ProviderError('invalid_request', { message: 'svg output is not supported' })
+  }
   const image = req.responseFormat.type === 'image' ? req.responseFormat : null
   // No model in this image family produces an alpha channel (§5c), so the one knob the wire
   // cannot express is rejected before any network call; the quota slot is still consumed.

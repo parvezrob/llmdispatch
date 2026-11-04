@@ -76,6 +76,10 @@ async function completeAnthropic(
   if (req.responseFormat.type === 'image') {
     throw new ProviderError('invalid_request', { message: 'image output is not supported' })
   }
+  // Nor any svg wire (§5c): rejected the same way, before any network call.
+  if (req.responseFormat.type === 'svg') {
+    throw new ProviderError('invalid_request', { message: 'svg output is not supported' })
+  }
   const body: Record<string, unknown> = {
     model: req.model,
     max_tokens: req.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
