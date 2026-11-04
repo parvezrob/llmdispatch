@@ -1,7 +1,8 @@
 /**
  * The redirect-exfiltration fixture (spec §5c/§8): a real `fetch` against a
  * local two-endpoint `node:http` pair, source answering 302 to target. Proves what
- * `redirect: 'error'` does under the real runtime, no scripted fetch can show this.
+ * `redirect: 'error'` does under the real runtime, no scripted fetch can show this, and that the
+ * transport's message still says what happened.
  */
 
 import { createServer } from 'node:http'
@@ -142,5 +143,21 @@ describe('redirect exfiltration fixture', () => {
     expect(sourceLog[0]!.body).toContain(FILENAME_SENTINEL)
     expect(targetLog.every((entry) => !entry.body.includes(DATA_SENTINEL))).toBe(true)
     expect(targetLog.every((entry) => !entry.body.includes(FILENAME_SENTINEL))).toBe(true)
+  })
+
+  // The runtime's refusal carries no error code, only a fixed message; the transport tells it
+  // apart by that message without copying it, so the redirect target's URL never appears.
+  it('says the redirect was refused, and names neither the target nor the key', async () => {
+    const complete = await startPair()
+    const error = await complete(baseRequest()).then(
+      () => null,
+      (thrown: unknown) => thrown,
+    )
+
+    expect(ProviderError.is(error)).toBe(true)
+    const thrown = error as ProviderError
+    expect(thrown.message).toBe('network failure (redirect refused)')
+    expect(thrown.message).not.toContain(String(targetPort))
+    expect(thrown.message).not.toContain('sk-should-never-leave-source')
   })
 })

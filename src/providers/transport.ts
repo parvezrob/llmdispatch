@@ -42,11 +42,11 @@ export async function fetchJson(
     // rejection above; otherwise a raw TypeError escapes and the core treats it as
     // `provider_unclassified` (no fallback). JSON.parse stays outside this catch.
     text = await response.text()
-  } catch {
+  } catch (error) {
     if (init.signal.aborted) {
       throw new ProviderError('aborted', { message: 'request aborted' })
     }
-    throw new ProviderError('transient', { message: 'network failure' })
+    throw new ProviderError('transient', { message: networkFailureMessage(error) })
   }
 
   let body: unknown = null
@@ -58,6 +58,63 @@ export async function fetchJson(
     }
   }
   return { status: response.status, body }
+}
+
+/**
+ * The shapes the runtime's error codes take (spec §5c): errno-style (`ECONNRESET`,
+ * `EAI_AGAIN`), Node's `ERR_*` and undici's `UND_ERR_*`, plus the certificate codes below.
+ * Shape is the only check: a `fetch` an application installs could still put short
+ * upper-case text in `code`, so such a wrapper must not put a secret there.
+ */
+const ERROR_CODE = /^(?:E[A-Z0-9_]{2,23}|ERR_[A-Z0-9_]{1,48}|UND_ERR_[A-Z0-9_]{1,40})$/
+
+/** OpenSSL's certificate checks, which Node reports with no prefix: a fixed list. */
+const CERTIFICATE_CODES: ReadonlySet<string> = new Set([
+  'CERT_CHAIN_TOO_LONG',
+  'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'CERT_REJECTED',
+  'CERT_REVOKED',
+  'CERT_SIGNATURE_FAILURE',
+  'CERT_UNTRUSTED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'HOSTNAME_MISMATCH',
+  'INVALID_CA',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+])
+
+/**
+ * `network failure`, plus a code-shaped `code` of the thrown value or its `cause`, or a
+ * refused redirect (spec §5c). The error's message and any URL in it can carry a key, so
+ * neither is kept: only a code of those shapes, or a fixed phrase for undici's redirect
+ * refusal, which has no code and is told by its fixed message.
+ */
+function networkFailureMessage(error: unknown): string {
+  const cause = ownValue(error, 'cause')
+  const detail =
+    errorCode(error) ??
+    errorCode(cause) ??
+    (ownValue(cause, 'message') === 'unexpected redirect' ? 'redirect refused' : null)
+  return detail === null ? 'network failure' : `network failure (${detail})`
+}
+
+/** An own data property of a thrown value: no getter runs, and a trap that throws is absent. */
+function ownValue(value: unknown, key: string): unknown {
+  if (typeof value !== 'object' || value === null) return undefined
+  try {
+    return Object.getOwnPropertyDescriptor(value, key)?.value
+  } catch {
+    return undefined
+  }
+}
+
+function errorCode(value: unknown): string | null {
+  const code = ownValue(value, 'code')
+  if (typeof code !== 'string') return null
+  return ERROR_CODE.test(code) || CERTIFICATE_CODES.has(code) ? code : null
 }
 
 /**

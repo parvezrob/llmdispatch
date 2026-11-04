@@ -28,6 +28,25 @@ explicitly mapped classifies by family: 401/403 → `auth` (except the per-adapt
 moderation rows below); 402/429 → `rate_limit`; 404 → `model_not_found`; 408 → `transient`;
 any other 4xx (incl. 409/413/422) → `invalid_request`; any 5xx (incl. 504/529) →
 `transient`; network/DNS/TLS failures → `transient`. Implementers never invent a mapping.
+**Network failure detail.** A fetch or body read that fails, other than by the caller's
+abort, throws `ProviderError('transient')` with no status and the message `network failure`,
+followed in parentheses by a detail when one can be read: the `code` of the thrown value,
+else of its `cause`, else `redirect refused` for the runtime's refusal of a 3xx under
+`redirect: 'error'`, told by its fixed message. The `code` is an own data property, kept only
+when it is shaped like a Node, undici or OpenSSL code, which is what the runtime sets there:
+matching `^(?:E[A-Z0-9_]{2,23}|ERR_[A-Z0-9_]{1,48}|UND_ERR_[A-Z0-9_]{1,40})$` (errno-style
+codes such as `ECONNRESET`, `ENOTFOUND` or `EAI_AGAIN`, Node's `ERR_*`, undici's
+`UND_ERR_*`), or one of the OpenSSL certificate codes Node reports unprefixed: `CERT_CHAIN_TOO_LONG`,
+`CERT_HAS_EXPIRED`, `CERT_NOT_YET_VALID`, `CERT_REJECTED`, `CERT_REVOKED`,
+`CERT_SIGNATURE_FAILURE`, `CERT_UNTRUSTED`, `DEPTH_ZERO_SELF_SIGNED_CERT`,
+`HOSTNAME_MISMATCH`, `INVALID_CA`, `SELF_SIGNED_CERT_IN_CHAIN`, `UNABLE_TO_GET_ISSUER_CERT`,
+`UNABLE_TO_GET_ISSUER_CERT_LOCALLY` and `UNABLE_TO_VERIFY_LEAF_SIGNATURE`. A code of any
+other shape is dropped. The shape is the only check, so a `fetch` an application installs
+could still put short upper-case text in `code`, and such a wrapper must not put a secret
+there. Nothing else of the thrown error is kept, neither its message nor any URL, which can
+carry a key in its query string. The detail is in that `ProviderError` alone: an
+`AttemptRecord` has no field for it and a `PROVIDER_FAILED` message names the classification
+only (§6), so it is seen by code that wraps a provider and catches what `complete()` throws.
 
 ## `openaiCompatible`
 
