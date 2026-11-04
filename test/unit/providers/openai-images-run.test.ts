@@ -283,3 +283,45 @@ describe('openaiImages error answers through run()', () => {
     ])
   })
 })
+
+describe('a request the adapter refuses before any fetch, through run()', () => {
+  // The gates run inside the attempt, after the run's quota slot is committed: no request is
+  // made, but the slot is used, and the attempt has no status since nothing answered.
+  it('uses the quota slot and ends invalid_request with no status and no fallback', async () => {
+    const operations = defineOperations({
+      poster: defineOperation({
+        input: z.object({}),
+        output: imageOutputSchema,
+        prompt: () => 'a poster',
+        format: 'image',
+        image: { aspectRatio: '1:1', size: '4K' },
+        quota: { perDay: 1 },
+        defaultRoute: {
+          provider: 'images',
+          model: MODEL,
+          fallback: { provider: 'images', model: 'gpt-image-y' },
+        },
+      }),
+    })
+    const ai = createSwitch({
+      providers: { images: openaiImages({ apiKey: () => 'sk-images-test' }) },
+      operations,
+      stores: memoryStores(),
+    })
+    const { fetch } = captureRequests(() => jsonResponse(200, {}))
+
+    const error = await expectCode(
+      ai.run('poster', { input: {}, subjectId: 'user-1' }),
+      'PROVIDER_FAILED',
+    )
+    expect(error.retryable).toBe(false)
+    expect(error.attempts).toHaveLength(1)
+    const [attempt] = error.attempts ?? []
+    expect(attempt).toEqual(expect.objectContaining({ outcome: 'invalid_request' }))
+    expect(attempt).not.toHaveProperty('status')
+    expect(fetch).not.toHaveBeenCalled()
+    expect(await ai.getQuota('poster', 'user-1')).toEqual(
+      expect.objectContaining({ limit: 1, used: 1, remaining: 0 }),
+    )
+  })
+})
