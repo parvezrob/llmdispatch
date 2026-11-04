@@ -44,6 +44,24 @@ describe('the live check deciding which children start', () => {
     expect(probeTableProblems()).toEqual([])
   })
 
+  // gpt-image-2 rejects a transparent background, so only the older model is asked for one.
+  it('asks gpt-image-2 for no background and checks alpha on gpt-image-1-mini only', () => {
+    const check = CHECKS.find((candidate) => candidate.name === 'openai-images (image probes)')
+    const probes = JSON.parse(check?.args[1] ?? '[]') as {
+      model: string
+      image?: { background?: string }
+      expect?: { alpha?: boolean; pixels?: string }
+    }[]
+    const byModel = new Map(probes.map((entry) => [entry.model, entry]))
+    expect(byModel.get('gpt-image-2')?.image).not.toHaveProperty('background')
+    expect(byModel.get('gpt-image-2')?.expect).toEqual(
+      expect.not.objectContaining({ alpha: true }),
+    )
+    expect(byModel.get('gpt-image-2')?.expect?.pixels).toBe('2048x2048')
+    expect(byModel.get('gpt-image-1-mini')?.image?.background).toBe('transparent')
+    expect(byModel.get('gpt-image-1-mini')?.expect?.alpha).toBe(true)
+  })
+
   it('starts the OpenAI image probes with OPENAI_API_KEY alone when no override is set', async () => {
     const { started, ran } = await plan({ OPENAI_API_KEY: OPENAI })
     expect(started.map((child) => child.name)).toEqual([
