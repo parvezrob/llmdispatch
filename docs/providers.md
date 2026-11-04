@@ -301,35 +301,52 @@ is no OpenRouter branch: a 403 that is not a refusal is `auth`.
 resolved in `prepare()` like the other built-ins; synchronous, one request per attempt
 ([OpenRouter Image API](https://openrouter.ai/docs/features/multimodal/image-generation)).
 One wire reaches every image model OpenRouter lists, by its OpenRouter model ID. The
-endpoint makes images only, so this adapter has no text or JSON mode. Which knobs a model
-honours, and with which values, is per model and not recorded here: the live catalogue
-(`GET https://openrouter.ai/api/v1/images/models`) lists each model's
+endpoint makes images only, raster images and, from a vectorization model, SVG documents,
+so this adapter has an image mode and an svg mode and no text or JSON mode. Which knobs a
+model honours, and with which values, is per model and not recorded here: the live
+catalogue (`GET https://openrouter.ai/api/v1/images/models`) lists each model's
 `supported_parameters`.
 **Gates**, in this order, each throwing `ProviderError('invalid_request')` before any fetch:
-a `responseFormat.type` other than `'image'`, since text and JSON runs have no wire here and
-this adapter does not yet map the API's svg output, so it rejects `'svg'` before any fetch;
-any part that is not a text part, since reference images (the API's `input_references`) are
-an edit surface this adapter does not map. There is no pair or size gate: each knob travels
-alone, in its own field.
-Request: `model`; `prompt`, the text parts joined with `'\n'`, so a single part is sent
-verbatim, `''` included; then, each only when set and each verbatim, `n` from `count`,
+a `responseFormat.type` other than `'image'` or `'svg'`, since text and JSON runs have no
+wire here; any part that is not a text part, since reference images (the API's
+`input_references`) are an edit surface this adapter does not map. There is no pair or size
+gate: each knob travels alone, in its own field.
+Request, image: `model`; `prompt`, the text parts joined with `'\n'`, so a single part is
+sent verbatim, `''` included; then, each only when set and each verbatim, `n` from `count`,
 `aspect_ratio` from `aspectRatio`, `resolution` from `size` (`'1K'`, `'2K'` or `'4K'`; the
 API's smaller `512` class is not offered), and `background`. `quality`, `output_format`,
 `seed`, `stream` and `provider` are never sent, so the model's and the router's defaults
 apply; `maxOutputTokens` and `temperature` have no field on this wire and are dropped even
 when the route sets them (see the opening of §5c). A model that lacks a knob, or a value of
 one, answers its own error, classified by the rows below; the catalogue says so in advance.
-Response: a non-2xx status classifies by the errors below, and a 2xx body that is not an
-object throws `ProviderError('malformed_response')`. **Images win:** a non-empty `data`
-array is the answer, read by the element rules below, and an error embedded beside it is not
-consulted, since OpenRouter bills an image call all or nothing and answers a failed
-generation with a 502 it does not bill
-([image generation](https://openrouter.ai/docs/features/multimodal/image-generation)). Only
-when `data` is absent, not an array, or empty is an embedded error read (refusal and errors,
-below); with none, `data` must be an array. The §3 point 4b count cap is checked before any
-element is read. Each `data[]` element, in order, becomes one `ProviderImage` from its
-`b64_json` and its `media_type`, with no dimensions: the core reads width and height from
-the image header (§3 point 4b). Per element, in this order,
+Request, svg: `model`; `prompt`, built as for an image request; `output_format: 'svg'`,
+always; then, each only when set and each verbatim, `n` from `count` and `aspect_ratio`
+from `aspectRatio`. An svg block has no size and no background, so `resolution` and
+`background` are never sent, and neither are `quality`, `seed`, `stream` or `provider`;
+`maxOutputTokens` and `temperature` are dropped as for an image request. Only a
+vectorization model accepts `output_format: 'svg'`, and the catalogue lists which: as of
+2026-11-04, six Recraft vector models, whose only output format is `svg`, taking `n` from 1
+to 6 and no `resolution` or `background`. Of the `aspect_ratio` values the catalogue lists
+for them, this library can send `1:1`, `4:3`, `3:4`, `16:9` and `9:16`; the catalogue also
+lists `auto`, which an unset knob already covers. A knob value such a model lacks (a
+`count` above 6, a `3:2` or `2:3` ratio) may answer the model's own error, classified by
+the rows below. A model that rejects `output_format: 'svg'` with a 4xx is classified by the
+same rows (a 400 is `invalid_request`), never remapped, and does not fall back; one that
+answers with a raster image instead is `malformed_response` and falls back (§5b, visual
+output mismatches).
+Response, both modes: a non-2xx status classifies by the errors below, and a 2xx body that
+is not an object throws `ProviderError('malformed_response')`. **Images win:** a non-empty
+`data` array is the answer, read by the element rules below for the requested mode (SVG
+documents count as images here), and an error embedded beside it is not consulted, since
+OpenRouter bills an image call all or nothing and answers a failed generation with a 502 it
+does not bill ([image generation](https://openrouter.ai/docs/features/multimodal/image-generation)).
+Only when `data` is absent, not an array, or empty is an embedded error read (refusal and
+errors, below); with none, `data` must be an array. An image answer carries `images` and
+never `svgs`; an svg answer carries `svgs` and never `images`.
+Image elements: the §3 point 4b count cap is checked before any element is read. Each
+`data[]` element, in order, becomes one `ProviderImage` from its `b64_json` and its
+`media_type`, with no dimensions: the core reads width and height from the image header
+(§3 point 4b). Per element, in this order,
 `ProviderError('malformed_response')` is thrown for an element that is not an object, a
 `b64_json` that is absent or not a string, a `b64_json` over the §3 point 4b length cap, a
 `media_type` other than `image/png`, `image/jpeg` and `image/webp` (absent, any other string
@@ -337,17 +354,36 @@ or type, and the `image/svg+xml` a vector model answers with, all included), and
 `b64_json` outside the §6 base64 grammar. The length and the media type are cheap reads and
 come before the grammar, so an oversized image, or one in a type the core cannot take, costs
 no scan. An empty `data` with no embedded error is complete with no images, and §3 point 4b
-records the output rejection. Other fields are ignored, and `text` is always `''`.
-Usage: base counters `usage.prompt_tokens` and `usage.completion_tokens` REQUIRED
-(missing/invalid, or no `usage` object → `usage: null`). The API does not split out image
-tokens, so `imageOutputTokens` is never reported.
+records the output rejection. An image request never accepts an SVG.
+Svg elements: the three §3 point 4c caps, the adapter's own copies of the core's, are read
+in the core's order: the count (more than **16** documents) before any element is read,
+then, element by element, its length (over **10 000 000** base64 characters) and the
+running total across the response (over **40 000 000**). Per element, in this order,
+`ProviderError('malformed_response')` is thrown for an element that is not an object, a
+`b64_json` that is absent or not a string, a `b64_json` over the per-document cap, a running
+total over the response cap, and a `media_type` other than exactly `image/svg+xml` (absent,
+a raster type, any other string or type, all included). Every element goes through those
+reads before any grammar scan, so an oversized answer, or one in a type that was not asked
+for, costs length reads only; then each `b64_json` outside the §6 base64 grammar throws the
+same way. Each element, in order, becomes one `ProviderSvg { mediaType: 'image/svg+xml', data }`
+whose `data` is the `b64_json`, unchanged. The adapter does not run the §6 SVG document
+check: the core runs it on every svg answer (§3 point 4c), so a document the API labels SVG
+but that fails the check classifies `malformed_response` there, with the attempt's usage and
+cost kept. An answer the adapter itself rejects as `malformed_response` (for example raster
+media on an svg request) carries no usage or cost, since the attempt record of a thrown
+classification has none; only answers the core rejects keep them. An empty `data` with no
+embedded error is complete with `svgs: []`, and §3 point 4c records the output rejection.
+Other fields are ignored in both modes, and `text` is always `''`.
+Usage, both modes: base counters `usage.prompt_tokens` and `usage.completion_tokens`
+REQUIRED (missing/invalid, or no `usage` object → `usage: null`). The API does not split out
+image tokens, so `imageOutputTokens` is never reported.
 Cost: `usage.cost`, OpenRouter's charge in USD for the call, becomes the response's
 `costUsd` when it is a finite non-negative number (`-0` reads as `0`); any other value, or
 none, leaves the property out. It is read even when the counters are invalid and rides on
 every response the adapter returns, a refusal included. By §7 a reported cost is the
 attempt's cost and the pricing table is not consulted; without one the table applies, and
 since this usage carries no image split, an image attempt with a non-zero output prices
-`null` (§7).
+`null`, and an svg attempt prices `null` whatever its output (§7).
 **Refusal and errors:** OpenRouter's error envelope as `openaiCompatible` defines it above
 (the error-type word, read from its three documented `error_type` places and then from
 `metadata.code`, `code` and `type`; the moderation envelope; and
