@@ -618,13 +618,18 @@ included), and one outside the §6 base64 grammar. An empty `data` is complete w
 images, and §3 point 4b records the output rejection. Other fields (`created`, each
 element's `revised_prompt`, and the other echoed settings, `quality` and `background`) are
 ignored, and `text` is always `''`.
-**Refusal:** before any other reading of the body, an `error` object whose `code` is
-`moderation_blocked` (or the legacy `content_policy_violation`), at any status, or whose
-`type` alone is `image_generation_user_error`, on a 4xx only → `'refused'`, with `text: ''`
-and the body's usage read as below (a refusal keeps its usage, §6; `null` when the body
-reports none, which is the usual case). The type alone counts on a 4xx only, since outside
-it a type-only match would turn a retryable server failure into a terminal refusal; there it
-classifies by status.
+**Refusal:** before any other reading of the body, an own `error` object whose own `code`
+is the string `moderation_blocked` (or the legacy `content_policy_violation`), at any
+status → `'refused'`, with `text: ''` and the body's usage read as below (a refusal keeps
+its usage, §6; `null` when the body reports none, which is the usual case). Nothing else is
+a refusal. The `type` `image_generation_user_error` is not one: as of 2026-11-04 the API
+gives that type to a moderation block and to a rejected setting alike (an unsupported
+`size`, a `background` the model cannot produce, both with `code: 'invalid_value'`). A body
+with no code, `null`, or any other code therefore classifies by the errors below like any
+other non-2xx answer, whatever its `type`, `param` or `message` say: a 400 is
+`invalid_request` unless the body names a missing model, and at 403, 404 or 429 it is
+`auth`, `model_not_found` or `rate_limit` by status, so it falls back wherever that
+classification does.
 Usage: base counters `usage.input_tokens` and `usage.output_tokens` REQUIRED
 (missing/invalid → `usage: null`), plus `imageOutputTokens` from
 `usage.output_tokens_details.image_tokens` when the details are an object and the value is
