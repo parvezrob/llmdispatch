@@ -1,29 +1,45 @@
 #!/usr/bin/env node
 /**
- * Calls every built-in adapter against its real provider four times — a plain prompt, a request
- * for a JSON object, an image and a PDF — and checks that what comes back is what the package
- * documents.
+ * Calls every built-in adapter against its real provider and checks that what comes back is
+ * what the package documents.
+ *
+ * The three text adapters are called four times each: a plain prompt, a request for a JSON
+ * object, an image and a PDF. The three image adapters are probed through `run()`, so the
+ * core's own image header reader and SVG document check are part of what is exercised:
+ * Gemini for two 1K images in one call (which also asks whether its image models take a
+ * candidate count), OpenAI's Images API for two transparent 1K images and one transparent 2K
+ * image at low quality, and OpenRouter's Image API for one 1K raster image with its reported
+ * cost and one SVG document from a vector model.
  *
  * Recorded fixtures prove the adapters read the shapes that were recorded; only this proves
  * the providers still send them. Manual by design: it spends money and needs keys, so it is
- * never wired into CI.
+ * never wired into CI. A full run costs about $0.21, nearly all of it the images: about $0.07
+ * for the two Gemini images (about $0.035 instead when the count is refused, since a refused
+ * request is not billed and the retry asks for one image), about $0.01 and $0.03 for the
+ * OpenAI images at low quality, about $0.02 for the OpenRouter raster image and $0.08 for the
+ * SVG document. The text calls cost a fraction of a cent.
  *
- * Key custody is why this file and the runner are separate. Each provider is checked in a
- * child process carrying exactly one credential, built from the shared allowlist; no key is
- * ever an argument, and the child's output is filtered on the way through.
+ * Key custody is why this file and the runners are separate, and `./lib/live-check-plan.mjs`
+ * holds the tables and the decision of which child starts with which credential. Each check
+ * runs in a child process carrying exactly one credential, built from the shared allowlist; no
+ * key is ever an argument, and the child's output is filtered on the way through.
  *
  * Usage: node scripts/live-check-providers.mjs [--release <path-to-tgz>]
  *   With `--release` the checks run from a throwaway project that installed that tarball, the
- *   OpenAI-compatible check is pinned to the official endpoint, and every adapter must run: a
+ *   OpenAI-compatible check is pinned to the official endpoint, and every check must run: a
  *   missing key is a failure. Without it they run against the working tree's current build and
- *   an adapter whose key is absent is skipped with a notice, which is for local development
- *   and is not evidence about a release.
- * Exit codes: 0 every adapter that had to run did and passed, 1 one did not, 2 wrong usage.
+ *   a check whose key is absent is skipped with a notice, which is for local development and
+ *   is not evidence about a release. A locally set OPENAI_BASE_URL also skips the OpenAI
+ *   image probes: OPENAI_API_KEY then belongs to the overridden endpoint, and the image probes
+ *   only ever call the official one.
+ *   Keys: ANTHROPIC_API_KEY, OPENAI_API_KEY (the OpenAI-compatible check and the OpenAI image
+ *   probes), GEMINI_API_KEY (the Gemini check and its image probe) and OPENROUTER_API_KEY.
+ * Exit codes: 0 every check that had to run did and passed, 1 one did not, 2 wrong usage.
  */
 
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { basename, isAbsolute, join, resolve } from 'node:path'
 
 import { buildChildEnvironment } from './lib/child-environment.mjs'
 import {
@@ -34,35 +50,20 @@ import {
   runInConsumerProject,
   stopRunningChildren,
 } from './lib/consumer-project.mjs'
+import {
+  CHECKS,
+  ENDPOINT_OVERRIDE,
+  IMAGE_PROBES,
+  IMAGE_RUNNER,
+  RUNNER,
+  TOLERANCE,
+  probeTableProblems,
+  runChecks,
+  secretsFor,
+} from './lib/live-check-plan.mjs'
 
 const ROOT = join(import.meta.dirname, '..')
-const RUNNER = join(import.meta.dirname, 'runners', 'live-check.mjs')
-/** The runner imports this, so it is copied into the scratch project beside it. */
-const TOLERANCE = join(import.meta.dirname, 'runners', 'json-tolerance.mjs')
 const USAGE = 'usage: live-check-providers.mjs [--release <path-to-tgz>]\n'
-
-/**
- * The adapters, each with the credential it needs and the model it is checked on.
- *
- * The models are the smallest each provider offers that handle every checked modality,
- * and the runner asks for a handful of tokens: a full run should cost a fraction of a
- * cent. Change them here when a provider retires one: nowhere else names a model.
- * For OpenAI that is not a small model at all: gpt-4.1-nano and gpt-4.1-mini silently
- * drop image parts (verified against the raw endpoint — the request carries the image,
- * the reported prompt tokens show it never reached the model), and gpt-4o-mini reads
- * images but fails the document check. gpt-4.1 is the smallest that passes all four.
- */
-const PROVIDERS = [
-  { name: 'anthropic', key: 'ANTHROPIC_API_KEY', model: 'claude-haiku-4-5' },
-  { name: 'openai-compatible', key: 'OPENAI_API_KEY', model: 'gpt-4.1' },
-  { name: 'gemini', key: 'GEMINI_API_KEY', model: 'gemini-3.5-flash-lite' },
-]
-
-/** Four calls to a live provider, two of them carrying a file; beyond this it is a hang. */
-const CHECK_DEADLINE = 4 * 60_000
-
-/** The one adapter whose endpoint may be pointed elsewhere, and the name that does it. */
-const ENDPOINT_OVERRIDE = { provider: 'openai-compatible', name: 'OPENAI_BASE_URL' }
 
 /** The tarball to check against, `null` for the working tree, or a usage failure. */
 function readArguments(argv) {
@@ -82,33 +83,16 @@ function readArguments(argv) {
   return { tarball, problem: null }
 }
 
-/**
- * The environment names one adapter's child is given: exactly one credential, and the endpoint
- * override only for the adapter that can use it.
- */
-function childValues(descriptor) {
-  const values = { [descriptor.key]: process.env[descriptor.key] }
-  if (descriptor.name === ENDPOINT_OVERRIDE.provider) {
-    values[ENDPOINT_OVERRIDE.name] = process.env[ENDPOINT_OVERRIDE.name]
-  }
-  return values
-}
-
-/** Runs one adapter's check against the working tree's build, from the repository. */
-function checkFromWorkingTree(descriptor, home) {
+/** Runs one check against the working tree's build, from the repository. */
+function checkFromWorkingTree(check, values, home) {
   return runChild({
     command: process.execPath,
-    args: [RUNNER, descriptor.name, descriptor.model],
+    args: [check.runner, ...check.args],
     cwd: ROOT,
-    env: buildChildEnvironment(home, childValues(descriptor)),
-    timeout: CHECK_DEADLINE,
-    redact: secretsFor(descriptor),
+    env: buildChildEnvironment(home, values),
+    timeout: check.timeout,
+    redact: secretsFor(check, process.env),
   })
-}
-
-/** The values this process put in the child's environment that must not appear in its output. */
-function secretsFor(descriptor) {
-  return [process.env[descriptor.key] ?? ''].filter((value) => value !== '')
 }
 
 async function main() {
@@ -121,11 +105,17 @@ async function main() {
 
   // The adapter's default endpoint is part of what a release check verifies, so an override is
   // refused rather than ignored.
-  if (release && (process.env.OPENAI_BASE_URL ?? '') !== '') {
+  if (release && (process.env[ENDPOINT_OVERRIDE.name] ?? '') !== '') {
     process.stderr.write(
       'OPENAI_BASE_URL is set. A release check calls the official endpoint; unset it and run ' +
         'again.\n',
     )
+    return 2
+  }
+
+  const tableProblems = probeTableProblems()
+  if (tableProblems.length > 0) {
+    for (const problem of tableProblems) process.stderr.write(`${problem}\n`)
     return 2
   }
 
@@ -141,35 +131,29 @@ async function main() {
           tarballPath: tarball,
           packages: [pinnedDevelopmentVersion('zod')],
           overrides: pinnedDevelopmentOverrides(['zod']),
-          files: [RUNNER, TOLERANCE],
+          files: [RUNNER, TOLERANCE, IMAGE_RUNNER, IMAGE_PROBES],
         })
       : null
 
-    for (const descriptor of PROVIDERS) {
-      const present = (process.env[descriptor.key] ?? '') !== ''
-      if (!present) {
-        if (release) {
-          problems.push(`${descriptor.name}: ${descriptor.key} is not set`)
-          continue
-        }
-        process.stdout.write(`${descriptor.name}: skipped, ${descriptor.key} is not set\n`)
-        continue
-      }
-
-      ran += 1
-      const check =
+    const outcome = await runChecks({
+      checks: CHECKS,
+      env: process.env,
+      release,
+      start: (check, values) =>
         project === null
-          ? await checkFromWorkingTree(descriptor, workspace)
-          : await runInConsumerProject(project, {
-              script: 'live-check.mjs',
-              args: [descriptor.name, descriptor.model, '--release'],
-              values: { [descriptor.key]: process.env[descriptor.key] },
-              timeout: CHECK_DEADLINE,
-              redact: secretsFor(descriptor),
-            })
-      if (check.note !== '') process.stderr.write(`${descriptor.name}: ${check.note}\n`)
-      if (!check.ok) problems.push(`${descriptor.name}: the check failed`)
-    }
+          ? checkFromWorkingTree(check, values, workspace)
+          : runInConsumerProject(project, {
+              script: basename(check.runner),
+              args: [...check.args, '--release'],
+              values,
+              timeout: check.timeout,
+              redact: secretsFor(check, process.env),
+            }),
+      write: (line, stream) =>
+        (stream === 'stderr' ? process.stderr : process.stdout).write(`${line}\n`),
+    })
+    ran = outcome.ran
+    problems.push(...outcome.problems)
   } catch (error) {
     problems.push(error instanceof Error ? error.message : 'unknown error')
   } finally {
@@ -177,10 +161,10 @@ async function main() {
   }
 
   for (const problem of problems) process.stdout.write(`${problem}\n`)
-  const total = String(PROVIDERS.length)
+  const total = String(CHECKS.length)
   if (problems.length > 0) {
     process.stdout.write(
-      `${String(ran)} of ${total} adapter(s) ran, ${String(problems.length)} problem(s)\n`,
+      `${String(ran)} of ${total} check(s) ran, ${String(problems.length)} problem(s)\n`,
     )
     return 1
   }
@@ -188,9 +172,9 @@ async function main() {
   // called nothing.
   process.stdout.write(
     release
-      ? `all ${total} adapter(s) ran against their providers and passed\n`
-      : `${String(ran)} of ${total} adapter(s) ran and passed; ${String(PROVIDERS.length - ran)} ` +
-          'had no key and were skipped, so this run is not evidence about a release\n',
+      ? `all ${total} check(s) ran against their providers and passed\n`
+      : `${String(ran)} of ${total} check(s) ran and passed; ${String(CHECKS.length - ran)} ` +
+          'were skipped, so this run is not evidence about a release\n',
   )
   return 0
 }
